@@ -80,7 +80,7 @@ Freeze the initial game rules before visual implementation.
 ### Exit criteria
 
 Every rule has a deterministic answer. The complete specification is in
-`game_spec.md` (version 1.0.0, Frozen).
+`game_spec.md` (version 1.0.1, Frozen — Phase 1 corrected).
 
 ---
 

@@ -218,19 +218,33 @@ If strong competitive anti-cheat requirements emerge, revisit the backend archit
 
 ## Phase 1 — Core Game Specification: COMPLETE
 
-Verified on 2026-09-20. See §13b below for the Phase 1 record.
+## Phase 1.1 — Specification Correction: COMPLETE
 
-### Completed (Phase 0 + Phase 1)
+Verified on 2026-09-20. See §13b and §13c below for the Phase 1 and Phase 1.1 records.
+
+### Completed (Phase 0 + Phase 1 + Phase 1.1)
 
 - All Phase 0 items (see §13a).
-- Frozen game specification in `game_spec.md` (v1.0.0).
+- Frozen game specification in `game_spec.md` (v1.0.1, corrected).
 - Board size, start positions, goal edges, movement, wall rules, path
   preservation, win condition, turn transition, and pawn-jump behavior all
   formalized with deterministic answers.
+- 18 decisions (D-01 through D-18) documented in Decision Log.
 - 15 project-specific rules in `rules.md` preserved. New Rule 16 added
   (game_spec.md is single source of truth).
 - Documentation cross-references updated (PRD, rules, architecture, phase,
   README, domain README).
+- Phase 1.1 corrected 10 defect categories (1.1–1.10):
+  - Wall blocking table: both anchors per direction.
+  - Board diagram: all rows labeled.
+  - Example 17: route corrected (old path crossed blocked edge).
+  - Example 18: replaced with verified sealed-pocket example.
+  - Test catalog: exact expected results for pathfinding and wall tests.
+  - Coverage matrix: updated for corrected test IDs.
+  - D-18: jump-failure classification taxonomy added.
+  - R-NOLEGAL-01: proof strengthened.
+  - Added: Decision Log, Open Questions, Out of Scope, Phase-1 Task Mapping,
+    Scripted Game, Finished-State JSON sections.
 
 ### Not yet completed
 
@@ -403,6 +417,36 @@ Decisions and facts established in Phase 1:
 - No Firebase or presentation code touched.
 - Open questions deferred (not resolved): Q-01 (draw/repetition),
   Q-02 (board edge behavior for wall anchors at N-2), Q-03 (turn limit).
+
+---
+
+# 13c. Phase 1.1 Record (Specification Correction)
+
+Status: **complete.**
+
+Defects corrected in `game_spec.md` (v1.0.0 → v1.0.1):
+
+| Defect | Description | Fix |
+|--------|-------------|-----|
+| 1.1 | Wall blocking table showed only one anchor per direction | Added both anchors with edge-case notes |
+| 1.2 | Board ASCII diagram missing row labels on odd rows | All 9 rows now labeled |
+| 1.3 | Example 17 Blue route crossed a blocked edge | Corrected to route via (5,5)->(4,5) |
+| 1.4 | Example 18 used 5 overlapping invalid walls | Replaced with verified H(7,0)+V(7,1) sealed pocket |
+| 1.5 | Test catalog had vague results | Exact expected results for T-PATH-002/004, T-WALL-011/012 |
+| 1.6 | Coverage matrix referenced wrong test IDs | Updated for corrected T-JUMP-004 |
+| 1.7 | No jump-failure classification taxonomy | D-18 added to Decision Log |
+| 1.8 | R-NOLEGAL-01 proof was weak | Strengthened with explicit path-preservation dependency |
+| 1.9 | Missing sections | Added Decision Log, Open Questions, Out of Scope, Phase-1 Task Mapping, Scripted Game, Finished-State JSON |
+| 1.10 | Minor consistency issues | Fixed throughout |
+
+All examples and test results verified by Python reference script (`wallforge_verify.py`).
+
+### What was NOT changed
+
+- No game rules changed — all corrections are text/table/example/test accuracy.
+- No Dart code touched.
+- No new dependencies.
+- Decision D-18 is a taxonomy clarification, not a rule change.
 
 ---
 

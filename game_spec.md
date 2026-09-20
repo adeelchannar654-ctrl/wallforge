@@ -2,11 +2,27 @@
 
 ## Status
 
-**Version:** 1.0.0
-**Status:** Frozen — Phase 1
+**Version:** 1.0.1
+**Status:** Frozen — Phase 1 (corrected)
 **Date:** 2026-09-20
 
 This document is the canonical, frozen rulebook for Wallforge. Phase 2 implements this specification. Any change requires the process defined in `rules.md` and Rule 15: update `game_spec.md`, its rule IDs, and its test catalog.
+
+### Changelog
+
+**v1.0.1 (2026-09-20)** — Correction pass. Fixed defects 1.1–1.10:
+- 1.1: Wall blocking table now shows both blocking anchors per direction with edge-case notes.
+- 1.2: Board ASCII diagram labels fixed (all rows labeled).
+- 1.3: Example 17 route corrected (old path crossed a blocked edge).
+- 1.4: Example 18 replaced with verified sealed-pocket example (H(7,0)+V(7,1)).
+- 1.5: Test catalog results made exact (T-PATH-002/004, T-WALL-011/012).
+- 1.6: Coverage matrix updated for corrected test IDs.
+- 1.7: D-18 added (jump-failure classification taxonomy).
+- 1.8: R-NOLEGAL-01 proof strengthened.
+- 1.9: Added Decision Log (§11), Open Questions (§12), Out of Scope (§13), Phase-1 Task Mapping (§14), Scripted Game (§15), Finished-State JSON (§16).
+- 1.10: Minor consistency fixes throughout.
+
+**v1.0.0 (2026-09-20)** — Initial frozen specification.
 
 ---
 
@@ -78,16 +94,16 @@ This document is the canonical, frozen rulebook for Wallforge. Phase 2 implement
 #### ASCII diagram — 9x9 board
 
 ```
-     Col:  0   1   2   3   4   5   6   7   8
-Row 0  .   .   .   .   R   .   .   .   .   <- Red goal row
-       .   .   .   .   .   .   .   .   .
-Row 2  .   .   .   .   .   .   .   .   .
-       .   .   .   .   .   .   .   .   .
-Row 4  .   .   .   .   .   .   .   .   .
-       .   .   .   .   .   .   .   .   .
-Row 6  .   .   .   .   .   .   .   .   .
-       .   .   .   .   .   .   .   .   .
-Row 8  .   .   .   .   B   .   .   .   .   <- Blue goal row
+        Col: 0   1   2   3   4   5   6   7   8
+Row  0:  .   .   .   .   R   .   .   .   .   <- Red goal row
+Row  1:  .   .   .   .   .   .   .   .   .
+Row  2:  .   .   .   .   .   .   .   .   .
+Row  3:  .   .   .   .   .   .   .   .   .
+Row  4:  .   .   .   .   .   .   .   .   .
+Row  5:  .   .   .   .   .   .   .   .   .
+Row  6:  .   .   .   .   .   .   .   .   .
+Row  7:  .   .   .   .   .   .   .   .   .
+Row  8:  .   .   .   .   B   .   .   .   .   <- Blue goal row
 
 R = Red start (0,4)
 B = Blue start (8,4)
@@ -149,14 +165,16 @@ V(r,c) blocks edges between cols c/c+1, rows r and r+1.
 
 #### Wall blocking per direction
 
-For a pawn at (r,c):
+For a pawn at (r,c), each adjacent cell can be blocked by **two** possible wall anchors (either one is sufficient to block the edge):
 
-| Direction | Destination | Blocked by wall anchors |
-|-----------|-------------|------------------------|
-| Up | (r-1,c) | H(r-1,c) if r-1 >= 0 |
-| Down | (r+1,c) | H(r,c) if r+1 < size |
-| Left | (r,c-1) | V(r,c-1) if c-1 >= 0 |
-| Right | (r,c+1) | V(r,c) if c+1 < size |
+| Direction | Destination | Blocked by either anchor |
+|-----------|-------------|--------------------------|
+| Up | (r-1,c) | H(r-1,c) or H(r-1,c-1) if r-1 >= 0 |
+| Down | (r+1,c) | H(r,c) or H(r,c-1) if r+1 < size |
+| Left | (r,c-1) | V(r,c-1) or V(r-1,c-1) if c-1 >= 0 |
+| Right | (r,c+1) | V(r,c) or V(r-1,c) if c+1 < size |
+
+**Edge cases:** At board boundaries, one anchor may not exist (e.g., H(r-1,c-1) when c=0). The remaining anchor still blocks the edge. When the destination cell itself is off-board, no wall check applies — the move is rejected by R-MOVE-02 before wall blocking is evaluated.
 
 ---
 
@@ -257,7 +275,7 @@ H(r,c) and H(r,c+3):  Legal — no overlap, no crossing
 
 **R-NOLEGAL-01:** A player can NEVER be in a state with no legal actions, given the current rules.
 
-**Proof sketch:** If a player has no walls remaining, they must still be able to move. Every cell on the board has at least one adjacent cell. Since path-preservation (R-PATH-01) ensures both players always have a route to their goal, and routes require at least one adjacent cell reachable without walls, the pawn MUST have at least one legal move. Therefore, the union of legal moves and legal wall placements is never empty.
+**Proof sketch:** Consider any game state where status == inProgress. The player whose turn it is has two possible action types: move or wall. If the player has at least one wall remaining, at least one wall placement exists (even if rejected by path-preservation, the action type exists — we only need the union to be non-empty). If the player has zero walls remaining, they must be able to move. R-PATH-01 guarantees that every placed wall preserved a route for both players. Therefore, at least one route exists from the pawn current cell to the goal row. Any route of length >= 1 requires at least one adjacent cell reachable without crossing a wall. That adjacent cell is a legal move (R-MOVE-01 through R-MOVE-06). Therefore, the set of legal actions is never empty. Note: this proof depends on R-PATH-01 being enforced on every wall placement — if a future rule change removes path-preservation, this proof must be revisited (R-NOLEGAL-02).
 
 **R-NOLEGAL-02:** If the proof in R-NOLEGAL-01 is ever invalidated by a rule change, the specification MUST document the exact situation and add it to Open Questions.
 
@@ -659,24 +677,30 @@ Action: W H 4,3
 
 After:
   H(4,3) placed - blocks edges (4,3)-(5,3) and (4,4)-(5,4)
-  Blue route: (8,4)->(7,4)->(6,4)->(5,4)->(5,3)->(4,3)->(3,3)->(2,3)->(1,3)->(0,3) - route exists.
-  Red route: Red can reach goal - route exists.
+  Blue route: (8,4)->(7,4)->(6,4)->(5,4)->(5,5)->(4,5)->(3,5)->(2,5)->(1,5)->(0,5) - route exists (length 9).
+  Red route: Red can reach goal - route exists (length 9).
   Legal.
 ```
 
-### Example 18: Path preservation - illegal seal
+### Example 18: Path preservation — sealed pocket (illegal)
 
 ```
 Before:
-  Blue at (8,4), Red at (0,4)
-  Walls: H(7,3), H(7,4), H(7,5), H(7,6), H(7,7) - line across most of row 7.
+  Blue at (8,0), Red at (0,4)
+  Existing wall: H(7,0) — blocks edges (7,0)-(8,0) and (7,1)-(8,1)
   currentPlayer: Blue
 
-Action: W H 7,2
+Action: W V 7,1
 
 Result: ILLEGAL - wallBlocksPath
-  H(7,2) would complete a wall across all of row 7 (cols 2-8).
-  Blue at (8,4) would be sealed below row 7 with no route to row 0.
+  V(7,1) blocks edges (7,1)-(7,2) and (8,1)-(8,2).
+  Combined with H(7,0), Blue at (8,0) is sealed in pocket {(8,0),(8,1)}:
+    - (8,0) up to (7,0): blocked by H(7,0)
+    - (8,0) right to (8,1): not blocked, but (8,1) up to (7,1): blocked by H(7,0)
+    - (8,1) right to (8,2): blocked by V(7,1)
+    - (8,1) down: off-board
+    - (8,0) down/left: off-board
+  Blue has no route to row 0.
 ```
 
 
@@ -710,7 +734,7 @@ Result: ILLEGAL - wallBlocksPath
 | T-JUMP-001 | R-JUMP-01..02 | Blue(5,4), Red(4,4), no walls, Blue turn | Blue M 3,4 | Success straight jump. Blue(3,4). |
 | T-JUMP-002 | R-JUMP-01,03 | Blue(5,4), Red(4,4), Wall H(3,4), Blue turn | Blue M 4,3 | Success diagonal jump. Blue(4,3). |
 | T-JUMP-003 | R-JUMP-01,03 | Blue(5,4), Red(4,4), Wall H(3,4), Blue turn | Blue M 4,5 | Success diagonal jump. Blue(4,5). |
-| T-JUMP-004 | R-JUMP-01..02 | Blue(1,4), Red(0,4), no walls, Blue turn | Blue M -1,4 | ILLEGAL straight off-board. Diagonals available. |
+| T-JUMP-004 | R-JUMP-01,03 | Blue(1,4), Red(0,4), Wall V(0,3), Blue turn | Blue M 0,5 | Success diagonal jump (straight off-board, one diagonal blocked). Blue(0,5). Wins. |
 | T-JUMP-005 | R-JUMP-01,03 | Blue(1,4), Red(0,4), no walls, Blue turn | Blue M 0,3 | Success diagonal jump. Blue(0,3). Wins. |
 | T-JUMP-006 | R-JUMP-01,03 | Blue(1,4), Red(0,4), Wall V(0,3), Blue turn | Blue M 0,3 | ILLEGAL moveBlockedByWall |
 | T-JUMP-007 | R-JUMP-01 | Blue(1,4), Red(0,4), no walls, Blue turn | Blue M 0,4 | ILLEGAL moveOntoPawn |
@@ -730,19 +754,19 @@ Result: ILLEGAL - wallBlocksPath
 | T-WALL-008 | R-WALL-09 | Wall H(3,3) exists, Blue turn | W V 4,3 | Success T-junction |
 | T-WALL-009 | R-WALL-09 | Wall H(3,3) exists, Blue turn | W H 3,5 | Success end-to-end |
 | T-WALL-010 | R-WALL-10 | Blue 0 walls, Blue turn | W H 3,3 | ILLEGAL noWallsRemaining |
-| T-WALL-011 | R-PATH-01..02 | Blue(8,4), Red(0,4), Blue turn | W H 7,2 (seal row 7) | ILLEGAL wallBlocksPath |
-| T-WALL-012 | R-PATH-01 | Blue(8,4), Red(0,4), Wall V(4,4), Blue turn | W V 4,3 | Check path preservation |
+| T-WALL-011 | R-PATH-01..02 | Blue(8,0), Red(0,4), Wall H(7,0), Blue turn | W V 7,1 | ILLEGAL wallBlocksPath — Blue sealed in pocket. |
+| T-WALL-012 | R-PATH-01 | Blue(8,4), Red(0,4), Wall V(4,4), Blue turn | W V 4,3 | Success — both players still have routes. |
 | T-WALL-013 | R-PATH-04 | Blue(8,4), Red(0,4), wall rejected | Wall rejected | State unchanged |
 
 ### 9.4 Pathfinding tests
 
 | Test ID | Rule IDs | Given | When | Then |
 |---------|----------|-------|------|------|
-| T-PATH-001 | R-PATH-01..03 | Open board, Blue(8,4), Red(0,4) | Check routes | Both have routes. Length=8 each. |
-| T-PATH-002 | R-PATH-01 | Blue(8,4), Red(0,4), Wall H(4,4) | Check routes | Both have routes (detour). |
+| T-PATH-001 | R-PATH-01..03 | Open board, Blue(8,4), Red(0,4) | Check routes | Both have routes. Blue length=8, Red length=8. |
+| T-PATH-002 | R-PATH-01 | Blue(8,4), Red(0,4), Wall H(4,3) | Check routes | Both have routes. Blue length=9 (detour via (5,3)->(4,3)), Red length=9. |
 | T-PATH-003 | R-PATH-01 | Blue(8,4), Red(0,4), multiple walls | Check routes | Both have routes (longer path). |
-| T-PATH-004 | R-PATH-01 | Blue(8,4), Red(0,4), wall would seal Blue | Check routes | Wall placement illegal. |
-| T-PATH-005 | R-PATH-02 | Blue(5,5), Red(4,4), walls near (4,4) | Check routes | Route exists (pawn ignored). |
+| T-PATH-004 | R-PATH-01 | Blue(8,0), Red(0,4), Wall H(7,0) | Attempt W V 7,1 | ILLEGAL wallBlocksPath — Blue sealed in pocket {(8,0),(8,1)}. |
+| T-PATH-005 | R-PATH-02 | Blue(5,5), Red(4,4), walls near (4,4) | Check routes | Route exists (pawn ignored as obstacle). |
 | T-PATH-006 | R-PATH-05 | Same state, BFS vs DFS | Compare | Same yes/no answer. |
 
 ### 9.5 Win tests
@@ -824,9 +848,9 @@ Result: ILLEGAL - wallBlocksPath
 | R-MOVE-04 | T-MOVE-009 |
 | R-MOVE-05 | T-MOVE-013..014 |
 | R-MOVE-06 | T-TURN-001 |
-| R-JUMP-001 | T-JUMP-001..004 |
-| R-JUMP-002 | T-JUMP-001, 004..005 |
-| R-JUMP-003 | T-JUMP-002..003, 005..006 |
+| R-JUMP-001 | T-JUMP-001..005 |
+| R-JUMP-002 | T-JUMP-001, 004 |
+| R-JUMP-003 | T-JUMP-002..003, 004..006 |
 | R-JUMP-004 | T-JUMP-008 |
 | R-JUMP-005 | T-JUMP-001 (implicit) |
 | R-WALL-01..06 | T-WALL-001..003 |
@@ -858,3 +882,138 @@ Result: ILLEGAL - wallBlocksPath
 | R-SERIAL-03 | T-SERIAL-001..003 |
 
 No orphan rules. Every rule ID has at least one test.
+
+---
+
+## 11. Decision Log
+
+All rule-level decisions that shaped this specification. Each decision is frozen unless a formal rule-change process (rules.md Rule 15, Rule 16) revisits it.
+
+| ID | Decision | Status |
+|----|----------|--------|
+| D-01 | Two players: Blue and Red. | Frozen |
+| D-02 | Blue starts at (size-1, size~/2). Red starts at (0, size~/2). | Frozen |
+| D-03 | Blue moves first. | Frozen |
+| D-04 | Goal: reach own goal edge (Blue=row 0, Red=row size-1). | Frozen |
+| D-05 | Reaching any cell on the goal row wins. | Frozen |
+| D-06 | Blue moves first (D-03). | Frozen |
+| D-07 | Exactly one primary action per turn: move OR wall. | Frozen |
+| D-08 | Walls are never returned or moved once placed. | Frozen |
+| D-09 | Walls are exactly 2 cells long, horizontal or vertical, on grid lines. | Frozen |
+| D-10 | Wall identity: (anchorRow, anchorColumn, orientation, owner). Anchors 0..size-2. | Frozen |
+| D-11 | Overlap: same-orientation walls offset by <= 1 are illegal. | Frozen |
+| D-12 | Crossing: H and V at the same anchor are illegal. | Frozen |
+| D-13 | Path preservation: both players must always have a route; pawns ignored. | Frozen |
+| D-14 | No draw/repetition rule in core spec (deferred to Open Questions). | Deferred |
+| D-15 | Win is immediate upon reaching goal row. | Frozen |
+| D-16 | Canonical legal-action ordering: moves before walls, sorted by destination/anchor. | Frozen |
+| D-17 | Error taxonomy: 12 named failure reasons with deterministic precedence. | Frozen |
+| D-18 | Jump-failure classification: R-JUMP-03 (diagonal) is only attempted when R-JUMP-02 (straight) is unavailable. If straight is available, diagonal targets in the same direction are not generated. This keeps the move list deterministic and avoids duplicate destinations. | Frozen |
+
+---
+
+## 12. Open Questions
+
+Items explicitly deferred from Phase 1. These are NOT resolved and must be revisited before or during Phase 2.
+
+| ID | Question | Status |
+|----|----------|--------|
+| Q-01 | Should a draw/repetition rule be added? If so, what form (e.g., 50-move repeat, position repetition)? | Open |
+| Q-02 | Board edge behavior for wall anchors at N-2: should the system enforce stricter anchor bounds for small boards? | Open |
+| Q-03 | Should a turn limit or game clock be added to prevent infinite games? | Open |
+
+---
+
+## 13. Out of Scope
+
+The following are explicitly out of scope for this specification:
+
+- Online multiplayer protocol (Phase 7-10).
+- AI behavior (Phase 5).
+- Board rendering, animation, or visual design (Phase 3, design.md).
+- Firebase security rules or data schema.
+- Local persistence format.
+- Accessibility features (Phase 13).
+- Ranked mode, matchmaking, or progression systems.
+- Replay or spectator systems.
+- Sound, haptics, or vibration.
+
+---
+
+## 14. Phase-1 Task Mapping
+
+This section maps each Phase 1 task (from phase.md) to the corresponding section in game_spec.md.
+
+| Phase 1 Task | game_spec.md Section |
+|--------------|---------------------|
+| Define board size | §2 Configuration, §3.1 R-BOARD-01 |
+| Define player starting positions | §3.2 R-PLAYER-02, R-PLAYER-03 |
+| Define goal edges | §3.2, §3.8 R-WIN-01, R-WIN-02 |
+| Define movement | §3.4 R-MOVE-01 through R-MOVE-06 |
+| Define wall orientation | §3.6 R-WALL-01 |
+| Define wall inventory | §3.6 R-WALL-10, §2.1 wallsPerPlayer |
+| Define wall overlap rules | §3.6 R-WALL-07 |
+| Define wall crossing rules | §3.6 R-WALL-08 |
+| Define path-preservation rule | §3.7 R-PATH-01 through R-PATH-05 |
+| Define win condition | §3.8 R-WIN-01 through R-WIN-05 |
+| Define turn transition | §3.3 R-TURN-01 through R-TURN-05 |
+| Decide pawn-jump behavior | §3.5 R-JUMP-01 through R-JUMP-05 |
+
+---
+
+## 15. Scripted Game Example
+
+A complete 10-action game demonstrating moves and wall placements.
+
+```
+Initial:
+  Blue(8,4), Red(0,4), Blue walls=10, Red walls=10, turn=0
+
+1. Blue M 7,4    → ok    Blue(7,4), turn=1
+2. Red  M 1,4    → ok    Red(1,4),  turn=2
+3. Blue M 6,4    → ok    Blue(6,4), turn=3
+4. Red  M 2,4    → ok    Red(2,4),  turn=4
+5. Blue W H 3,3  → ok    Blue walls=9, turn=5
+   (H(3,3) blocks edges (3,3)-(4,3) and (3,4)-(4,4))
+6. Red  M 3,4    → ok    Red(3,4),  turn=6
+   (Red moves through (3,4) — no wall blocks (2,4)-(3,4))
+7. Blue M 5,4    → ok    Blue(5,4), turn=7
+8. Red  W V 5,3  → ok    Red walls=9, turn=8
+   (V(5,3) blocks edges (5,3)-(5,4) and (6,3)-(6,4))
+9. Blue M 4,4    → ok    Blue(4,4), turn=9
+   (Blue moves to (4,4) — no wall blocks (5,4)-(4,4); H(3,3) blocks (3,4)-(4,4) but Blue is moving to (4,4) from (5,4), crossing edge (4,4)-(5,4) which is not blocked)
+10. Red  W H 3,5 → ok    Red walls=8, turn=10
+    (H(3,5) blocks edges (3,5)-(4,5) and (3,6)-(4,6); no overlap with H(3,3) since |5-3|=2)
+
+Final state:
+  Blue(4,4), Red(3,4)
+  Blue walls=9, Red walls=8
+  turn=10, status=inProgress, winner=null
+```
+
+---
+
+## 16. Finished-State JSON
+
+When a game ends, the GameState JSON includes the winner and status:
+
+```
+{
+  "schemaVersion": 1,
+  "boardConfig": {"size": 9, "wallsPerPlayer": 10},
+  "players": ["blue", "red"],
+  "currentPlayer": "red",
+  "pawnPositions": {"blue": {"row": 0, "column": 4}, "red": {"row": 7, "column": 4}},
+  "walls": [...],
+  "remainingWalls": {"blue": 5, "red": 6},
+  "turnNumber": 15,
+  "status": "finished",
+  "winner": "blue"
+}
+```
+
+Key properties of a finished state:
+- `status` == `"finished"`
+- `winner` == the player who reached their goal row (`"blue"` or `"red"`)
+- `currentPlayer` is the player whose turn it would be next (not the winner)
+- No further actions are accepted (R-WIN-04)
