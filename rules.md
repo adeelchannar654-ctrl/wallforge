@@ -466,6 +466,7 @@ rules.md
 phase.md
 design.md
 memory.md
+game_spec.md
 ```
 
 Then inspect the existing code before changing it.
@@ -673,6 +674,7 @@ If a game rule changes:
 
 Update:
 
+- game_spec.md (source of truth for game rules)
 - PRD.md
 - rules.md
 - phase.md if relevant
@@ -759,3 +761,8 @@ Do not introduce online features before the offline game engine is stable.
 ### Rule 15
 
 Any change to the core game rules requires tests and documentation updates.
+
+### Rule 16
+
+`game_spec.md` is the single source of truth for game legality. Any rule change
+requires updating `game_spec.md`, its rule IDs, and its test catalog.
