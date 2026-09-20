@@ -2,13 +2,22 @@
 
 ## Status
 
-**Version:** 1.0.3
+**Version:** 1.0.4
 **Status:** Frozen — Phase 1 (corrected)
 **Date:** 2026-09-20
 
 This document is the canonical, frozen rulebook for Wallforge. Phase 2 implements this specification. Any change requires the process defined in `rules.md` and Rule 15: update `game_spec.md`, its rule IDs, and its test catalog.
 
 ### Changelog
+
+**v1.0.4 (2026-09-20)** — Close Phase 1 gaps:
+- Fixed T-JUMP-009: wrong test (H(2,4) does not block jump) and removed duplicate row.
+- Added verified jump tests: T-JUMP-009..013 (straight blocked, diagonal allowed, wall beyond landing, diagonal-while-straight, non-adjacent).
+- Fixed R-WIN-05 matrix: now cites T-WIN-003 and T-WIN-006 (real IDs).
+- Removed stray test rows from coverage matrix section.
+- Replaced Decision Log D-01..D-18 with owner's canonical table (all rule IDs cited).
+- Added property-test wording to R-NOLEGAL-01 and T-DET-005.
+- Noted that v1.0.3's "checker passes" claim was not reproducible (checker file was not committed).
 
 **v1.0.3 (2026-09-20)** — Independent Checker Pass:
 - Removed verify_game_spec.py references which falsely claimed 125 passes.
@@ -297,7 +306,7 @@ H(r,c) and H(r,c+3):  Legal — no overlap, no crossing
 
 ### 3.9 No-Legal-Action Situation
 
-**R-NOLEGAL-01:** A player can NEVER be in a state with no legal actions, given the current rules.
+**R-NOLEGAL-01:** A player can NEVER be in a state with no legal actions, given the current rules. This is validated as a **property test** in Phase 2 (see T-DET-005).
 
 **Proof sketch:**
 
@@ -848,9 +857,11 @@ Result: ILLEGAL - wallBlocksPath
 | T-JUMP-006 | R-JUMP-01,03 | Blue(1,4), Red(0,4), Wall V(0,3), Blue turn | Blue M 0,3 | ILLEGAL moveIllegalJump |
 | T-JUMP-007 | R-JUMP-01 | Blue(1,4), Red(0,4), no walls, Blue turn | Blue M 0,4 | ILLEGAL moveOntoPawn |
 | T-JUMP-008 | R-JUMP-04 | Blue(5,4), Red(4,4), no walls, Blue turn | Blue M 3,4 | turnNumber increments by 1 |
-| T-JUMP-009 | R-JUMP-02 | Blue(5,4), Red(4,4), Wall H(2,4), Blue turn | Blue M 3,4 | ILLEGAL moveIllegalJump |
-| T-JUMP-010 | R-JUMP-03 | Blue(5,4), Red(4,4), no walls, Blue turn | Blue M 4,3 | ILLEGAL moveIllegalJump (straight is available) |
-| T-JUMP-011 | R-JUMP-01 | Blue(5,4), Red(0,4), Blue turn | Blue M 3,4 | ILLEGAL moveNotAdjacent (distance 2, no opponent) |
+| T-JUMP-009 | R-JUMP-02 | Blue(5,4), Red(4,4), Wall H(3,4), Blue turn | Blue M 3,4 | ILLEGAL moveIllegalJump (straight jump blocked between opponent and landing) |
+| T-JUMP-010 | R-JUMP-03 | Blue(5,4), Red(4,4), Wall H(3,4), Blue turn | Blue M 4,3 | Success diagonal jump (straight unavailable, diagonal allowed) |
+| T-JUMP-011 | R-JUMP-02 | Blue(5,4), Red(4,4), Wall H(2,4), Blue turn | Blue M 3,4 | Success straight jump (wall beyond landing cell does not block) |
+| T-JUMP-012 | R-JUMP-03 | Blue(5,4), Red(4,4), no walls, Blue turn | Blue M 4,3 | ILLEGAL moveIllegalJump (diagonal while straight is available) |
+| T-JUMP-013 | R-JUMP-01 | Blue(5,4), Red(0,4), Blue turn | Blue M 3,4 | ILLEGAL moveNotAdjacent (distance 2, no opponent) |
 
 ### 9.3 Wall tests
 
@@ -887,10 +898,10 @@ Result: ILLEGAL - wallBlocksPath
 |---------|----------|-------|------|------|
 | T-WIN-001 | R-WIN-01..02 | Blue(1,4), Red(3,2), Blue turn | Blue M 0,4 | finished, winner=Blue |
 | T-WIN-002 | R-WIN-01..02 | Red(7,4), Blue(3,2), Red turn | Red M 8,4 | finished, winner=Red |
-| T-WIN-003a | R-WIN-05 | Blue(7,4), Red(1,4), Red turn | Red M 0,4 | Success. inProgress, no winner (row 0 is Blue goal) |
-| T-WIN-003b | R-WIN-05 | Blue(7,4), Red(3,2), Blue turn | Blue M 8,4 | Success. inProgress, no winner |
+| T-WIN-003 | R-WIN-05 | Blue(7,4), Red(1,4), Red turn | Red M 0,4 | Success. inProgress, no winner (row 0 is Blue goal, not Red's) |
 | T-WIN-004 | R-WIN-04 | Game finished | Any action | ILLEGAL matchFinished |
 | T-WIN-005 | R-WIN-01, R-JUMP-01 | Blue(1,4), Red(0,4), Blue turn | Blue M 0,3 (jump) | winner=Blue (goal row via jump) |
+| T-WIN-006 | R-WIN-05 | Blue(7,4), Red(3,2), Blue turn | Blue M 8,4 | Success. inProgress, no winner (row 8 is Red goal, not Blue's) |
 
 ### 9.6 Turn handling tests
 
@@ -922,7 +933,7 @@ Result: ILLEGAL - wallBlocksPath
 | T-DET-002 | R-ORDER-01 | Initial state | Count moves | 3 (up/left/right; down off-board) |
 | T-DET-003 | R-ORDER-01 | Initial state | Count walls | 128 (all slots available) |
 | T-DET-004 | R-ORDER-01 | Initial state | Total actions | 3 + 128 = 131 |
-| T-DET-005 | R-NOLEGAL-01..02 | Initial state | 1000 random seeds random play | Never empty legalActions while inProgress |
+| T-DET-005 | R-NOLEGAL-01..02 | Initial state | Property test (Phase 2): ≥1000 random seeds on 9×9 and 5×5 boards, random legal play | Never empty legalActions while status == inProgress |
 
 ### 9.9 Config tests
 
@@ -963,13 +974,10 @@ Result: ILLEGAL - wallBlocksPath
 | R-MOVE-04 | T-MOVE-009 |
 | R-MOVE-05 | T-MOVE-013..014 |
 | R-MOVE-06 | T-TURN-001 |
-| R-JUMP-01 | T-JUMP-001..005 |
-| R-JUMP-02 | T-JUMP-001, 004 |
-| R-JUMP-03 | T-JUMP-002..003, 004..006 |
+| R-JUMP-01 | T-JUMP-001..005, 013 |
+| R-JUMP-02 | T-JUMP-001, 004, 009, 011 |
+| R-JUMP-03 | T-JUMP-002..003, 004..006, 010, 012 |
 | R-JUMP-04 | T-JUMP-008 |
-| T-JUMP-009 | R-JUMP-02 | Blue(5,4), Red(4,4), Wall H(2,4), Blue turn | Blue M 3,4 | ILLEGAL moveIllegalJump |
-| T-JUMP-010 | R-JUMP-03 | Blue(5,4), Red(4,4), no walls, Blue turn | Blue M 4,3 | ILLEGAL moveIllegalJump (straight is available) |
-| T-JUMP-011 | R-JUMP-01 | Blue(5,4), Red(0,4), Blue turn | Blue M 3,4 | ILLEGAL moveNotAdjacent (distance 2, no opponent) |
 | R-JUMP-05 | T-JUMP-007 (destination occupied = moveOntoPawn) |
 | R-WALL-01..06 | T-WALL-001..003 |
 | R-WALL-07 | T-WALL-004..006 |
@@ -987,7 +995,7 @@ Result: ILLEGAL - wallBlocksPath
 | R-WIN-02 | T-WIN-001..002 |
 | R-WIN-03 | T-WIN-001 |
 | R-WIN-04 | T-WIN-004, T-MOVE-012 |
-| R-WIN-05 | T-WIN-003 |
+| R-WIN-05 | T-WIN-003, 006 |
 | R-NOLEGAL-01 | T-DET-005 |
 | R-NOLEGAL-02 | T-DET-005 |
 | R-ORDER-01..04 | T-DET-001..004 |
@@ -1010,24 +1018,24 @@ All rule-level decisions that shaped this specification. Each decision is frozen
 
 | ID | Decision | Status |
 |----|----------|--------|
-| D-01 | Two players: Blue and Red. | Frozen |
-| D-02 | Blue starts at (size-1, size~/2). Red starts at (0, size~/2). | Frozen |
-| D-03 | Blue moves first. | Frozen |
-| D-04 | Goal: reach own goal edge (Blue=row 0, Red=row size-1). | Frozen |
-| D-05 | Reaching any cell on the goal row wins. | Frozen |
-| D-06 | Blue moves first (D-03). | Frozen |
-| D-07 | Exactly one primary action per turn: move OR wall. | Frozen |
-| D-08 | Walls are never returned or moved once placed. | Frozen |
-| D-09 | Walls are exactly 2 cells long, horizontal or vertical, on grid lines. | Frozen |
-| D-10 | Wall identity: (anchorRow, anchorColumn, orientation, owner). Anchors 0..size-2. | Frozen |
-| D-11 | Overlap: same-orientation walls offset by <= 1 are illegal. | Frozen |
-| D-12 | Crossing: H and V at the same anchor are illegal. | Frozen |
-| D-13 | Path preservation: both players must always have a route; pawns ignored. | Frozen |
-| D-14 | No draw/repetition rule in core spec (deferred to Open Questions). | Deferred |
-| D-15 | Win is immediate upon reaching goal row. | Frozen |
-| D-16 | Canonical legal-action ordering: moves before walls, sorted by destination/anchor. | Frozen |
-| D-17 | Error taxonomy: 12 named failure reasons with deterministic precedence. | Frozen |
-| D-18 | Jump-failure classification: matchFinished -> wrongTurn -> then per action type. Move classification: off-board -> moveOutOfBoard; step -> moveBlockedByWall/moveOntoPawn/legal; jump-shaped -> legal/moveIllegalJump; else -> moveNotAdjacent. | Frozen |
+| D-01 | Board is 9×9, driven by `BoardConfig` (`size`, `wallsPerPlayer`); supported sizes odd, minimum 5 (R-BOARD-01) | Frozen |
+| D-02 | Coordinates are `(row, column)`, zero-based; row 0 is the top edge, column 0 the left edge (R-BOARD-02) | Frozen |
+| D-03 | Two players: Blue and Red (R-PLAYER-01) | Frozen |
+| D-04 | Start cells: Blue `(size-1, size~/2)`, Red `(0, size~/2)` (R-PLAYER-02, R-PLAYER-03) | Frozen |
+| D-05 | Goals: Blue's goal is row 0, Red's is row `size-1`; reaching any cell of the goal row wins (R-WIN-01, R-WIN-02, R-WIN-05) | Frozen |
+| D-06 | Blue moves first (R-PLAYER-07) | Frozen |
+| D-07 | Exactly one primary action per turn (move or place a wall); no passing; turn alternates after each successful action (R-TURN-01, R-TURN-02, R-TURN-03) | Frozen |
+| D-08 | 10 walls per player at start (`wallsPerPlayer`), equal for both; walls are never returned or moved (R-PLAYER-04, R-WALL-10, R-WALL-11) | Frozen |
+| D-09 | Every wall is exactly 2 cells long, horizontal (H) or vertical (V), placed between cells on grid lines (R-WALL-01, R-WALL-02) | Frozen |
+| D-10 | Wall identity `(anchorRow, anchorColumn, orientation, owner)`; valid anchors `0 … size-2` on both axes (R-WALL-03, R-WALL-04) | Frozen |
+| D-11 | Overlap: same orientation with anchor offset ≤ 1 along the wall's axis is illegal (R-WALL-07) | Frozen |
+| D-12 | Crossing: H and V walls with the same anchor are illegal (R-WALL-08) | Frozen |
+| D-13 | Path preservation: a wall is illegal if either player would have no route to their goal edge; walls only, pawns ignored (R-PATH-01) | Frozen |
+| D-14 | Pawn jumping is included (straight jump; diagonal side-step only when the straight jump is unavailable) (R-JUMP-01, R-JUMP-02, R-JUMP-03) | Frozen |
+| D-15 | Win is immediate on reaching the goal row; status becomes finished; no further actions accepted (R-WIN-03, R-WIN-04) | Frozen |
+| D-16 | No draw or repetition rule in the core rules; deferred (see Q-01, Q-03) | Deferred |
+| D-17 | Deterministic canonical ordering of legal actions: moves before walls; moves by destination row then column; walls `H` before `V`, then anchor row, then anchor column (R-ORDER-01, R-ORDER-02, R-ORDER-03, R-ORDER-04) | Frozen |
+| D-18 | Error taxonomy and jump-failure classification: `matchFinished` → `wrongTurn` → then per action type. Move classification: off-board → `moveOutOfBoard`; step → `moveBlockedByWall`/`moveOntoPawn`/legal; jump-shaped → legal/`moveIllegalJump`; else → `moveNotAdjacent`. Diagonal jump only when straight jump is unavailable (R-NOLEGAL-01, §5.2) | Frozen |
 
 ---
 
