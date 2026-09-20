@@ -1,0 +1,55 @@
+# Analyzer and lint configuration for Wallforge.
+#
+# Standards are defined in `rules.md` §11 (Code Style) and §12 (Naming).
+#
+# The project uses the recommended Flutter lint set as a baseline, then adds a
+# small number of stricter rules that directly support the project rules:
+#   - explicit typing and immutable models (rules.md §11)
+#   - avoiding magic numbers/strings and dead code (Phase 0 quality bar)
+#
+# Rules are only ever ADDED. Do not disable rules just to make code pass.
+
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
+  language:
+    strict-casts: true
+    strict-raw-types: true
+  errors:
+    # treat project rule-supporting lints as errors so they cannot silently slip
+    always_declare_return_types: error
+    unawaited_futures: error
+
+linter:
+  rules:
+    # --- Style / correctness (rules.md §11) ---
+    always_declare_return_types: true
+    avoid_print: true
+    avoid_unnecessary_containers: true
+    avoid_redundant_argument_values: true
+    prefer_final_locals: true
+    prefer_single_quotes: true
+    sort_child_properties_last: true
+    use_super_parameters: true
+    unnecessary_lambdas: true
+    unnecessary_this: true
+    unnecessary_parenthesis: true
+    cancel_subscriptions: true
+    close_sinks: true
+
+    # --- Immutability / typing (rules.md §11) ---
+    prefer_const_constructors: true
+    prefer_const_declarations: true
+    prefer_const_literals_to_create_immutables: true
+
+    # --- Documentation of public API (rules.md §18) ---
+    # Public members of the foundational layers should be documented.
+    omit_local_variable_types: false
