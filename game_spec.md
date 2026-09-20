@@ -2,7 +2,7 @@
 
 ## Status
 
-**Version:** 1.0.2
+**Version:** 1.0.3
 **Status:** Frozen — Phase 1 (corrected)
 **Date:** 2026-09-20
 
@@ -10,11 +10,21 @@ This document is the canonical, frozen rulebook for Wallforge. Phase 2 implement
 
 ### Changelog
 
+**v1.0.3 (2026-09-20)** — Independent Checker Pass:
+- Removed verify_game_spec.py references which falsely claimed 125 passes.
+- Fixed R-JUMP IDs and added R-BOARD-06, R-NOLEGAL-02 to matrix.
+- Corrected invalid states where Red was on row 8 prematurely.
+- Fixed wrong/vague tests (T-WIN-003, T-JUMP-006, T-WALL-013, T-DET-001).
+- Added second-anchor and edge coverage tests.
+- Clarified jump-failure taxonomy and updated R-NOLEGAL-01 proof.
+- Replaced scripted game and JSON with valid 17-action sequence.
+- Restored full decision log and formatted open questions.
+
 **v1.0.2 (2026-09-20)** — Second correction pass. Fixed defects 2.1–2.12:
 - 2.1: Board ASCII diagram labels corrected (row 0 = Blue GOAL, row 8 = Red GOAL).
 - 2.2: Invalid in-progress states fixed (Example 4, T-MOVE-003/004, T-WIN-002/003).
 - 2.3: Vague test descriptions replaced with exact values (T-PATH-002/003/005/006).
-- 2.4: Coverage matrix entries made explicit (R-BOARD-03, R-BOARD-05, R-WALL-11, R-JUMP-005, R-NOLEGAL-01).
+- 2.4: Coverage matrix entries made explicit (R-BOARD-03, R-BOARD-05, R-WALL-11, R-JUMP-05, R-NOLEGAL-01).
 - 2.5: R-NOLEGAL-01 proof rewritten — relies on route existence + legal move, not wall action type.
 - 2.6: §3.4 R-MOVE-03 reworded for clarity (MUST NOT instead of ambiguous MUST).
 - 2.7: Examples 3a/3b added for second-anchor blocking (H second segment, V second segment).
@@ -169,7 +179,7 @@ V(r,c) blocks edges between cols c/c+1, rows r and r+1.
 
 **R-MOVE-02:** The destination cell MUST be on the board: 0 <= row < size and 0 <= column < size.
 
-**R-MOVE-03:** No wall MUST separate the current cell from the destination cell. A wall MUST NOT block the edge between the two cells.
+**R-MOVE-03:** The destination MUST NOT be separated from the current cell by a wall.
 
 **R-MOVE-04:** The destination cell MUST NOT contain the opponent pawn (unless jumping per section 3.5).
 
@@ -289,13 +299,12 @@ H(r,c) and H(r,c+3):  Legal — no overlap, no crossing
 
 **R-NOLEGAL-01:** A player can NEVER be in a state with no legal actions, given the current rules.
 
-**Proof sketch:** Consider any game state where status == inProgress. The player whose turn it is has two possible action types: move or wall.
+**Proof sketch:**
 
-1. **Route existence:** R-PATH-01 guarantees that every placed wall preserved a route for both players. Therefore, at least one route exists from the pawn's current cell to the goal row.
-
-2. **Legal move exists:** Any route of length >= 1 requires at least one adjacent cell reachable without crossing a wall. That adjacent cell is a legal move target (R-MOVE-01 through R-MOVE-06), because: (a) it is on the board, (b) it is not occupied by the opponent (if it were, the route would need to continue through it, but pawns are ignored as obstacles for routing), and (c) no wall separates the current cell from it (the route's first edge is wall-free). Therefore, at least one legal move always exists.
-
-3. **Union is non-empty:** Since at least one legal move exists, the set of legal actions (moves ∪ walls) is never empty. A wall placement may or may not be legal, but we only need the union to be non-empty, which is guaranteed by the existence of at least one legal move.
+1. **Invariant.** After every legal action, each pawn lies in a wall-graph *component* that contains a cell of its own goal row (walls are only added when both players keep a route; steps stay in one component; a jump A→B→Y crosses open edges, so it stays in the component).
+2. Take a shortest route for the mover from cell A. If its first step is to an **empty** neighbour → a legal step exists.
+3. If the first step is to the opponent's cell B and B is **not** on the mover's goal row, the route continues to a neighbour Y≠A of B over an open edge. If the in-line cell beyond B is on board and open → the **straight jump** is legal; otherwise Y is a side cell → a diagonal jump is legal.
+4. If B **is** on the mover's goal row and the mover had no legal move, then A and B would form the whole component `{A,B}`, which contains no cell of the opponent's goal row — contradicting the invariant for the opponent.
 
 **Dependency:** This proof depends on R-PATH-01 being enforced on every wall placement. If a future rule change removes path-preservation, this proof must be revisited (R-NOLEGAL-02).
 
@@ -365,20 +374,11 @@ Examples:
 
 ### 5.2 Deterministic validation precedence
 
-When multiple failures apply, the engine MUST report the first matching failure in this order:
+1. `matchFinished` → `wrongTurn` → then per action type.
+2. Move destination classification: off-board → `moveOutOfBoard`; one of the 4 neighbours (a *step*): wall between → `moveBlockedByWall`, opponent there → `moveOntoPawn`, else legal; **jump-shaped** (opponent orthogonally adjacent with an open edge, and the destination is the cell directly beyond the opponent or a cell beside the opponent): legal only if R-JUMP-02/03 allow it, otherwise `moveIllegalJump`; anything else (including jump-shaped attempts when the opponent is not adjacent or the edge to the opponent is walled) → `moveNotAdjacent`.
+3. Wall action order: `noWallsRemaining` → `wallOutOfBounds` → `wallOverlaps` → `wallCrosses` → `wallBlocksPath`.
 
-1. matchFinished
-2. wrongTurn
-3. noWallsRemaining (for wall actions)
-4. moveOutOfBoard / wallOutOfBounds (bounds checks)
-5. moveNotAdjacent (adjacency check)
-6. moveBlockedByWall (wall blocking check)
-7. moveOntoPawn / moveIllegalJump (pawn collision/jump checks)
-8. wallOverlaps (overlap check)
-9. wallCrosses (crossing check)
-10. wallBlocksPath (path-preservation check)
 
-Justification: This order starts with the most fundamental constraints (game state, turn ownership) before evaluating action-specific legality, ensuring the most useful error is always reported.
 
 ---
 
@@ -420,8 +420,19 @@ inProgress transitions to finished exactly once, when a player reaches their goa
 
 Initial state:
 
-```
-{"schemaVersion":1,"boardConfig":{"size":9,"wallsPerPlayer":10},"players":["blue","red"],"currentPlayer":"blue","pawnPositions":{"blue":{"row":8,"column":4},"red":{"row":0,"column":4}},"walls":[],"remainingWalls":{"blue":10,"red":10},"turnNumber":0,"status":"inProgress","winner":null}
+```json
+{
+  "schemaVersion": 1,
+  "boardConfig": {"size": 9, "wallsPerPlayer": 10},
+  "players": ["blue", "red"],
+  "currentPlayer": "red",
+  "pawnPositions": {"blue": {"row": 5, "column": 4}, "red": {"row": 2, "column": 4}},
+  "walls": [],
+  "remainingWalls": {"blue": 10, "red": 10},
+  "turnNumber": 5,
+  "status": "inProgress",
+  "winner": null
+}
 ```
 
 ### 7.2 JSON shape - Action
@@ -439,8 +450,19 @@ Wall: `{"type":"wall","orientation":"H","anchor":{"row":0,"column":0}}`
 
 ### 7.4 Example - mid-game state
 
-```
-{"schemaVersion":1,"boardConfig":{"size":9,"wallsPerPlayer":10},"players":["blue","red"],"currentPlayer":"red","pawnPositions":{"blue":{"row":7,"column":4},"red":{"row":1,"column":4}},"walls":[{"owner":"blue","orientation":"H","anchor":{"row":3,"column":3}},{"owner":"red","orientation":"V","anchor":{"row":5,"column":2}}],"remainingWalls":{"blue":9,"red":9},"turnNumber":2,"status":"inProgress","winner":null}
+```json
+{
+  "schemaVersion": 1,
+  "boardConfig": {"size": 9, "wallsPerPlayer": 10},
+  "players": ["blue", "red"],
+  "currentPlayer": "red",
+  "pawnPositions": {"blue": {"row": 5, "column": 4}, "red": {"row": 2, "column": 4}},
+  "walls": [],
+  "remainingWalls": {"blue": 10, "red": 10},
+  "turnNumber": 5,
+  "status": "inProgress",
+  "winner": null
+}
 ```
 
 
@@ -523,11 +545,40 @@ Result: ILLEGAL - moveBlockedByWall
   The edge (5,3)-(5,4) is blocked by V(4,3)'s second segment.
 ```
 
+### Example 3c: Move blocked at board edge
+
+```
+Before:
+  Blue at (3,8), Red at (0,4)
+  Wall: H(3,7) — blocks edges (3,7)-(4,7) and (3,8)-(4,8)
+  currentPlayer: Blue
+
+Action: M 4,8
+
+Result: ILLEGAL - moveBlockedByWall
+  H(3,7) second segment blocks (3,8)-(4,8). Only one anchor exists here.
+```
+
+### Example 3d: Move right blocked by second anchor of vertical wall
+
+```
+Before:
+  Blue at (5,4), Red at (0,4)
+  Wall: V(4,4) — second anchor V(r-1,c) blocks rightward from (5,4)
+  currentPlayer: Blue
+
+Action: M 5,5
+
+Result: ILLEGAL - moveBlockedByWall
+  V(4,4) has second anchor at row 4, spanning rows 4-5.
+  The edge (5,4)-(5,5) is blocked by V(4,4)'s second segment.
+```
+
 ### Example 4: Move off the board edge
 
 ```
 Before:
-  Blue at (5,4), Red at (8,4)
+  Blue at (5,4), Red at (3,2)
   currentPlayer: Blue
 
 Action: M -1,4
@@ -678,7 +729,7 @@ After:
 
 ```
 Before:
-  Blue at (1,4), Red at (8,4)
+  Blue at (1,4), Red at (3,2)
   currentPlayer: Blue
 
 Action: M 0,4
@@ -773,11 +824,17 @@ Result: ILLEGAL - wallBlocksPath
 | T-MOVE-007 | R-MOVE-03, R-WALL-05 | Blue(3,4), Red(0,4), Wall H(3,4), Blue turn | Blue M 4,4 | ILLEGAL moveBlockedByWall |
 | T-MOVE-008 | R-MOVE-03, R-WALL-06 | Blue(5,3), Red(0,4), Wall V(5,3), Blue turn | Blue M 5,4 | ILLEGAL moveBlockedByWall |
 | T-MOVE-009 | R-MOVE-04 | Blue(5,4), Red(4,4), no walls, Blue turn | Blue M 4,4 | ILLEGAL moveOntoPawn |
-| T-MOVE-010 | R-WIN-01..02 | Blue(1,4), Red(8,4), Blue turn | Blue M 0,4 | Success. finished. winner=Blue |
+| T-MOVE-010 | R-WIN-01..02 | Blue(1,4), Red(3,2), Blue turn | Blue M 0,4 | Success. finished. winner=Blue |
 | T-MOVE-011 | R-TURN-05, R-PLAYER-07 | Blue(8,4), Red(0,4), Blue turn | Red M 1,4 | ILLEGAL wrongTurn |
 | T-MOVE-012 | R-WIN-04 | Blue(0,4), game finished | Blue M any | ILLEGAL matchFinished |
 | T-MOVE-013 | R-MOVE-05 | Blue(5,5), Red(0,4), Blue turn | Blue M 5,4 | Success (sideways) |
 | T-MOVE-014 | R-MOVE-05 | Blue(5,5), Red(0,4), Blue turn | Blue M 4,5 | Success (backward) |
+| T-MOVE-015 | R-MOVE-03 | Blue(4,4), Red(0,4), Wall H(3,3), Blue turn | Blue M 3,4 | ILLEGAL moveBlockedByWall |
+| T-MOVE-016 | R-MOVE-03 | Blue(3,4), Red(0,4), Wall H(3,3), Blue turn | Blue M 4,4 | ILLEGAL moveBlockedByWall |
+| T-MOVE-017 | R-MOVE-03 | Blue(5,4), Red(0,4), Wall V(4,3), Blue turn | Blue M 5,3 | ILLEGAL moveBlockedByWall |
+| T-MOVE-018 | R-MOVE-03 | Blue(5,4), Red(0,4), Wall V(4,4), Blue turn | Blue M 5,5 | ILLEGAL moveBlockedByWall |
+| T-MOVE-019 | R-MOVE-03 | Blue(3,8), Red(0,4), Wall H(3,7), Blue turn | Blue M 4,8 | ILLEGAL moveBlockedByWall |
+| T-MOVE-020 | R-MOVE-03 | Blue(5,4), Red(0,4), Wall V(4,3), Blue turn | Blue M 5,5 | Success. Blue(5,5). |
 
 ### 9.2 Jump tests
 
@@ -788,9 +845,12 @@ Result: ILLEGAL - wallBlocksPath
 | T-JUMP-003 | R-JUMP-01,03 | Blue(5,4), Red(4,4), Wall H(3,4), Blue turn | Blue M 4,5 | Success diagonal jump. Blue(4,5). |
 | T-JUMP-004 | R-JUMP-01,03 | Blue(1,4), Red(0,4), Wall V(0,3), Blue turn | Blue M 0,5 | Success diagonal jump (straight off-board, one diagonal blocked). Blue(0,5). Wins. |
 | T-JUMP-005 | R-JUMP-01,03 | Blue(1,4), Red(0,4), no walls, Blue turn | Blue M 0,3 | Success diagonal jump. Blue(0,3). Wins. |
-| T-JUMP-006 | R-JUMP-01,03 | Blue(1,4), Red(0,4), Wall V(0,3), Blue turn | Blue M 0,3 | ILLEGAL moveBlockedByWall |
+| T-JUMP-006 | R-JUMP-01,03 | Blue(1,4), Red(0,4), Wall V(0,3), Blue turn | Blue M 0,3 | ILLEGAL moveIllegalJump |
 | T-JUMP-007 | R-JUMP-01 | Blue(1,4), Red(0,4), no walls, Blue turn | Blue M 0,4 | ILLEGAL moveOntoPawn |
 | T-JUMP-008 | R-JUMP-04 | Blue(5,4), Red(4,4), no walls, Blue turn | Blue M 3,4 | turnNumber increments by 1 |
+| T-JUMP-009 | R-JUMP-02 | Blue(5,4), Red(4,4), Wall H(2,4), Blue turn | Blue M 3,4 | ILLEGAL moveIllegalJump |
+| T-JUMP-010 | R-JUMP-03 | Blue(5,4), Red(4,4), no walls, Blue turn | Blue M 4,3 | ILLEGAL moveIllegalJump (straight is available) |
+| T-JUMP-011 | R-JUMP-01 | Blue(5,4), Red(0,4), Blue turn | Blue M 3,4 | ILLEGAL moveNotAdjacent (distance 2, no opponent) |
 
 ### 9.3 Wall tests
 
@@ -808,7 +868,7 @@ Result: ILLEGAL - wallBlocksPath
 | T-WALL-010 | R-WALL-10 | Blue 0 walls, Blue turn | W H 3,3 | ILLEGAL noWallsRemaining |
 | T-WALL-011 | R-PATH-01..02 | Blue(8,0), Red(0,4), Wall H(7,0), Blue turn | W V 7,1 | ILLEGAL wallBlocksPath — Blue sealed in pocket. |
 | T-WALL-012 | R-PATH-01 | Blue(8,4), Red(0,4), Wall V(4,4), Blue turn | W V 4,3 | Success — both players still have routes. |
-| T-WALL-013 | R-PATH-04 | Blue(8,4), Red(0,4), wall rejected | Wall rejected | State unchanged |
+| T-WALL-013 | R-PATH-04 | Blue(8,0), Wall H(7,0), Blue turn | Blue W V 7,1 | ILLEGAL wallBlocksPath. Blue remainingWalls=9, turnNumber unchanged, walls unchanged |
 
 ### 9.4 Pathfinding tests
 
@@ -825,9 +885,10 @@ Result: ILLEGAL - wallBlocksPath
 
 | Test ID | Rule IDs | Given | When | Then |
 |---------|----------|-------|------|------|
-| T-WIN-001 | R-WIN-01..02 | Blue(1,4), Red(8,4), Blue turn | Blue M 0,4 | finished, winner=Blue |
+| T-WIN-001 | R-WIN-01..02 | Blue(1,4), Red(3,2), Blue turn | Blue M 0,4 | finished, winner=Blue |
 | T-WIN-002 | R-WIN-01..02 | Red(7,4), Blue(3,2), Red turn | Red M 8,4 | finished, winner=Red |
-| T-WIN-003 | R-WIN-05 | Blue(7,4), Red(0,4), Red turn | Red M 8,4 | Red does NOT win (wrong goal row — Red reaches row 8, not row 0) |
+| T-WIN-003a | R-WIN-05 | Blue(7,4), Red(1,4), Red turn | Red M 0,4 | Success. inProgress, no winner (row 0 is Blue goal) |
+| T-WIN-003b | R-WIN-05 | Blue(7,4), Red(3,2), Blue turn | Blue M 8,4 | Success. inProgress, no winner |
 | T-WIN-004 | R-WIN-04 | Game finished | Any action | ILLEGAL matchFinished |
 | T-WIN-005 | R-WIN-01, R-JUMP-01 | Blue(1,4), Red(0,4), Blue turn | Blue M 0,3 (jump) | winner=Blue (goal row via jump) |
 
@@ -847,8 +908,8 @@ Result: ILLEGAL - wallBlocksPath
 | Test ID | Rule IDs | Given | When | Then |
 |---------|----------|-------|------|------|
 | T-SERIAL-001 | R-SERIAL-03 | Initial GameState | toJson then fromJson | Round-trip preserves all fields |
-| T-SERIAL-002 | R-SERIAL-003 | Mid-game GameState | toJson then fromJson | Round-trip preserves all fields |
-| T-SERIAL-003 | R-SERIAL-003 | Finished GameState | toJson then fromJson | Preserves status and winner |
+| T-SERIAL-002 | R-SERIAL-03 | Mid-game GameState | toJson then fromJson | Round-trip preserves all fields |
+| T-SERIAL-003 | R-SERIAL-03 | Finished GameState | toJson then fromJson | Preserves status and winner |
 | T-SERIAL-004 | R-SERIAL-01 | JSON with schemaVersion=999 | fromJson | Rejected unknown version |
 | T-SERIAL-005 | R-SERIAL-02 | Malformed JSON | fromJson | Rejected no partial apply |
 | T-SERIAL-006 | R-SERIAL-02 | JSON violating R-STATE-01 | fromJson | Rejected invariant violation |
@@ -857,10 +918,11 @@ Result: ILLEGAL - wallBlocksPath
 
 | Test ID | Rule IDs | Given | When | Then |
 |---------|----------|-------|------|------|
-| T-DET-001 | R-ORDER-01..04 | Initial state | Generate legalActions | Moves first, then walls. Canonical order. |
+| T-DET-001 | R-ORDER-01..04 | Initial state | Generate legalActions | M 7,4, M 8,3, M 8,5, then W H 0,0, W H 0,1 ... last three W V 7,5, W V 7,6, W V 7,7 |
 | T-DET-002 | R-ORDER-01 | Initial state | Count moves | 3 (up/left/right; down off-board) |
 | T-DET-003 | R-ORDER-01 | Initial state | Count walls | 128 (all slots available) |
 | T-DET-004 | R-ORDER-01 | Initial state | Total actions | 3 + 128 = 131 |
+| T-DET-005 | R-NOLEGAL-01..02 | Initial state | 1000 random seeds random play | Never empty legalActions while inProgress |
 
 ### 9.9 Config tests
 
@@ -882,6 +944,7 @@ Result: ILLEGAL - wallBlocksPath
 | R-BOARD-03 | T-MOVE-001 (coordinate range validated by BFS) |
 | R-BOARD-04 | T-MOVE-001..002 |
 | R-BOARD-05 | T-MOVE-001 (adjacent move = one edge crossed) |
+| R-BOARD-06 | T-CONFIG-001 |
 | R-PLAYER-01 | T-MOVE-001, 011 |
 | R-PLAYER-02 | T-MOVE-001, T-JUMP-001 |
 | R-PLAYER-03 | T-MOVE-001, 011 |
@@ -900,11 +963,14 @@ Result: ILLEGAL - wallBlocksPath
 | R-MOVE-04 | T-MOVE-009 |
 | R-MOVE-05 | T-MOVE-013..014 |
 | R-MOVE-06 | T-TURN-001 |
-| R-JUMP-001 | T-JUMP-001..005 |
-| R-JUMP-002 | T-JUMP-001, 004 |
-| R-JUMP-003 | T-JUMP-002..003, 004..006 |
-| R-JUMP-004 | T-JUMP-008 |
-| R-JUMP-005 | T-JUMP-007 (destination occupied = moveOntoPawn) |
+| R-JUMP-01 | T-JUMP-001..005 |
+| R-JUMP-02 | T-JUMP-001, 004 |
+| R-JUMP-03 | T-JUMP-002..003, 004..006 |
+| R-JUMP-04 | T-JUMP-008 |
+| T-JUMP-009 | R-JUMP-02 | Blue(5,4), Red(4,4), Wall H(2,4), Blue turn | Blue M 3,4 | ILLEGAL moveIllegalJump |
+| T-JUMP-010 | R-JUMP-03 | Blue(5,4), Red(4,4), no walls, Blue turn | Blue M 4,3 | ILLEGAL moveIllegalJump (straight is available) |
+| T-JUMP-011 | R-JUMP-01 | Blue(5,4), Red(0,4), Blue turn | Blue M 3,4 | ILLEGAL moveNotAdjacent (distance 2, no opponent) |
+| R-JUMP-05 | T-JUMP-007 (destination occupied = moveOntoPawn) |
 | R-WALL-01..06 | T-WALL-001..003 |
 | R-WALL-07 | T-WALL-004..006 |
 | R-WALL-08 | T-WALL-007 |
@@ -922,7 +988,8 @@ Result: ILLEGAL - wallBlocksPath
 | R-WIN-03 | T-WIN-001 |
 | R-WIN-04 | T-WIN-004, T-MOVE-012 |
 | R-WIN-05 | T-WIN-003 |
-| R-NOLEGAL-01 | Proof in §3.9 (structural — no single test can prove universality) |
+| R-NOLEGAL-01 | T-DET-005 |
+| R-NOLEGAL-02 | T-DET-005 |
 | R-ORDER-01..04 | T-DET-001..004 |
 | R-STATE-01 | T-MOVE-009, T-SERIAL-006 |
 | R-STATE-02 | T-WALL-001, 010 |
@@ -960,7 +1027,7 @@ All rule-level decisions that shaped this specification. Each decision is frozen
 | D-15 | Win is immediate upon reaching goal row. | Frozen |
 | D-16 | Canonical legal-action ordering: moves before walls, sorted by destination/anchor. | Frozen |
 | D-17 | Error taxonomy: 12 named failure reasons with deterministic precedence. | Frozen |
-| D-18 | Jump-failure classification: When the opponent is adjacent, straight jump (R-JUMP-02) is checked first. If straight is available, diagonal targets (R-JUMP-03) in the same direction are not generated. If straight is unavailable (off-board or wall-blocked), diagonal side-steps are attempted. This ensures deterministic move generation with no duplicate destinations. | Frozen |
+| D-18 | Jump-failure classification: matchFinished -> wrongTurn -> then per action type. Move classification: off-board -> moveOutOfBoard; step -> moveBlockedByWall/moveOntoPawn/legal; jump-shaped -> legal/moveIllegalJump; else -> moveNotAdjacent. | Frozen |
 
 ---
 
@@ -970,9 +1037,9 @@ Items explicitly deferred from Phase 1. These are NOT resolved and must be revis
 
 | ID | Question | Status |
 |----|----------|--------|
-| Q-01 | Should a draw/repetition rule be added? If so, what form (e.g., 50-move repeat, position repetition)? | Open |
+| Q-01 | Should a draw/repetition rule be added? Options: 50-move, 3-fold repetition. Consequences: prevents stalling, adds memory. Recommended default: 3-fold repetition. Decide before Phase 5 (AI) and Phase 9 (online). | Unresolved |
 | Q-02 | ~~Board edge behavior for wall anchors at N-2: should the system enforce stricter anchor bounds for small boards?~~ Resolved: R-WALL-04 enforces anchors 0..size-2. No further action. | Resolved |
-| Q-03 | Should a turn limit or game clock be added to prevent infinite games? | Open |
+| Q-03 | Should a turn limit or game clock be added to prevent infinite games? Options: Turn limit (e.g. 200), Clock. Consequences: prevents griefing. Recommended default: 200 turn limit. Decide before Phase 5 (AI) and Phase 9 (online). | Unresolved |
 
 ---
 
@@ -1021,33 +1088,29 @@ A complete 17-action game demonstrating moves, wall placements, and a Blue win.
 Initial:
   Blue(8,4), Red(0,4), Blue walls=10, Red walls=10, turn=0
 
- 1. Blue M 7,4    → ok    Blue(7,4), turn=1
- 2. Red  M 1,4    → ok    Red(1,4),  turn=2
- 3. Blue M 6,4    → ok    Blue(6,4), turn=3
- 4. Red  M 2,4    → ok    Red(2,4),  turn=4
- 5. Blue W H 3,3  → ok    Blue walls=9, turn=5
-    (H(3,3) blocks edges (3,3)-(4,3) and (3,4)-(4,4))
- 6. Red  M 3,4    → ok    Red(3,4),  turn=6
- 7. Blue M 5,4    → ok    Blue(5,4), turn=7
- 8. Red  W V 5,3  → ok    Red walls=9, turn=8
-    (V(5,3) blocks edges (5,3)-(5,4) and (6,3)-(6,4))
- 9. Blue M 4,5    → ok    Blue(4,5), turn=9
-10. Red  W H 1,3  → ok    Red walls=8, turn=10
-    (H(1,3) blocks edges (1,3)-(2,3) and (1,4)-(2,4))
-11. Blue M 3,5    → ok    Blue(3,5), turn=11
-12. Red  W H 2,3  → ok    Red walls=7, turn=12
-    (H(2,3) blocks edges (2,3)-(3,3) and (2,4)-(3,4))
-13. Blue M 2,5    → ok    Blue(2,5), turn=13
-14. Red  M 3,4    → ok    Red(3,4),  turn=14
-15. Blue M 1,5    → ok    Blue(1,5), turn=15
-16. Red  M 4,4    → ok    Red(4,4),  turn=16
-17. Blue M 0,5    → ok    Blue(0,5), turn=17
+  1. Blue M 7,4    → ok    Blue(7,4), turn=1
+  2. Red  M 1,4    → ok    Red(1,4),  turn=2
+  3. Blue M 6,4    → ok    Blue(6,4), turn=3
+  4. Red  M 2,4    → ok    Red(2,4),  turn=4
+  5. Blue M 5,4    → ok    Blue(5,4), turn=5
+  6. Red  W V 6,3  → ok    Red walls=9, turn=6
+  7. Blue W H 6,5  → ok    Blue walls=9, turn=7
+  8. Red  M 3,4    → ok    Red(3,4),  turn=8
+  9. Blue M 4,4    → ok    Blue(4,4), turn=9
+ 10. Red  W H 1,3  → ok    Red walls=8, turn=10
+ 11. Blue M 2,4    → ok    Blue(2,4), turn=11
+ 12. Red  M 4,4    → ok    Red(4,4),  turn=12
+ 13. Blue M 2,5    → ok    Blue(2,5), turn=13
+ 14. Red  M 5,4    → ok    Red(5,4),  turn=14
+ 15. Blue M 1,5    → ok    Blue(1,5), turn=15
+ 16. Red  M 6,4    → ok    Red(6,4),  turn=16
+ 17. Blue M 0,5    → ok    Blue(0,5), turn=17
 
 Final state:
-  Blue(0,5), Red(4,4)
-  status: finished, winner: Blue
-  Blue walls=9, Red walls=7
-  Blue reached row 0 (goal row) — wins immediately.
+  Blue(0,5), Red(6,4)
+  walls: V(6,3) (Red), H(6,5) (Blue), H(1,3) (Red)
+  status: finished, winner: blue
+  Blue walls=9, Red walls=8, turn=17
 ```
 
 ---
@@ -1056,16 +1119,20 @@ Final state:
 
 When a game ends, the GameState JSON includes the winner and status:
 
-```
+```json
 {
   "schemaVersion": 1,
   "boardConfig": {"size": 9, "wallsPerPlayer": 10},
   "players": ["blue", "red"],
   "currentPlayer": "red",
-  "pawnPositions": {"blue": {"row": 0, "column": 4}, "red": {"row": 7, "column": 4}},
-  "walls": [...],
-  "remainingWalls": {"blue": 5, "red": 6},
-  "turnNumber": 15,
+  "pawnPositions": {"blue": {"row": 0, "column": 5}, "red": {"row": 6, "column": 4}},
+  "walls": [
+    {"owner": "red", "orientation": "V", "anchor": {"row": 6, "column": 3}},
+    {"owner": "blue", "orientation": "H", "anchor": {"row": 6, "column": 5}},
+    {"owner": "red", "orientation": "H", "anchor": {"row": 1, "column": 3}}
+  ],
+  "remainingWalls": {"blue": 9, "red": 8},
+  "turnNumber": 17,
   "status": "finished",
   "winner": "blue"
 }

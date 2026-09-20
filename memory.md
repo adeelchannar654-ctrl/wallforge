@@ -220,13 +220,14 @@ If strong competitive anti-cheat requirements emerge, revisit the backend archit
 
 ## Phase 1.1 — Specification Correction: COMPLETE
 ## Phase 1.2 — Second Specification Correction: COMPLETE
+## Phase 1.3 — Third Specification Correction: COMPLETE
 
-Verified on 2026-09-20. See §13b and §13c below for the Phase 1, Phase 1.1, and Phase 1.2 records.
+Verified on 2026-09-20. See §13b, §13c, §13d, and §13e below for the Phase records.
 
-### Completed (Phase 0 + Phase 1 + Phase 1.1 + Phase 1.2)
+### Completed (Phase 0 + Phase 1 + Phase 1.1 + Phase 1.2 + Phase 1.3)
 
 - All Phase 0 items (see §13a).
-- Frozen game specification in `game_spec.md` (v1.0.2, corrected twice).
+- Frozen game specification in `game_spec.md` (v1.0.3, corrected thrice).
 - Board size, start positions, goal edges, movement, wall rules, path
   preservation, win condition, turn transition, and pawn-jump behavior all
   formalized with deterministic answers.
@@ -518,3 +519,29 @@ The most important principle is:
 Game correctness has priority over visual effects.
 
 The visual system should make the rules easier to understand rather than hide them.
+
+
+---
+
+# 13e. Phase 1.3 Record (Third Specification Correction)
+
+Status: **complete.**
+
+Defects corrected in `game_spec.md` (v1.0.2 → v1.0.3):
+
+- Removed verify_game_spec.py references which falsely claimed 125 passes.
+- Fixed R-JUMP IDs and added R-BOARD-06, R-NOLEGAL-02 to matrix.
+- Corrected invalid states where Red was on row 8 prematurely.
+- Fixed wrong/vague tests (T-WIN-003, T-JUMP-006, T-WALL-013, T-DET-001).
+- Added second-anchor and edge coverage tests.
+- Clarified jump-failure taxonomy (D-18) and updated R-NOLEGAL-01 proof.
+- Replaced scripted game and JSON with valid 17-action sequence.
+- Restored full decision log and formatted open questions.
+
+The independent consistency checker `tool/spec_verification/check_spec_consistency.py` now passes with code 0 (`OK`). Output captured in `check_output.txt`.
+
+### What was NOT changed
+
+- No game rules changed.
+- No Dart code touched.
+- No new dependencies.

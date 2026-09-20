@@ -18,7 +18,8 @@ A wall may never remove the last route to either player's goal.
 ## Status
 
 **Phase 1 — Core Game Specification** is complete: the game rules are frozen
-in [`game_spec.md`](game_spec.md) (v1.0.2) with deterministic answers for every rule,
+in [`game_spec.md`](game_spec.md) (v1.0.3) with deterministic answers for every rule,
+and validated by the independent checker script `tool/spec_verification/check_spec_consistency.py` which passes (`OK`).
 a test catalog, an error taxonomy, and a decision log.
 
 **Phase 0 — Project Foundation** is also complete: the Flutter project, platform
