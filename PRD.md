@@ -107,63 +107,46 @@ Web users:
 
 ## 5. Core Game Rules
 
+The authoritative, frozen rulebook is [`game_spec.md`](game_spec.md). All rules
+below are summarized from that document. In case of any conflict,
+`game_spec.md` controls.
+
 ### Board
 
-Initial target: a 9×9 movement grid with wall-placement boundaries between cells.
-
-The exact board size must be represented by configuration in the game engine rather than hard-coded throughout the UI.
+A configurable NxN movement grid (default 9x9, N must be odd and >= 5). The
+board size is set by `BoardConfig` in the game engine, never hard-coded in UI.
 
 ### Players
 
-Two players:
-
-- Blue
-- Red
-
-Each player has:
-
-- A pawn position.
-- A goal edge.
-- A limited wall inventory.
-- A player identity.
-- A turn.
+Two players: Blue and Red. Blue starts at the bottom-center; Red starts at the
+top-center. Blue moves first.
 
 ### Turn
 
-A turn contains one primary action:
-
-- Move one legal step, OR
-- Place one legal wall.
-
-After a successful action, the turn changes.
+Exactly one primary action per turn: move the pawn or place a wall. No passing.
+After every successful action the turn alternates.
 
 ### Movement
 
-A pawn may move one adjacent grid position when:
-
-- The destination is on the board.
-- No wall blocks the edge.
-- Any player-specific movement rule is satisfied.
-
-If adjacent-pawn jumping is implemented, it must be specified and tested in the game-engine rules before UI implementation.
+A pawn may move to any orthogonally adjacent cell that is on the board, not
+separated by a wall, and not occupied by the opponent (unless jumping). Pawn
+jumping over an adjacent opponent is included — straight jump, or diagonal
+side-step when the straight jump is blocked.
 
 ### Walls
 
-Walls:
-
-- Belong to the player who placed them.
-- Are horizontal or vertical.
-- Occupy the appropriate wall slots.
-- Cannot overlap an existing wall.
-- Cannot illegally cross an existing wall.
-- Require at least one remaining wall.
-- Must not remove every possible route to either player's goal.
+Each player starts with 10 walls. Walls are horizontal or vertical, 2 cells
+long, placed on grid lines between cells. Walls cannot overlap, cannot cross at
+the same anchor, and must preserve at least one route for each player to their
+goal.
 
 ### Win
 
-A player wins when their pawn reaches their goal edge.
+A player wins immediately upon reaching their goal row. The game stops
+accepting actions after a win.
 
-The game must stop accepting normal moves after a win.
+See [`game_spec.md`](game_spec.md) for the complete specification including
+rule IDs, error taxonomy, serialization contract, and test catalog.
 
 ---
 
