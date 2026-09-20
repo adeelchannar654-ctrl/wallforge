@@ -222,8 +222,9 @@ If strong competitive anti-cheat requirements emerge, revisit the backend archit
 ## Phase 1.2 — Second Specification Correction: COMPLETE
 ## Phase 1.3 — Third Specification Correction: COMPLETE
 ## Phase 1.4 — Fourth Specification Correction: COMPLETE
+## Phase 2 — Game Engine Implementation: COMPLETE
 
-Verified on 2026-09-20. See §13b, §13c, §13d, §13e, and §13f below for the Phase records.
+Verified on 2026-09-20. See §13b, §13c, §13d, §13e, §13f, and §13g below for the Phase records.
 
 ### Completed (Phase 0 + Phase 1 + Phase 1.1 + Phase 1.2 + Phase 1.3 + Phase 1.4)
 
@@ -262,8 +263,6 @@ Verified on 2026-09-20. See §13b, §13c, §13d, §13e, and §13f below for the 
 
 ### Not yet completed
 
-- Game engine (Phase 2).
-- Automated game-rule tests (Phase 2).
 - Board renderer.
 - Pawn renderer.
 - Wall renderer.
@@ -572,3 +571,60 @@ The independent consistency checker `tool/spec_verification/check_spec_consisten
 - No game rules changed.
 - No Dart code touched.
 - No new dependencies.
+
+---
+
+# 13g. Phase 2 Record (Game Engine Implementation)
+
+Status: **complete.**
+
+Phase 2 implemented the pure-Dart game engine in `lib/domain/`.
+
+### Files created
+
+```text
+lib/domain/wallforge_domain.dart          — barrel export
+lib/domain/models/models.dart             — model barrel
+lib/domain/models/board_config.dart       — board geometry
+lib/domain/models/cell.dart               — grid coordinate
+lib/domain/models/player_id.dart          — Blue/Red enum
+lib/domain/models/wall_orientation.dart   — H/V enum
+lib/domain/models/wall.dart               — wall model
+lib/domain/models/game_action.dart        — action types
+lib/domain/models/game_status.dart        — match status
+lib/domain/models/game_state.dart         — immutable state
+lib/domain/models/action_failure.dart     — error taxonomy
+lib/domain/engine/engine.dart             — engine barrel
+lib/domain/engine/pathfinder.dart         — BFS reachability
+lib/domain/engine/move_generator.dart     — legal action generator
+lib/domain/engine/action_validator.dart   — action validator
+lib/domain/engine/game_engine.dart        — state transitions
+lib/domain/engine/board_edge.dart         — edge utility
+lib/domain/serialization/serialization.dart — serial barrel
+lib/domain/serialization/game_state_json.dart — JSON round-trip
+lib/domain/serialization/action_notation.dart — action notation
+```
+
+### Test files created
+
+```text
+test/domain/models_test.dart        — model unit tests
+test/domain/engine_test.dart        — engine unit tests
+test/domain/spec_catalog_test.dart  — spec catalog traceability
+test/domain/property_test.dart      — property/cross-check tests
+```
+
+### Quality gates
+
+| Gate | Result |
+|------|--------|
+| `dart format` | Clean (24 files) |
+| `flutter analyze` | 0 issues |
+| `flutter test test/domain/` | 79/79 pass |
+| `check_spec_consistency.py` | OK (79 catalog rows, 65 rule IDs, 65 in matrix) |
+
+### What was NOT changed
+
+- No game rules changed.
+- No new dependencies added.
+- `pubspec.yaml` and `analysis_options.yaml` untouched.

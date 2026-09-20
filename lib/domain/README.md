@@ -1,19 +1,41 @@
 # Domain layer (game engine)
 
-**Phase 0 boundary marker — no implementation yet.**
+**Phase 2 complete.** Pure-Dart game engine implementing `game_spec.md` v1.0.4.
 
-This directory is the home of the Wallforge game engine. Per
-[`architecture.md`](../../architecture.md) §2.3 and [`rules.md`](../../rules.md)
-Rule 1, this layer is the authoritative owner of game legality.
+## Structure
 
-The frozen game specification is in [`../../game_spec.md`](../../game_spec.md).
-Phase 2 will implement this specification here.
+```text
+lib/domain/
+├── wallforge_domain.dart        — barrel export
+├── models/
+│   ├── models.dart              — model barrel
+│   ├── board_config.dart        — board geometry (10x10, 10 walls)
+│   ├── cell.dart                — immutable grid coordinate
+│   ├── player_id.dart           — Blue/Red enum with opponent
+│   ├── wall_orientation.dart    — horizontal/vertical enum
+│   ├── wall.dart                — wall model with footprint and blocked edges
+│   ├── game_action.dart         — MoveAction, JumpAction, PlaceWallAction
+│   ├── game_status.dart         — waitingForPlayers, active, blueWins, redWins, draw
+│   ├── game_state.dart          — immutable game snapshot with copyWith
+│   └── action_failure.dart      — sealed error taxonomy (14 failure types)
+├── engine/
+│   ├── engine.dart              — engine barrel
+│   ├── pathfinder.dart          — BFS reachability check
+│   ├── move_generator.dart      — generates all legal actions for active player
+│   ├── action_validator.dart    — validates a single action against state
+│   ├── game_engine.dart         — validates + applies actions, switches turns
+│   └── board_edge.dart          — edge utility type
+└── serialization/
+    ├── serialization.dart       — serialization barrel
+    ├── game_state_json.dart     — JSON round-trip (spec §16)
+    └── action_notation.dart     — action notation parse/serialize
+```
 
-## Responsibility (later phases)
+## Responsibility
 
 - Board model and board configuration.
 - Player and pawn models.
-- Wall model (logical `anchorRow`, `anchorColumn`, `orientation`, `owner`).
+- Wall model.
 - `GameState` and turn state.
 - Legal move generation.
 - Wall validation.
@@ -25,21 +47,17 @@ Phase 2 will implement this specification here.
 
 - **Pure Dart.** No Flutter, no Firebase, no `dart:ui`.
 - **Logical coordinates only.** Never store pixel positions as game state.
-- **Deterministic.** The same state must yield the same legal actions on every
-  platform.
+- **Deterministic.** The same state yields the same legal actions on every platform.
+- **Invalid actions return structured failures.** Never throw exceptions for game-rule violations.
 
-The planned layout is:
+## Tests
 
 ```text
-lib/domain/
-├── game/
-│   ├── models/
-│   ├── rules/
-│   ├── pathfinding/
-│   └── game_engine.dart
-├── player/
-└── repositories/
+test/domain/
+├── models_test.dart          — model unit tests
+├── engine_test.dart          — engine unit tests
+├── spec_catalog_test.dart    — spec catalog traceability (T-* IDs)
+└── property_test.dart        — property/cross-check tests
 ```
 
-No files are created here in Phase 0 because inventing models before the rules
-are frozen (Phase 1) would violate the documented phase order.
+79 tests, all passing. Spec checker passes OK.

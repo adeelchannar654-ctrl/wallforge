@@ -86,6 +86,8 @@ Every rule has a deterministic answer. The complete specification is in
 
 # Phase 2 — Game Engine
 
+Status: **COMPLETE.**
+
 ## Goal
 
 Build the framework-independent game engine.
@@ -120,6 +122,13 @@ Build extensive tests for:
 
 The engine passes the `game_spec.md` test catalog. The game can be played
 entirely through code without Flutter UI.
+
+### Result
+
+- 20 source files in `lib/domain/` (models, engine, serialization).
+- 4 test files with 79 tests, all passing.
+- `dart format` clean, `flutter analyze` 0 issues.
+- Spec checker passes OK.
 
 ---
 
