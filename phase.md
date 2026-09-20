@@ -79,7 +79,8 @@ Freeze the initial game rules before visual implementation.
 
 ### Exit criteria
 
-Every rule has a deterministic answer.
+Every rule has a deterministic answer. The complete specification is in
+`game_spec.md` (version 1.0.0, Frozen).
 
 ---
 
@@ -117,7 +118,8 @@ Build extensive tests for:
 
 ### Exit criteria
 
-The game can be played entirely through code without Flutter UI.
+The engine passes the `game_spec.md` test catalog. The game can be played
+entirely through code without Flutter UI.
 
 ---
 

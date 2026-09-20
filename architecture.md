@@ -112,7 +112,8 @@ Repositories expose domain-friendly interfaces to the application layer.
 
 ### Core state
 
-The match state should contain conceptually:
+The match state should contain conceptually (see `game_spec.md` section 6 for
+the full specification and invariants):
 
 ```text
 GameState
@@ -183,7 +184,8 @@ This must be covered by automated tests.
 
 ## 5. Movement Validation
 
-The engine should generate legal moves from the current state.
+The engine should generate legal moves from the current state. See
+`game_spec.md` sections 3.4 and 3.5 for the full movement and jumping rules.
 
 A move is legal only if:
 
@@ -199,7 +201,8 @@ The UI should display the result of engine validation rather than implementing i
 
 ## 6. Wall Validation
 
-A proposed wall is validated by the engine.
+A proposed wall is validated by the engine. See `game_spec.md` sections 3.6 and
+3.7 for the full wall placement and path-preservation rules.
 
 Checks include:
 
