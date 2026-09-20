@@ -6,6 +6,9 @@ This directory is the home of the Wallforge game engine. Per
 [`architecture.md`](../../architecture.md) §2.3 and [`rules.md`](../../rules.md)
 Rule 1, this layer is the authoritative owner of game legality.
 
+The frozen game specification is in [`../../game_spec.md`](../../game_spec.md).
+Phase 2 will implement this specification here.
+
 ## Responsibility (later phases)
 
 - Board model and board configuration.

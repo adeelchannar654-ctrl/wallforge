@@ -17,7 +17,11 @@ A wall may never remove the last route to either player's goal.
 
 ## Status
 
-**Phase 0 — Project Foundation** is complete: the Flutter project, platform
+**Phase 1 — Core Game Specification** is complete: the game rules are frozen
+in [`game_spec.md`](game_spec.md) with deterministic answers for every rule,
+a test catalog, and an error taxonomy.
+
+**Phase 0 — Project Foundation** is also complete: the Flutter project, platform
 targets, folder structure, lint/format standards, test structure and a minimal
 application shell are in place.
 
@@ -52,6 +56,7 @@ Read these before contributing. They are the source of truth.
 | [`phase.md`](phase.md) | Development phase plan |
 | [`design.md`](design.md) | Visual design system |
 | [`memory.md`](memory.md) | Project memory / current status |
+| [`game_spec.md`](game_spec.md) | Frozen game specification (Phase 1) |
 
 > The Google Stitch design output is **not** a project dependency and must not
 > be treated as the visual source of truth. See [`memory.md`](memory.md) §4.
