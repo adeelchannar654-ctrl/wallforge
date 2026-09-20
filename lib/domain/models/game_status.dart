@@ -1,19 +1,10 @@
 /// Current status of a match.
 ///
-/// Mirrors spec §4.8.
+/// Mirrors spec §6.1: inProgress or finished.
 enum GameStatus {
-  /// Match not yet started (awaiting both players).
-  waitingForPlayers,
+  /// Game is in progress.
+  inProgress,
 
-  /// Both players connected, Blue to move.
-  active,
-
-  /// Blue won.
-  blueWins,
-
-  /// Red won.
-  redWins,
-
-  /// Game over, no winner possible.
-  draw,
+  /// Game is finished (a player won).
+  finished,
 }

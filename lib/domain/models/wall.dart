@@ -1,74 +1,44 @@
-import 'cell.dart';
+import 'player_id.dart';
 import 'wall_orientation.dart';
 
 /// Immutable wall on the board.
 ///
-/// Mirrors spec §4.4: walls span 2 tiles and block adjacency between 4 cells.
+/// Mirrors spec §3.6 R-WALL-03: identified by (anchorRow, anchorColumn, orientation, owner).
 class Wall {
-  /// Creates a wall at [origin] with the given [orientation].
-  const Wall({required this.origin, required this.orientation});
+  /// Creates a wall.
+  const Wall({
+    required this.anchorRow,
+    required this.anchorColumn,
+    required this.orientation,
+    required this.owner,
+  });
 
-  /// Anchor cell of the wall footprint.
-  final Cell origin;
+  /// Row coordinate of the wall anchor.
+  final int anchorRow;
+
+  /// Column coordinate of the wall anchor.
+  final int anchorColumn;
 
   /// Horizontal or vertical orientation.
   final WallOrientation orientation;
 
-  /// Returns the two cells under the wall footprint.
-  List<Cell> get footprint => switch (orientation) {
-    WallOrientation.horizontal => [
-      origin,
-      Cell(col: origin.col + 1, row: origin.row),
-    ],
-    WallOrientation.vertical => [
-      origin,
-      Cell(col: origin.col, row: origin.row + 1),
-    ],
-  };
-
-  /// Returns the two adjacency-pairs this wall blocks.
-  ///
-  /// A vertical wall at (col, row) blocks horizontal movement between:
-  /// - (col, row) ↔ (col+1, row)
-  /// - (col, row+1) ↔ (col+1, row+1)
-  ///
-  /// A horizontal wall at (col, row) blocks vertical movement between:
-  /// - (col, row) ↔ (col, row+1)
-  /// - (col+1, row) ↔ (col+1, row+1)
-  List<(Cell, Cell)> get blockedEdges => switch (orientation) {
-    WallOrientation.horizontal => [
-      (
-        Cell(col: origin.col, row: origin.row),
-        Cell(col: origin.col, row: origin.row + 1),
-      ),
-      (
-        Cell(col: origin.col + 1, row: origin.row),
-        Cell(col: origin.col + 1, row: origin.row + 1),
-      ),
-    ],
-    WallOrientation.vertical => [
-      (
-        Cell(col: origin.col, row: origin.row),
-        Cell(col: origin.col + 1, row: origin.row),
-      ),
-      (
-        Cell(col: origin.col, row: origin.row + 1),
-        Cell(col: origin.col + 1, row: origin.row + 1),
-      ),
-    ],
-  };
+  /// Owner of the wall.
+  final PlayerId owner;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is Wall &&
           runtimeType == other.runtimeType &&
-          origin == other.origin &&
-          orientation == other.orientation;
+          anchorRow == other.anchorRow &&
+          anchorColumn == other.anchorColumn &&
+          orientation == other.orientation &&
+          owner == other.owner;
 
   @override
-  int get hashCode => Object.hash(origin, orientation);
+  int get hashCode => Object.hash(anchorRow, anchorColumn, orientation, owner);
 
   @override
-  String toString() => 'Wall($origin, $orientation)';
+  String toString() =>
+      'Wall(${orientation.name.toUpperCase()}($anchorRow, $anchorColumn), $owner)';
 }

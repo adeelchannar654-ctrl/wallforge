@@ -1,5 +1,4 @@
-/// Serialization for Wallforge game state and actions.
+/// Serialization layer for Wallforge game state.
 library;
 
-export 'action_notation.dart';
-export 'game_state_json.dart';
+export 'game_state_serializer.dart';

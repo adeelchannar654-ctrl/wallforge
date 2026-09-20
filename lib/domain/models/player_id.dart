@@ -1,6 +1,6 @@
 /// Identifies a player in a Wallforge match.
 ///
-/// Mirrors spec §4.2: exactly two players, Blue and Red.
+/// Mirrors spec §3.2 R-PLAYER-01: exactly two players, Blue and Red.
 enum PlayerId {
   blue,
   red;

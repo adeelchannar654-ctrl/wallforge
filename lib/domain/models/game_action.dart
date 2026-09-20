@@ -3,78 +3,111 @@ import 'wall_orientation.dart';
 
 /// Discriminated union of all player actions.
 ///
-/// Mirrors spec §4.7.
-abstract class GameAction {
+/// Mirrors spec §4: exactly two types — move or wall.
+sealed class GameAction {
   const GameAction._();
+
+  /// Creates a move action to [destination].
+  const factory GameAction.move(Cell destination) = MoveAction;
+
+  /// Creates a wall action with [orientation] at [anchor].
+  const factory GameAction.wall({
+    required WallOrientation orientation,
+    required Cell anchor,
+  }) = WallAction;
+
+  /// Parses an action from spec notation.
+  ///
+  /// Format: "M r,c" or "W H r,c" or "W V r,c".
+  /// Returns null if the string is malformed.
+  static GameAction? parse(String notation) {
+    final parts = notation.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty) return null;
+
+    if (parts[0] == 'M' && parts.length == 2) {
+      final coords = parts[1].split(',');
+      if (coords.length != 2) return null;
+      final row = int.tryParse(coords[0]);
+      final col = int.tryParse(coords[1]);
+      if (row == null || col == null) return null;
+      return GameAction.move(Cell(row: row, column: col));
+    }
+
+    if (parts[0] == 'W' && parts.length == 3) {
+      final orientStr = parts[1].toUpperCase();
+      if (orientStr != 'H' && orientStr != 'V') return null;
+      final orient = orientStr == 'H'
+          ? WallOrientation.h
+          : WallOrientation.v;
+      final coords = parts[2].split(',');
+      if (coords.length != 2) return null;
+      final row = int.tryParse(coords[0]);
+      final col = int.tryParse(coords[1]);
+      if (row == null || col == null) return null;
+      return GameAction.wall(
+        orientation: orient,
+        anchor: Cell(row: row, column: col),
+      );
+    }
+
+    return null;
+  }
+
+  /// Returns the spec notation for this action.
+  String toNotation() => switch (this) {
+    MoveAction(:final destination) => 'M ${destination.row},${destination.column}',
+    WallAction(:final orientation, :final anchor) =>
+      'W ${orientation.name.toUpperCase()} ${anchor.row},${anchor.column}',
+  };
 }
 
-/// Move pawn to an adjacent cell.
+/// Move action: pawn moves to a destination cell.
 class MoveAction extends GameAction {
-  /// Creates a move action to [target].
-  const MoveAction({required this.target}) : super._();
+  /// Creates a move action to [destination].
+  const MoveAction(this.destination) : super._();
 
   /// Destination cell.
-  final Cell target;
+  final Cell destination;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is MoveAction &&
           runtimeType == other.runtimeType &&
-          target == other.target;
+          destination == other.destination;
 
   @override
-  int get hashCode => Object.hash(runtimeType, target);
+  int get hashCode => Object.hash(runtimeType, destination);
 
   @override
-  String toString() => 'MoveAction($target)';
+  String toString() => 'MoveAction($destination)';
 }
 
-/// Jump over opponent onto the cell beyond them.
-class JumpAction extends GameAction {
-  /// Creates a jump action to [target].
-  const JumpAction({required this.target}) : super._();
-
-  /// Destination cell.
-  final Cell target;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is JumpAction &&
-          runtimeType == other.runtimeType &&
-          target == other.target;
-
-  @override
-  int get hashCode => Object.hash(runtimeType, target);
-
-  @override
-  String toString() => 'JumpAction($target)';
-}
-
-/// Place a wall on the board.
-class PlaceWallAction extends GameAction {
-  /// Creates a wall placement action.
-  const PlaceWallAction({required this.origin, required this.orientation})
-    : super._();
-
-  /// Top-left cell of the wall footprint.
-  final Cell origin;
+/// Wall action: place a wall at an anchor with given orientation.
+class WallAction extends GameAction {
+  /// Creates a wall action.
+  const WallAction({
+    required this.orientation,
+    required this.anchor,
+  }) : super._();
 
   /// Wall orientation.
   final WallOrientation orientation;
 
+  /// Anchor cell.
+  final Cell anchor;
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is PlaceWallAction &&
+      other is WallAction &&
           runtimeType == other.runtimeType &&
-          origin == other.origin &&
-          orientation == other.orientation;
+          orientation == other.orientation &&
+          anchor == other.anchor;
 
   @override
-  int get hashCode => Object.hash(runtimeType, origin, orientation);
+  int get hashCode => Object.hash(runtimeType, orientation, anchor);
 
   @override
-  String toString() => 'PlaceWallAction($origin, $orientation)';
+  String toString() => 'WallAction(${orientation.name.toUpperCase()}, $anchor)';
 }

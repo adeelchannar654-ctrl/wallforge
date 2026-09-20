@@ -1,135 +1,41 @@
 /// Structured failure describing an illegal action attempt.
 ///
-/// Mirrors spec §7: every illegal action returns one of these; no exceptions.
-sealed class ActionFailure {
-  const ActionFailure._();
+/// Mirrors spec §5.1: the 12 named failure reasons.
+/// Invalid actions never throw; they return one of these.
+enum ActionFailure {
+  /// The game is in a terminal state (status == finished).
+  matchFinished,
 
-  /// Not this player's turn.
-  const factory ActionFailure.wrongTurn() = WrongTurnFailure;
+  /// It is not the requesting player's turn.
+  wrongTurn,
 
-  /// Game is not active.
-  const factory ActionFailure.gameNotActive() = GameNotActiveFailure;
+  /// The destination cell is outside the board.
+  moveOutOfBoard,
 
-  /// Target cell occupied by own pawn.
-  const factory ActionFailure.occupiedByOwnPawn() = OccupiedByOwnPawnFailure;
+  /// The destination is not orthogonally adjacent to the pawn.
+  moveNotAdjacent,
 
-  /// Not orthogonal or adjacent (for moves/jumps).
-  const factory ActionFailure.notAdjacent() = NotAdjacentFailure;
+  /// A wall separates the current cell from the destination.
+  moveBlockedByWall,
 
-  /// Jump target not directly behind opponent.
-  const factory ActionFailure.jumpTargetNotBehind() =
-      JumpTargetNotBehindFailure;
+  /// The destination contains the opponent pawn and jump rules do not apply.
+  moveOntoPawn,
 
-  /// No opponent adjacent in the required direction.
-  const factory ActionFailure.noOpponentToJumpOver() =
-      NoOpponentToJumpOverFailure;
+  /// A jump is attempted but the destination is invalid per §3.5.
+  moveIllegalJump,
 
-  /// Must jump when a jump is available.
-  const factory ActionFailure.mustJump() = MustJumpFailure;
+  /// The player has no walls left in inventory.
+  noWallsRemaining,
 
-  /// Player has no walls remaining.
-  const factory ActionFailure.noWallsRemaining() = NoWallsRemainingFailure;
+  /// The wall anchor is outside the valid anchor range.
+  wallOutOfBounds,
 
-  /// Wall origin out of board bounds.
-  const factory ActionFailure.wallOutOfBounds() = WallOutOfBoundsFailure;
+  /// The wall overlaps an existing wall of the same orientation.
+  wallOverlaps,
 
-  /// Wall overlaps another wall.
-  const factory ActionFailure.wallOverlap() = WallOverlapFailure;
+  /// The wall crosses an existing wall of the other orientation.
+  wallCrosses,
 
-  /// Wall overlaps a pawn.
-  const factory ActionFailure.wallOverlapPawn() = WallOverlapPawnFailure;
-
-  /// Wall blocks all paths for a player to reach goal.
-  const factory ActionFailure.wallBlocksPath() = WallBlocksPathFailure;
-
-  /// Wall placed directly on a player's forward path.
-  const factory ActionFailure.wallOnForwardPath() = WallOnForwardPathFailure;
-
-  /// Wall orientation invalid for this board.
-  const factory ActionFailure.invalidWallOrientation() =
-      InvalidWallOrientationFailure;
-}
-
-class WrongTurnFailure extends ActionFailure {
-  const WrongTurnFailure() : super._();
-  @override
-  String toString() => 'WrongTurn';
-}
-
-class GameNotActiveFailure extends ActionFailure {
-  const GameNotActiveFailure() : super._();
-  @override
-  String toString() => 'GameNotActive';
-}
-
-class OccupiedByOwnPawnFailure extends ActionFailure {
-  const OccupiedByOwnPawnFailure() : super._();
-  @override
-  String toString() => 'OccupiedByOwnPawn';
-}
-
-class NotAdjacentFailure extends ActionFailure {
-  const NotAdjacentFailure() : super._();
-  @override
-  String toString() => 'NotAdjacent';
-}
-
-class JumpTargetNotBehindFailure extends ActionFailure {
-  const JumpTargetNotBehindFailure() : super._();
-  @override
-  String toString() => 'JumpTargetNotBehind';
-}
-
-class NoOpponentToJumpOverFailure extends ActionFailure {
-  const NoOpponentToJumpOverFailure() : super._();
-  @override
-  String toString() => 'NoOpponentToJumpOver';
-}
-
-class MustJumpFailure extends ActionFailure {
-  const MustJumpFailure() : super._();
-  @override
-  String toString() => 'MustJump';
-}
-
-class NoWallsRemainingFailure extends ActionFailure {
-  const NoWallsRemainingFailure() : super._();
-  @override
-  String toString() => 'NoWallsRemaining';
-}
-
-class WallOutOfBoundsFailure extends ActionFailure {
-  const WallOutOfBoundsFailure() : super._();
-  @override
-  String toString() => 'WallOutOfBounds';
-}
-
-class WallOverlapFailure extends ActionFailure {
-  const WallOverlapFailure() : super._();
-  @override
-  String toString() => 'WallOverlap';
-}
-
-class WallOverlapPawnFailure extends ActionFailure {
-  const WallOverlapPawnFailure() : super._();
-  @override
-  String toString() => 'WallOverlapPawn';
-}
-
-class WallBlocksPathFailure extends ActionFailure {
-  const WallBlocksPathFailure() : super._();
-  @override
-  String toString() => 'WallBlocksPath';
-}
-
-class WallOnForwardPathFailure extends ActionFailure {
-  const WallOnForwardPathFailure() : super._();
-  @override
-  String toString() => 'WallOnForwardPath';
-}
-
-class InvalidWallOrientationFailure extends ActionFailure {
-  const InvalidWallOrientationFailure() : super._();
-  @override
-  String toString() => 'InvalidWallOrientation';
+  /// The wall would leave either player with no route to their goal.
+  wallBlocksPath,
 }

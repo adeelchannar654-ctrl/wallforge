@@ -6,127 +6,128 @@ import 'wall.dart';
 
 /// Immutable snapshot of a Wallforge match.
 ///
-/// Mirrors spec §4: complete game state.
+/// Mirrors spec §6: complete game state.
+/// currentPlayer is derived from turnNumber parity (R-STATE-05).
 class GameState {
-  /// Creates a game state.
+  /// Creates a game state. Use [GameState.initial] for the standard start.
   const GameState({
-    required this.config,
-    required this.bluePawn,
-    required this.redPawn,
+    required this.boardConfig,
+    required this.pawnPositions,
     required this.walls,
-    required this.blueWallsRemaining,
-    required this.redWallsRemaining,
-    required this.activePlayer,
+    required this.remainingWalls,
+    required this.turnNumber,
     required this.status,
-    required this.moveCount,
+    this.winner,
   });
 
   /// Standard initial state per spec §6.1.
-  factory GameState.initial({BoardConfig config = const BoardConfig()}) {
+  factory GameState.initial([BoardConfig config = const BoardConfig()]) {
     return GameState(
-      config: config,
-      bluePawn: Cell(col: config.cols ~/ 2, row: 0),
-      redPawn: Cell(col: config.cols ~/ 2, row: config.rows - 1),
+      boardConfig: config,
+      pawnPositions: {
+        PlayerId.blue: Cell(row: config.blueStart.$1, column: config.blueStart.$2),
+        PlayerId.red: Cell(row: config.redStart.$1, column: config.redStart.$2),
+      },
       walls: const [],
-      blueWallsRemaining: config.maxWallsPerPlayer,
-      redWallsRemaining: config.maxWallsPerPlayer,
-      activePlayer: PlayerId.blue,
-      status: GameStatus.active,
-      moveCount: 0,
+      remainingWalls: {
+        PlayerId.blue: config.wallsPerPlayer,
+        PlayerId.red: config.wallsPerPlayer,
+      },
+      turnNumber: 0,
+      status: GameStatus.inProgress,
     );
   }
 
-  /// Board geometry.
-  final BoardConfig config;
+  /// Board configuration.
+  final BoardConfig boardConfig;
 
-  /// Blue pawn position.
-  final Cell bluePawn;
+  /// Current cell for each player pawn.
+  final Map<PlayerId, Cell> pawnPositions;
 
-  /// Red pawn position.
-  final Cell redPawn;
-
-  /// All walls currently on the board.
+  /// All placed walls.
   final List<Wall> walls;
 
-  /// Walls remaining for Blue.
-  final int blueWallsRemaining;
+  /// Walls left in each player inventory.
+  final Map<PlayerId, int> remainingWalls;
 
-  /// Walls remaining for Red.
-  final int redWallsRemaining;
+  /// Count of completed actions (starts at 0).
+  final int turnNumber;
 
-  /// Whose turn it is.
-  final PlayerId activePlayer;
-
-  /// Match status.
+  /// Game status: inProgress or finished.
   final GameStatus status;
 
-  /// Number of moves made so far.
-  final int moveCount;
+  /// Winner if status is finished; null otherwise.
+  final PlayerId? winner;
+
+  /// Current player derived from turnNumber parity (R-STATE-05).
+  ///
+  /// Blue when turnNumber is even, Red when turnNumber is odd.
+  PlayerId get currentPlayer =>
+      turnNumber.isEven ? PlayerId.blue : PlayerId.red;
 
   /// Position of [player]'s pawn.
-  Cell pawnPosition(PlayerId player) =>
-      player == PlayerId.blue ? bluePawn : redPawn;
+  Cell pawnPosition(PlayerId player) => pawnPositions[player]!;
 
   /// Walls remaining for [player].
-  int wallsRemaining(PlayerId player) =>
-      player == PlayerId.blue ? blueWallsRemaining : redWallsRemaining;
+  int wallsRemaining(PlayerId player) => remainingWalls[player]!;
+
+  /// Returns a copy with the given fields replaced.
+  GameState copyWith({
+    BoardConfig? boardConfig,
+    Map<PlayerId, Cell>? pawnPositions,
+    List<Wall>? walls,
+    Map<PlayerId, int>? remainingWalls,
+    int? turnNumber,
+    GameStatus? status,
+    PlayerId? winner,
+  }) {
+    return GameState(
+      boardConfig: boardConfig ?? this.boardConfig,
+      pawnPositions: pawnPositions ?? this.pawnPositions,
+      walls: walls ?? this.walls,
+      remainingWalls: remainingWalls ?? this.remainingWalls,
+      turnNumber: turnNumber ?? this.turnNumber,
+      status: status ?? this.status,
+      winner: winner ?? this.winner,
+    );
+  }
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is GameState &&
           runtimeType == other.runtimeType &&
-          config == other.config &&
-          bluePawn == other.bluePawn &&
-          redPawn == other.redPawn &&
+          boardConfig == other.boardConfig &&
+          _mapEquals(pawnPositions, other.pawnPositions) &&
           _listEquals(walls, other.walls) &&
-          blueWallsRemaining == other.blueWallsRemaining &&
-          redWallsRemaining == other.redWallsRemaining &&
-          activePlayer == other.activePlayer &&
+          _mapEquals(remainingWalls, other.remainingWalls) &&
+          turnNumber == other.turnNumber &&
           status == other.status &&
-          moveCount == other.moveCount;
+          winner == other.winner;
 
   @override
   int get hashCode => Object.hash(
-    config,
-    bluePawn,
-    redPawn,
+    boardConfig,
+    Object.hashAll(pawnPositions.entries),
     Object.hashAll(walls),
-    blueWallsRemaining,
-    redWallsRemaining,
-    activePlayer,
+    Object.hashAll(remainingWalls.entries),
+    turnNumber,
     status,
-    moveCount,
+    winner,
   );
 
   @override
   String toString() =>
-      'GameState(blue=$bluePawn, red=$redPawn, active=$activePlayer, '
-      'walls=${walls.length}, move=$moveCount, status=$status)';
+      'GameState(pawns: ${pawnPositions[PlayerId.blue]}-${pawnPositions[PlayerId.red]}, '
+      'turn=$turnNumber, player=$currentPlayer, walls=${walls.length}, '
+      'status=$status, winner=$winner)';
 
-  /// Returns a copy with the given fields replaced.
-  GameState copyWith({
-    BoardConfig? config,
-    Cell? bluePawn,
-    Cell? redPawn,
-    List<Wall>? walls,
-    int? blueWallsRemaining,
-    int? redWallsRemaining,
-    PlayerId? activePlayer,
-    GameStatus? status,
-    int? moveCount,
-  }) {
-    return GameState(
-      config: config ?? this.config,
-      bluePawn: bluePawn ?? this.bluePawn,
-      redPawn: redPawn ?? this.redPawn,
-      walls: walls ?? this.walls,
-      blueWallsRemaining: blueWallsRemaining ?? this.blueWallsRemaining,
-      redWallsRemaining: redWallsRemaining ?? this.redWallsRemaining,
-      activePlayer: activePlayer ?? this.activePlayer,
-      status: status ?? this.status,
-      moveCount: moveCount ?? this.moveCount,
-    );
+  static bool _mapEquals<K, V>(Map<K, V> a, Map<K, V> b) {
+    if (a.length != b.length) return false;
+    for (final entry in a.entries) {
+      if (b[entry.key] != entry.value) return false;
+    }
+    return true;
   }
 
   static bool _listEquals<T>(List<T> a, List<T> b) {

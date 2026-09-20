@@ -1,42 +1,56 @@
-/// Immutable board geometry constants.
+/// Board configuration.
 ///
-/// Mirrors spec §4.1: rows=10, cols=10, totalWalls=10, maxWallsPerPlayer=5.
+/// Mirrors spec §2: size (odd ≥ 5) and wallsPerPlayer (≥ 0).
 class BoardConfig {
-  /// Standard 10x10 board.
-  const BoardConfig({
-    this.rows = 10,
-    this.cols = 10,
-    this.totalWalls = 10,
-    this.maxWallsPerPlayer = 5,
-  });
+  /// Creates a board configuration.
+  const BoardConfig({this.size = 9, this.wallsPerPlayer = 10})
+      : assert(size >= 5, 'size must be >= 5'),
+        assert(wallsPerPlayer >= 0, 'wallsPerPlayer must be >= 0');
 
-  /// Number of rows.
-  final int rows;
+  /// Board dimension (NxN grid). MUST be odd and >= 5.
+  final int size;
 
-  /// Number of columns.
-  final int cols;
+  /// Number of walls each player starts with.
+  final int wallsPerPlayer;
 
-  /// Total wall count in a standard match.
-  final int totalWalls;
+  /// Blue start cell: (size-1, size~/2).
+  (int, int) get blueStart => (size - 1, size ~/ 2);
 
-  /// Max walls each player may hold initially (spec §4.1).
-  final int maxWallsPerPlayer;
+  /// Red start cell: (0, size~/2).
+  (int, int) get redStart => (0, size ~/ 2);
+
+  /// Blue goal row: 0.
+  int get blueGoalRow => 0;
+
+  /// Red goal row: size-1.
+  int get redGoalRow => size - 1;
+
+  /// Anchor range: 0..size-2 on both axes.
+  int get maxAnchor => size - 2;
+
+  /// Total wall slots: 2 * (size-1)^2.
+  int get totalWallSlots => 2 * (size - 1) * (size - 1);
+
+  /// Validates this config. Returns null if valid, error string otherwise.
+  static String? validate(int size, int wallsPerPlayer) {
+    if (size < 5) return 'size must be >= 5';
+    if (size.isOdd != true) return 'size must be odd';
+    if (wallsPerPlayer < 0) return 'wallsPerPlayer must be >= 0';
+    return null;
+  }
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is BoardConfig &&
           runtimeType == other.runtimeType &&
-          rows == other.rows &&
-          cols == other.cols &&
-          totalWalls == other.totalWalls &&
-          maxWallsPerPlayer == other.maxWallsPerPlayer;
+          size == other.size &&
+          wallsPerPlayer == other.wallsPerPlayer;
 
   @override
-  int get hashCode => Object.hash(rows, cols, totalWalls, maxWallsPerPlayer);
+  int get hashCode => Object.hash(size, wallsPerPlayer);
 
   @override
   String toString() =>
-      'BoardConfig(rows=$rows, cols=$cols, totalWalls=$totalWalls, '
-      'maxWallsPerPlayer=$maxWallsPerPlayer)';
+      'BoardConfig(size: $size, wallsPerPlayer: $wallsPerPlayer)';
 }

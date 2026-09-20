@@ -3,195 +3,281 @@ import '../models/cell.dart';
 import '../models/game_action.dart';
 import '../models/game_state.dart';
 import '../models/game_status.dart';
+import '../models/player_id.dart';
 import '../models/wall.dart';
 import '../models/wall_orientation.dart';
 import 'pathfinder.dart';
 
 /// Validates whether a specific action is legal in the given state.
 ///
-/// Mirrors spec §14 (validation pseudo-code).
+/// Mirrors spec §5.2: deterministic validation precedence.
 class ActionValidator {
-  /// Validates [action] for [state]. Returns null if valid, or the failure.
-  static ActionFailure? validate(GameState state, GameAction action) {
-    if (state.status != GameStatus.active) {
-      return const ActionFailure.gameNotActive();
-    }
-
-    if (action case MoveAction(:final target)) {
-      return _validateMove(state, target);
-    } else if (action case JumpAction(:final target)) {
-      return _validateJump(state, target);
-    } else if (action case PlaceWallAction(:final origin, :final orientation)) {
-      return _validatePlaceWall(state, origin, orientation);
-    }
-    return null;
-  }
-
-  static ActionFailure? _validateMove(GameState state, Cell target) {
-    final pos = state.pawnPosition(state.activePlayer);
-    final opponentPos = state.pawnPosition(state.activePlayer.opponent);
-
-    if (!_isOrthogonalAdjacent(pos, target)) {
-      return const ActionFailure.notAdjacent();
-    }
-
-    if (target == opponentPos) {
-      return const ActionFailure.notAdjacent();
-    }
-
-    if (target == pos) {
-      return const ActionFailure.notAdjacent();
-    }
-
-    final blocked = Pathfinder.buildBlockedEdges(state.walls);
-    if (blocked.contains((pos, target))) {
-      return const ActionFailure.wallBlocksPath();
-    }
-
-    // Mandatory jump check
-    final jumpTargets = _findJumpTargets(state);
-    if (jumpTargets.isNotEmpty && !jumpTargets.contains(target)) {
-      return const ActionFailure.mustJump();
-    }
-
-    return null;
-  }
-
-  static ActionFailure? _validateJump(GameState state, Cell target) {
-    final pos = state.pawnPosition(state.activePlayer);
-    final opponentPos = state.pawnPosition(state.activePlayer.opponent);
-
-    if (!_isOrthogonalAdjacent(pos, opponentPos)) {
-      return const ActionFailure.noOpponentToJumpOver();
-    }
-
-    final jumpTargets = _findJumpTargets(state);
-    if (!jumpTargets.contains(target)) {
-      return const ActionFailure.jumpTargetNotBehind();
-    }
-
-    return null;
-  }
-
-  static ActionFailure? _validatePlaceWall(
+  /// Validates [action] for [player] in [state].
+  ///
+  /// Returns null if valid, or the failure reason.
+  static ActionFailure? validate(
     GameState state,
-    Cell origin,
-    WallOrientation orientation,
+    PlayerId player,
+    GameAction action,
   ) {
-    if (state.wallsRemaining(state.activePlayer) <= 0) {
-      return const ActionFailure.noWallsRemaining();
+    // §5.2.1: matchFinished → wrongTurn
+    if (state.status == GameStatus.finished) {
+      return ActionFailure.matchFinished;
+    }
+    if (state.currentPlayer != player) {
+      return ActionFailure.wrongTurn;
     }
 
-    if (orientation == WallOrientation.horizontal) {
-      if (origin.col < 0 ||
-          origin.col > state.config.cols - 2 ||
-          origin.row < 0 ||
-          origin.row > state.config.rows - 1) {
-        return const ActionFailure.wallOutOfBounds();
+    // §5.2.2/3: dispatch by action type
+    if (action is MoveAction) {
+      return _validateMove(state, player, action.destination);
+    } else if (action is WallAction) {
+      return _validateWall(state, player, action);
+    }
+    return null;
+  }
+
+  static ActionFailure? _validateMove(
+    GameState state,
+    PlayerId player,
+    Cell destination,
+  ) {
+    final me = state.pawnPosition(player);
+    final op = state.pawnPosition(player.opponent);
+    final size = state.boardConfig.size;
+    final b = _blockedEdges(state.walls);
+
+    // Off-board check
+    if (destination.row < 0 ||
+        destination.row >= size ||
+        destination.column < 0 ||
+        destination.column >= size) {
+      return ActionFailure.moveOutOfBoard;
+    }
+
+    // Step: destination is one of 4 neighbours
+    final isStep = _neighbors(me, size).contains(destination);
+    if (isStep) {
+      if (_isEdgeBlocked(me, destination, b)) {
+        return ActionFailure.moveBlockedByWall;
       }
-    } else {
-      if (origin.col < 0 ||
-          origin.col > state.config.cols - 1 ||
-          origin.row < 0 ||
-          origin.row > state.config.rows - 2) {
-        return const ActionFailure.wallOutOfBounds();
+      if (destination == op) {
+        return ActionFailure.moveOntoPawn;
+      }
+      return null; // legal step
+    }
+
+    // Jump-shaped check (matching generator logic exactly)
+    final opAdjacent = _neighbors(me, size).contains(op) &&
+        !_isEdgeBlocked(me, op, b);
+
+    if (opAdjacent) {
+      final straightTarget = Cell(
+        row: op.row + (op.row - me.row),
+        column: op.column + (op.column - me.column),
+      );
+
+      // Generator's jump_shaped: destination == straightTarget OR
+      // (manhattan distance to opponent == 1 AND destination != me)
+      final isJumpShaped = destination == straightTarget ||
+          (destination.row >= 0 &&
+              destination.row < size &&
+              destination.column >= 0 &&
+              destination.column < size &&
+              _manhattanDistance(destination, op) == 1 &&
+              destination != me);
+
+      if (isJumpShaped) {
+        final validTargets = _jumpTargets(me, op, state.walls, size);
+        if (validTargets.contains(destination)) {
+          return null; // legal jump
+        }
+        return ActionFailure.moveIllegalJump;
       }
     }
 
-    final newWall = Wall(origin: origin, orientation: orientation);
+    return ActionFailure.moveNotAdjacent;
+  }
+
+  static ActionFailure? _validateWall(
+    GameState state,
+    PlayerId player,
+    WallAction action,
+  ) {
+    final anchor = action.anchor;
+    final orient = action.orientation;
+    final size = state.boardConfig.size;
+    final maxAnchor = size - 2;
+
+    // §5.2.3: noWallsRemaining → wallOutOfBounds → wallOverlaps → wallCrosses → wallBlocksPath
+    if (state.wallsRemaining(player) <= 0) {
+      return ActionFailure.noWallsRemaining;
+    }
+
+    if (anchor.row < 0 ||
+        anchor.row > maxAnchor ||
+        anchor.column < 0 ||
+        anchor.column > maxAnchor) {
+      return ActionFailure.wallOutOfBounds;
+    }
+
+    // Check overlap with existing walls of same orientation
     for (final existing in state.walls) {
-      if (_footprintsOverlap(newWall.footprint, existing.footprint)) {
-        return const ActionFailure.wallOverlap();
+      if (existing.orientation != orient) continue;
+      if (orient == WallOrientation.h) {
+        if (existing.anchorRow == anchor.row &&
+            (existing.anchorColumn - anchor.column).abs() <= 1) {
+          return ActionFailure.wallOverlaps;
+        }
+      } else {
+        if (existing.anchorColumn == anchor.column &&
+            (existing.anchorRow - anchor.row).abs() <= 1) {
+          return ActionFailure.wallOverlaps;
+        }
       }
     }
 
-    final occupied = {state.bluePawn, state.redPawn};
-    for (final cell in newWall.footprint) {
-      if (occupied.contains(cell)) {
-        return const ActionFailure.wallOverlapPawn();
+    // Check crossing: same anchor, different orientation
+    for (final existing in state.walls) {
+      if (existing.anchorRow == anchor.row &&
+          existing.anchorColumn == anchor.column &&
+          existing.orientation != orient) {
+        return ActionFailure.wallCrosses;
       }
     }
 
-    final newWalls = [...state.walls, newWall];
+    // Check path preservation
+    final testWall = Wall(
+      anchorRow: anchor.row,
+      anchorColumn: anchor.column,
+      orientation: orient,
+      owner: player,
+    );
+    final newWalls = [...state.walls, testWall];
+
     if (!Pathfinder.canReachGoal(
-      from: state.bluePawn,
-      goalRow: state.config.rows - 1,
+      from: state.pawnPosition(PlayerId.blue),
+      goalRow: state.boardConfig.blueGoalRow,
       walls: newWalls,
-      cols: state.config.cols,
-      rows: state.config.rows,
+      size: size,
     )) {
-      return const ActionFailure.wallBlocksPath();
+      return ActionFailure.wallBlocksPath;
     }
     if (!Pathfinder.canReachGoal(
-      from: state.redPawn,
-      goalRow: 0,
+      from: state.pawnPosition(PlayerId.red),
+      goalRow: state.boardConfig.redGoalRow,
       walls: newWalls,
-      cols: state.config.cols,
-      rows: state.config.rows,
+      size: size,
     )) {
-      return const ActionFailure.wallBlocksPath();
+      return ActionFailure.wallBlocksPath;
     }
 
     return null;
   }
 
-  static bool _isOrthogonalAdjacent(Cell a, Cell b) {
-    final dx = (a.col - b.col).abs();
-    final dy = (a.row - b.row).abs();
-    return (dx + dy) == 1;
+  /// Computes blocked edges from wall placements.
+  static Set<(_CK, _CK)> _blockedEdges(List<Wall> walls) {
+    final blocked = <(_CK, _CK)>{};
+    for (final wall in walls) {
+      final r = wall.anchorRow;
+      final c = wall.anchorColumn;
+      if (wall.orientation == WallOrientation.h) {
+        _addEdge(blocked, r, c, r + 1, c);
+        _addEdge(blocked, r, c + 1, r + 1, c + 1);
+      } else {
+        _addEdge(blocked, r, c, r, c + 1);
+        _addEdge(blocked, r + 1, c, r + 1, c + 1);
+      }
+    }
+    return blocked;
   }
 
-  static List<Cell> _findJumpTargets(GameState state) {
-    final pos = state.pawnPosition(state.activePlayer);
-    final opponentPos = state.pawnPosition(state.activePlayer.opponent);
-    final blocked = Pathfinder.buildBlockedEdges(state.walls);
+  static void _addEdge(
+    Set<(_CK, _CK)> blocked,
+    int r1,
+    int c1,
+    int r2,
+    int c2,
+  ) {
+    blocked.add((_CK(r1, c1), _CK(r2, c2)));
+    blocked.add((_CK(r2, c2), _CK(r1, c1)));
+  }
+
+  static bool _isEdgeBlocked(Cell a, Cell b, Set<(_CK, _CK)> blocked) {
+    return blocked.contains((_CK(a.row, a.column), _CK(b.row, b.column)));
+  }
+
+  static List<Cell> _neighbors(Cell cell, int size) {
+    const offsets = [(-1, 0), (1, 0), (0, -1), (0, 1)];
+    final result = <Cell>[];
+    for (final (dr, dc) in offsets) {
+      final nr = cell.row + dr;
+      final nc = cell.column + dc;
+      if (nr >= 0 && nr < size && nc >= 0 && nc < size) {
+        result.add(Cell(row: nr, column: nc));
+      }
+    }
+    return result;
+  }
+
+  static int _manhattanDistance(Cell a, Cell b) =>
+      (a.row - b.row).abs() + (a.column - b.column).abs();
+
+  /// All valid jump targets from [me] through [op].
+  ///
+  /// Straight is the only target when available; diagonals only when straight
+  /// is unavailable (off-board or wall-blocked). Matches R-JUMP-02/03.
+  static List<Cell> _jumpTargets(
+    Cell me,
+    Cell op,
+    List<Wall> walls,
+    int size,
+  ) {
+    final b = _blockedEdges(walls);
+    final dr = op.row - me.row;
+    final dc = op.column - me.column;
+
+    // Straight jump
+    final straight = Cell(row: op.row + dr, column: op.column + dc);
+    final straightAvailable = straight.row >= 0 &&
+        straight.row < size &&
+        straight.column >= 0 &&
+        straight.column < size &&
+        !_isEdgeBlocked(op, straight, b);
+
+    if (straightAvailable) {
+      return [straight];
+    }
+
+    // Diagonal jumps only when straight is unavailable
     final targets = <Cell>[];
-
-    final dx = opponentPos.col - pos.col;
-    final dy = opponentPos.row - pos.row;
-    if (dx.abs() + dy.abs() != 1) return targets;
-
-    final direct = Cell(col: opponentPos.col + dx, row: opponentPos.row + dy);
-    if (_isValidCell(direct, state.config.cols, state.config.rows) &&
-        !blocked.contains((opponentPos, direct))) {
-      targets.add(direct);
-    }
-
-    if (dx.abs() == 1) {
-      for (final diagDy in [-1, 1]) {
-        final diag = Cell(col: opponentPos.col, row: opponentPos.row + diagDy);
-        final diagFrom = Cell(col: pos.col, row: pos.row + diagDy);
-        if (_isValidCell(diag, state.config.cols, state.config.rows) &&
-            _isValidCell(diagFrom, state.config.cols, state.config.rows) &&
-            !blocked.contains((pos, diagFrom)) &&
-            !blocked.contains((diagFrom, diag))) {
-          targets.add(diag);
-        }
-      }
-    } else if (dy.abs() == 1) {
-      for (final diagDx in [-1, 1]) {
-        final diag = Cell(col: opponentPos.col + diagDx, row: opponentPos.row);
-        final diagFrom = Cell(col: pos.col + diagDx, row: pos.row);
-        if (_isValidCell(diag, state.config.cols, state.config.rows) &&
-            _isValidCell(diagFrom, state.config.cols, state.config.rows) &&
-            !blocked.contains((pos, diagFrom)) &&
-            !blocked.contains((diagFrom, diag))) {
-          targets.add(diag);
-        }
+    for (final (pdr, pdc) in [(-dc, dr), (dc, -dr)]) {
+      final diag = Cell(row: op.row + pdr, column: op.column + pdc);
+      if (diag.row >= 0 &&
+          diag.row < size &&
+          diag.column >= 0 &&
+          diag.column < size &&
+          !_isEdgeBlocked(op, diag, b)) {
+        targets.add(diag);
       }
     }
-
     return targets;
   }
+}
 
-  static bool _isValidCell(Cell cell, int cols, int rows) =>
-      cell.col >= 0 && cell.col < cols && cell.row >= 0 && cell.row < rows;
+class _CK {
+  const _CK(this.r, this.c);
+  final int r;
+  final int c;
 
-  static bool _footprintsOverlap(List<Cell> a, List<Cell> b) {
-    final aSet = a.toSet();
-    for (final cell in b) {
-      if (aSet.contains(cell)) return true;
-    }
-    return false;
-  }
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _CK &&
+          runtimeType == other.runtimeType &&
+          r == other.r &&
+          c == other.c;
+
+  @override
+  int get hashCode => Object.hash(r, c);
 }
