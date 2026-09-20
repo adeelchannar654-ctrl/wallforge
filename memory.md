@@ -219,13 +219,14 @@ If strong competitive anti-cheat requirements emerge, revisit the backend archit
 ## Phase 1 — Core Game Specification: COMPLETE
 
 ## Phase 1.1 — Specification Correction: COMPLETE
+## Phase 1.2 — Second Specification Correction: COMPLETE
 
-Verified on 2026-09-20. See §13b and §13c below for the Phase 1 and Phase 1.1 records.
+Verified on 2026-09-20. See §13b and §13c below for the Phase 1, Phase 1.1, and Phase 1.2 records.
 
-### Completed (Phase 0 + Phase 1 + Phase 1.1)
+### Completed (Phase 0 + Phase 1 + Phase 1.1 + Phase 1.2)
 
 - All Phase 0 items (see §13a).
-- Frozen game specification in `game_spec.md` (v1.0.1, corrected).
+- Frozen game specification in `game_spec.md` (v1.0.2, corrected twice).
 - Board size, start positions, goal edges, movement, wall rules, path
   preservation, win condition, turn transition, and pawn-jump behavior all
   formalized with deterministic answers.
@@ -245,6 +246,17 @@ Verified on 2026-09-20. See §13b and §13c below for the Phase 1 and Phase 1.1 
   - R-NOLEGAL-01: proof strengthened.
   - Added: Decision Log, Open Questions, Out of Scope, Phase-1 Task Mapping,
     Scripted Game, Finished-State JSON sections.
+- Phase 1.2 corrected 12 defect categories (2.1–2.12):
+  - Board ASCII diagram: row 0 = Blue GOAL, row 8 = Red GOAL.
+  - Invalid in-progress states fixed (Example 4, T-MOVE-003/004, T-WIN-002/003).
+  - Vague test descriptions replaced with exact values.
+  - Coverage matrix: all "Implicit"/"Argument-based" entries replaced with explicit test refs.
+  - R-NOLEGAL-01 proof rewritten (route existence + legal move, not wall action type).
+  - §3.4 R-MOVE-03 reworded (MUST NOT instead of ambiguous MUST).
+  - Examples 3a/3b added for second-anchor blocking.
+  - Scripted game rewritten — 17 actions ending in Blue win.
+  - D-18 clarified, Open Questions cleaned up.
+  - Reference model built: 125 tests, all PASS.
 
 ### Not yet completed
 
@@ -439,7 +451,7 @@ Defects corrected in `game_spec.md` (v1.0.0 → v1.0.1):
 | 1.9 | Missing sections | Added Decision Log, Open Questions, Out of Scope, Phase-1 Task Mapping, Scripted Game, Finished-State JSON |
 | 1.10 | Minor consistency issues | Fixed throughout |
 
-All examples and test results verified by Python reference script (`wallforge_verify.py`).
+All examples and test results verified by Python reference script (`tool/spec_verification/verify_game_spec.py`).
 
 ### What was NOT changed
 
@@ -447,6 +459,37 @@ All examples and test results verified by Python reference script (`wallforge_ve
 - No Dart code touched.
 - No new dependencies.
 - Decision D-18 is a taxonomy clarification, not a rule change.
+
+---
+
+# 13d. Phase 1.2 Record (Second Specification Correction)
+
+Status: **complete.**
+
+Defects corrected in `game_spec.md` (v1.0.1 → v1.0.2):
+
+| Defect | Description | Fix |
+|--------|-------------|-----|
+| 2.1 | Board ASCII diagram had row 0 = Red GOAL, row 8 = Blue GOAL (backwards) | Corrected: row 0 = Blue GOAL, row 8 = Red GOAL |
+| 2.2 | Invalid in-progress states (Example 4 Blue at row 0, T-MOVE-003/004 Blue at row 0, T-WIN-002 Blue at row 0, T-WIN-003 Red at row 1) | Fixed pawn positions to valid in-progress states |
+| 2.3 | Vague test descriptions (T-PATH-002/003/005/006) | Replaced with exact values verified by reference script |
+| 2.4 | Coverage matrix had "Implicit"/"Argument-based" entries | All replaced with explicit test ID references |
+| 2.5 | R-NOLEGAL-01 proof claimed wall action type exists even when rejected | Rewritten: relies on route existence + legal move |
+| 2.6 | §3.4 R-MOVE-03 "No wall MUST separate" ambiguous | Reworded with MUST NOT clarification |
+| 2.7 | No second-anchor blocking examples | Added Examples 3a (H second segment) and 3b (V second segment) |
+| 2.8 | Scripted game (§15) had 10 actions, no win | Rewritten: 17 actions ending in Blue win |
+| 2.9 | D-18 jump-failure taxonomy unclear | Clarified: straight checked first, diagonal only when straight unavailable |
+| 2.10 | Open Questions stale (Q-02 already resolved) | Q-02 marked Resolved |
+| 2.11 | No executable reference model | Built tool/spec_verification/verify_game_spec.py (125 tests, all PASS) |
+| 2.12 | No verification output | Captured to tool/spec_verification/verify_output.txt |
+
+All examples and test results verified by Python reference script (`tool/spec_verification/verify_game_spec.py`).
+
+### What was NOT changed
+
+- No game rules changed — all corrections are text/table/example/test accuracy.
+- No Dart code touched.
+- No new dependencies.
 
 ---
 
