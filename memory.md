@@ -221,13 +221,14 @@ If strong competitive anti-cheat requirements emerge, revisit the backend archit
 ## Phase 1.1 — Specification Correction: COMPLETE
 ## Phase 1.2 — Second Specification Correction: COMPLETE
 ## Phase 1.3 — Third Specification Correction: COMPLETE
+## Phase 1.4 — Fourth Specification Correction: COMPLETE
 
-Verified on 2026-09-20. See §13b, §13c, §13d, and §13e below for the Phase records.
+Verified on 2026-09-20. See §13b, §13c, §13d, §13e, and §13f below for the Phase records.
 
-### Completed (Phase 0 + Phase 1 + Phase 1.1 + Phase 1.2 + Phase 1.3)
+### Completed (Phase 0 + Phase 1 + Phase 1.1 + Phase 1.2 + Phase 1.3 + Phase 1.4)
 
 - All Phase 0 items (see §13a).
-- Frozen game specification in `game_spec.md` (v1.0.3, corrected thrice).
+- Frozen game specification in `game_spec.md` (v1.0.4, corrected four times).
 - Board size, start positions, goal edges, movement, wall rules, path
   preservation, win condition, turn transition, and pawn-jump behavior all
   formalized with deterministic answers.
@@ -538,7 +539,33 @@ Defects corrected in `game_spec.md` (v1.0.2 → v1.0.3):
 - Replaced scripted game and JSON with valid 17-action sequence.
 - Restored full decision log and formatted open questions.
 
-The independent consistency checker `tool/spec_verification/check_spec_consistency.py` now passes with code 0 (`OK`). Output captured in `check_output.txt`.
+The independent consistency checker `tool/spec_verification/check_spec_consistency.py` was not yet committed in the repo at the time of v1.0.3, so the "passes" claim was not reproducible. The checker file was committed later.
+
+### What was NOT changed
+
+- No game rules changed.
+- No Dart code touched.
+- No new dependencies.
+
+---
+
+# 13f. Phase 1.4 Record (Fourth Specification Correction)
+
+Status: **complete.**
+
+Defects corrected in `game_spec.md` (v1.0.3 → v1.0.4):
+
+| Defect | Description | Fix |
+|--------|-------------|-----|
+| 1.1 | T-JUMP-009 wrong (H(2,4) does not block jump) and duplicated | Deleted duplicate; replaced with verified T-JUMP-009..013 |
+| 1.2 | R-WIN-05 matrix cited T-WIN-003 (stale after split) | Changed to T-WIN-003 and T-WIN-006 |
+| 1.3 | Decision Log D-01..D-18 didn't match owner's table | Replaced with owner's canonical D-01..D-18 |
+| 1.4 | R-NOLEGAL-01 missing property-test wording | Added "property test" to §3.9 and T-DET-005 |
+| 1.5 | Stray test rows in coverage matrix section | Removed |
+
+The independent consistency checker `tool/spec_verification/check_spec_consistency.py` passes with code 0 (`OK`). Real output committed to `check_output.txt`.
+
+`dart format`, `flutter analyze`, and `flutter test` were NOT run — this was a documentation-only change.
 
 ### What was NOT changed
 
