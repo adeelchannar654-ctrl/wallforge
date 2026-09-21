@@ -86,7 +86,12 @@ Every rule has a deterministic answer. The complete specification is in
 
 # Phase 2 — Game Engine
 
-Status: **COMPLETE.**
+Status: **IN PROGRESS (Phase 2.1).**
+
+The engine core was implemented in commit `d6c7af2` against
+`game_spec.md` v1.0.4. Phase 2 is **not** complete: docs, structured
+serialization, complete per-rule tests and quality gates are being finished
+in Phase 2.1.
 
 ## Goal
 
@@ -123,12 +128,23 @@ Build extensive tests for:
 The engine passes the `game_spec.md` test catalog. The game can be played
 entirely through code without Flutter UI.
 
-### Result
+### Result (Phase 2.1, in progress — not yet met)
 
-- 20 source files in `lib/domain/` (models, engine, serialization).
-- 4 test files with 79 tests, all passing.
-- `dart format` clean, `flutter analyze` 0 issues.
-- Spec checker passes OK.
+Measured baseline at the start of Phase 2.1 (2026-09-20), with real output:
+
+- `dart format --output=none --set-exit-if-changed lib test` reported
+  **11 files changed** (not clean yet).
+- `flutter analyze` reported **165 issues** (mostly `prefer_const_constructors`
+  infos plus one `unused_element_parameter` warning).
+- `flutter test` reported `+69: All tests passed!`.
+- `python tool/spec_verification/check_spec_consistency.py game_spec.md` printed
+  `OK: spec is consistent with the reference engine.`
+- The independent generator output was byte-identical to the committed fixture.
+
+Remaining work before Phase 2 can be marked complete: structured serialization
+with invariant validation, one test per catalog row (79 IDs), worked examples
+(§8), the scripted game (§15), traceability, independent cross-checks, the
+`GameEngine.legalActions` API, immutable state, and format/analyze taken to zero.
 
 ---
 

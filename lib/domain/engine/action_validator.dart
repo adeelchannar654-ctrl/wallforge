@@ -6,6 +6,7 @@ import '../models/game_status.dart';
 import '../models/player_id.dart';
 import '../models/wall.dart';
 import '../models/wall_orientation.dart';
+import 'blocked_edges.dart';
 import 'pathfinder.dart';
 
 /// Validates whether a specific action is legal in the given state.
@@ -28,13 +29,16 @@ class ActionValidator {
       return ActionFailure.wrongTurn;
     }
 
-    // §5.2.2/3: dispatch by action type
-    if (action is MoveAction) {
-      return _validateMove(state, player, action.destination);
-    } else if (action is WallAction) {
-      return _validateWall(state, player, action);
-    }
-    return null;
+    // §5.2.2/3: dispatch by action type. The union is sealed, so the switch is
+    // exhaustive; no default branch is required.
+    return switch (action) {
+      MoveAction(:final destination) => _validateMove(
+        state,
+        player,
+        destination,
+      ),
+      final WallAction wall => _validateWall(state, player, wall),
+    };
   }
 
   static ActionFailure? _validateMove(
@@ -45,7 +49,7 @@ class ActionValidator {
     final me = state.pawnPosition(player);
     final op = state.pawnPosition(player.opponent);
     final size = state.boardConfig.size;
-    final b = _blockedEdges(state.walls);
+    final board = BlockedEdges.fromWalls(state.walls, size);
 
     // Off-board check
     if (destination.row < 0 ||
@@ -56,9 +60,8 @@ class ActionValidator {
     }
 
     // Step: destination is one of 4 neighbours
-    final isStep = _neighbors(me, size).contains(destination);
-    if (isStep) {
-      if (_isEdgeBlocked(me, destination, b)) {
+    if (board.neighborsOf(me).contains(destination)) {
+      if (board.isBlocked(me, destination)) {
         return ActionFailure.moveBlockedByWall;
       }
       if (destination == op) {
@@ -68,8 +71,8 @@ class ActionValidator {
     }
 
     // Jump-shaped check (matching generator logic exactly)
-    final opAdjacent = _neighbors(me, size).contains(op) &&
-        !_isEdgeBlocked(me, op, b);
+    final opAdjacent =
+        board.neighborsOf(me).contains(op) && !board.isBlocked(me, op);
 
     if (opAdjacent) {
       final straightTarget = Cell(
@@ -79,7 +82,8 @@ class ActionValidator {
 
       // Generator's jump_shaped: destination == straightTarget OR
       // (manhattan distance to opponent == 1 AND destination != me)
-      final isJumpShaped = destination == straightTarget ||
+      final isJumpShaped =
+          destination == straightTarget ||
           (destination.row >= 0 &&
               destination.row < size &&
               destination.column >= 0 &&
@@ -88,7 +92,7 @@ class ActionValidator {
               destination != me);
 
       if (isJumpShaped) {
-        final validTargets = _jumpTargets(me, op, state.walls, size);
+        final validTargets = _jumpTargets(me, op, board, size);
         if (validTargets.contains(destination)) {
           return null; // legal jump
         }
@@ -109,7 +113,8 @@ class ActionValidator {
     final size = state.boardConfig.size;
     final maxAnchor = size - 2;
 
-    // §5.2.3: noWallsRemaining → wallOutOfBounds → wallOverlaps → wallCrosses → wallBlocksPath
+    // §5.2.3: noWallsRemaining → wallOutOfBounds → wallOverlaps → wallCrosses
+    // → wallBlocksPath
     if (state.wallsRemaining(player) <= 0) {
       return ActionFailure.noWallsRemaining;
     }
@@ -175,51 +180,6 @@ class ActionValidator {
     return null;
   }
 
-  /// Computes blocked edges from wall placements.
-  static Set<(_CK, _CK)> _blockedEdges(List<Wall> walls) {
-    final blocked = <(_CK, _CK)>{};
-    for (final wall in walls) {
-      final r = wall.anchorRow;
-      final c = wall.anchorColumn;
-      if (wall.orientation == WallOrientation.h) {
-        _addEdge(blocked, r, c, r + 1, c);
-        _addEdge(blocked, r, c + 1, r + 1, c + 1);
-      } else {
-        _addEdge(blocked, r, c, r, c + 1);
-        _addEdge(blocked, r + 1, c, r + 1, c + 1);
-      }
-    }
-    return blocked;
-  }
-
-  static void _addEdge(
-    Set<(_CK, _CK)> blocked,
-    int r1,
-    int c1,
-    int r2,
-    int c2,
-  ) {
-    blocked.add((_CK(r1, c1), _CK(r2, c2)));
-    blocked.add((_CK(r2, c2), _CK(r1, c1)));
-  }
-
-  static bool _isEdgeBlocked(Cell a, Cell b, Set<(_CK, _CK)> blocked) {
-    return blocked.contains((_CK(a.row, a.column), _CK(b.row, b.column)));
-  }
-
-  static List<Cell> _neighbors(Cell cell, int size) {
-    const offsets = [(-1, 0), (1, 0), (0, -1), (0, 1)];
-    final result = <Cell>[];
-    for (final (dr, dc) in offsets) {
-      final nr = cell.row + dr;
-      final nc = cell.column + dc;
-      if (nr >= 0 && nr < size && nc >= 0 && nc < size) {
-        result.add(Cell(row: nr, column: nc));
-      }
-    }
-    return result;
-  }
-
   static int _manhattanDistance(Cell a, Cell b) =>
       (a.row - b.row).abs() + (a.column - b.column).abs();
 
@@ -230,20 +190,20 @@ class ActionValidator {
   static List<Cell> _jumpTargets(
     Cell me,
     Cell op,
-    List<Wall> walls,
+    BlockedEdges board,
     int size,
   ) {
-    final b = _blockedEdges(walls);
     final dr = op.row - me.row;
     final dc = op.column - me.column;
 
     // Straight jump
     final straight = Cell(row: op.row + dr, column: op.column + dc);
-    final straightAvailable = straight.row >= 0 &&
+    final straightAvailable =
+        straight.row >= 0 &&
         straight.row < size &&
         straight.column >= 0 &&
         straight.column < size &&
-        !_isEdgeBlocked(op, straight, b);
+        !board.isBlocked(op, straight);
 
     if (straightAvailable) {
       return [straight];
@@ -257,27 +217,10 @@ class ActionValidator {
           diag.row < size &&
           diag.column >= 0 &&
           diag.column < size &&
-          !_isEdgeBlocked(op, diag, b)) {
+          !board.isBlocked(op, diag)) {
         targets.add(diag);
       }
     }
     return targets;
   }
-}
-
-class _CK {
-  const _CK(this.r, this.c);
-  final int r;
-  final int c;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is _CK &&
-          runtimeType == other.runtimeType &&
-          r == other.r &&
-          c == other.c;
-
-  @override
-  int get hashCode => Object.hash(r, c);
 }

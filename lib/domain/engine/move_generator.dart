@@ -1,77 +1,98 @@
 import '../models/cell.dart';
 import '../models/game_action.dart';
 import '../models/game_state.dart';
+import '../models/game_status.dart';
 import '../models/player_id.dart';
 import '../models/wall_orientation.dart';
 import 'action_validator.dart';
 
 /// Generates all legal actions for a player in a given state.
 ///
-/// Candidate order matches the oracle generator exactly (spec §3.10):
-/// 1. On-board moves in (row, column) ascending
-/// 2. Off-board moves: (-1,0), (0,-1), (n,0), (0,n), (-1,-1), (n,n)
-/// 3. Wall H anchors (0..n-1) row-major
-/// 4. Wall V anchors (0..n-1) row-major
-/// 5. Extra invalid walls: H(-1,0), V(0,-1)
+/// Canonical order matches the oracle generator exactly (spec §3.10):
+/// 1. Moves in (row, column) ascending.
+/// 2. Walls: all `H` anchors row-major, then all `V` anchors row-major.
+///
+/// [ActionValidator] remains the single source of truth for legality; this
+/// class only prunes candidates that are provably illegal (off-board moves and
+/// out-of-bounds / overlapping / crossing walls) before asking the validator.
+/// Pruning is behaviour-preserving: every pruned candidate would have been
+/// rejected by the validator for the same reason.
 class MoveGenerator {
   /// Returns all legal actions for [player] in [state].
   static List<GameAction> generate(GameState state, PlayerId player) {
-    final actions = <GameAction>[];
-    final size = state.boardConfig.size;
+    // A finished match has no legal actions (§5.2.1).
+    if (state.status == GameStatus.finished) return const [];
 
-    for (final candidate in _allCandidates(size)) {
-      final action = _candidateToAction(candidate);
-      if (ActionValidator.validate(state, player, action) == null) {
-        actions.add(action);
-      }
-    }
-
-    return actions;
+    return <GameAction>[
+      ..._legalMoves(state, player),
+      ..._legalWalls(state, player),
+    ];
   }
 
-  /// Returns all candidate actions in canonical order (including invalid ones).
-  ///
-  /// This matches the oracle generator's `candidates(n)` function.
-  static List<({String kind, int r, int c, WallOrientation? orient})>
-      _allCandidates(int n) {
-    final cands = <({String kind, int r, int c, WallOrientation? orient})>[];
-
-    // On-board moves row-major
-    for (var r = 0; r < n; r++) {
-      for (var cc = 0; cc < n; cc++) {
-        cands.add((kind: 'move', r: r, c: cc, orient: null));
-      }
-    }
-    // Off-board moves
-    for (final (r, c) in [(-1, 0), (0, -1), (n, 0), (0, n), (-1, -1), (n, n)]) {
-      cands.add((kind: 'move', r: r, c: c, orient: null));
-    }
-    // Wall H row-major (0..n-1), then V row-major (0..n-1)
-    for (final orient in [WallOrientation.h, WallOrientation.v]) {
-      for (var r = 0; r < n; r++) {
-        for (var cc = 0; cc < n; cc++) {
-          cands.add((kind: 'wall', r: r, c: cc, orient: orient));
+  /// Legal destinations, iterated in row-major order.
+  static List<GameAction> _legalMoves(GameState state, PlayerId player) {
+    final size = state.boardConfig.size;
+    final actions = <GameAction>[];
+    for (var row = 0; row < size; row++) {
+      for (var column = 0; column < size; column++) {
+        final action = GameAction.move(Cell(row: row, column: column));
+        if (ActionValidator.validate(state, player, action) == null) {
+          actions.add(action);
         }
       }
     }
-    // Extra invalid walls
-    cands.add((kind: 'wall', r: -1, c: 0, orient: WallOrientation.h));
-    cands.add((kind: 'wall', r: 0, c: -1, orient: WallOrientation.v));
-
-    return cands;
+    return actions;
   }
 
-  /// Converts a candidate tuple to a GameAction.
-  static GameAction _candidateToAction(
-    ({String kind, int r, int c, WallOrientation? orient}) cand,
-  ) {
-    if (cand.kind == 'move') {
-      return GameAction.move(Cell(row: cand.r, column: cand.c));
-    } else {
-      return GameAction.wall(
-        orientation: cand.orient!,
-        anchor: Cell(row: cand.r, column: cand.c),
-      );
+  /// Legal wall anchors for the current inventory.
+  static List<GameAction> _legalWalls(GameState state, PlayerId player) {
+    if (state.wallsRemaining(player) <= 0) return const [];
+
+    final size = state.boardConfig.size;
+    final maxAnchor = size - 2;
+    final actions = <GameAction>[];
+    for (final orientation in [WallOrientation.h, WallOrientation.v]) {
+      for (var row = 0; row <= maxAnchor; row++) {
+        for (var column = 0; column <= maxAnchor; column++) {
+          final action = GameAction.wall(
+            orientation: orientation,
+            anchor: Cell(row: row, column: column),
+          );
+          if (_overlapsOrCrosses(state, action as WallAction)) continue;
+          if (ActionValidator.validate(state, player, action) == null) {
+            actions.add(action);
+          }
+        }
+      }
     }
+    return actions;
+  }
+
+  /// True when [action] overlaps or crosses an existing wall.
+  ///
+  /// Mirrors the `wallOverlaps` / `wallCrosses` checks in [ActionValidator] so
+  /// the two stay consistent.
+  static bool _overlapsOrCrosses(GameState state, WallAction action) {
+    final row = action.anchor.row;
+    final column = action.anchor.column;
+    final orientation = action.orientation;
+    for (final existing in state.walls) {
+      if (existing.orientation == orientation) {
+        if (orientation == WallOrientation.h) {
+          if (existing.anchorRow == row &&
+              (existing.anchorColumn - column).abs() <= 1) {
+            return true;
+          }
+        } else {
+          if (existing.anchorColumn == column &&
+              (existing.anchorRow - row).abs() <= 1) {
+            return true;
+          }
+        }
+      } else if (existing.anchorRow == row && existing.anchorColumn == column) {
+        return true;
+      }
+    }
+    return false;
   }
 }

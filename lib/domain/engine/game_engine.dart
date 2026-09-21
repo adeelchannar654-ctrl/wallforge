@@ -6,6 +6,7 @@ import '../models/game_status.dart';
 import '../models/player_id.dart';
 import '../models/wall.dart';
 import 'action_validator.dart';
+import 'move_generator.dart';
 
 /// Core game engine: applies actions and transitions state.
 ///
@@ -24,20 +25,23 @@ class GameEngine {
       return ActionResult.failure(failure);
     }
 
-    GameState newState;
-    if (action is MoveAction) {
-      newState = _applyMove(state, action.destination);
-    } else if (action is WallAction) {
-      newState = _applyWall(state, player, action);
-    } else {
-      return ActionResult.failure(ActionFailure.moveNotAdjacent);
-    }
+    // GameAction is sealed, so this switch is exhaustive and has no
+    // unreachable fallback branch.
+    final GameState applied = switch (action) {
+      MoveAction(:final destination) => _applyMove(state, destination),
+      WallAction() => _applyWall(state, player, action),
+    };
 
     // Check win condition
-    newState = _checkWin(newState);
-
-    return ActionResult.success(newState);
+    return ActionResult.success(_checkWin(applied));
   }
+
+  /// All legal actions for the player whose turn it is, in canonical order.
+  ///
+  /// Returns an empty list when the match is finished. This is the public
+  /// "what can I do now?" API; [MoveGenerator] remains the generator detail.
+  static List<GameAction> legalActions(GameState state) =>
+      MoveGenerator.generate(state, state.currentPlayer);
 
   static GameState _applyMove(GameState state, Cell destination) {
     final player = state.currentPlayer;
@@ -83,18 +87,12 @@ class GameEngine {
 
     // Blue wins by reaching row 0
     if (bluePos.row == state.boardConfig.blueGoalRow) {
-      return state.copyWith(
-        status: GameStatus.finished,
-        winner: PlayerId.blue,
-      );
+      return state.copyWith(status: GameStatus.finished, winner: PlayerId.blue);
     }
 
     // Red wins by reaching row size-1
     if (redPos.row == state.boardConfig.redGoalRow) {
-      return state.copyWith(
-        status: GameStatus.finished,
-        winner: PlayerId.red,
-      );
+      return state.copyWith(status: GameStatus.finished, winner: PlayerId.red);
     }
 
     return state;

@@ -20,14 +20,18 @@ A wall may never remove the last route to either player's goal.
 **Phase 1 — Core Game Specification** is complete: the game rules are frozen
 in [`game_spec.md`](game_spec.md) (v1.0.4) with deterministic answers for every rule,
 a test catalog, an error taxonomy, and a decision log. The independent checker
-`tool/spec_verification/check_spec_consistency.py` reports `OK` (see `check_output.txt`).
+`tool/spec_verification/check_spec_consistency.py` prints
+`OK: spec is consistent with the reference engine.`
 
 **Phase 0 — Project Foundation** is also complete: the Flutter project, platform
 targets, folder structure, lint/format standards, test structure and a minimal
 application shell are in place.
 
-The game engine, board rendering and online multiplayer are **not** implemented
-yet. See [`phase.md`](phase.md) for the full phase plan.
+**Phase 2 — Game Engine** is **in progress (Phase 2.1)**. The pure-Dart engine
+core in [`lib/domain/`](lib/domain/README.md) matches `game_spec.md` (commit
+`d6c7af2`), but docs, structured serialization, complete per-rule tests and
+quality gates are still being finished. Board rendering (Phase 3) and online
+multiplayer are **not** implemented yet. See [`phase.md`](phase.md) for the plan.
 
 ---
 

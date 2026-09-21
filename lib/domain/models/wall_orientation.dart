@@ -6,5 +6,5 @@ enum WallOrientation {
   h,
 
   /// Vertical wall: lies on grid line to the right of column c, spanning rows r and r+1.
-  v;
+  v,
 }

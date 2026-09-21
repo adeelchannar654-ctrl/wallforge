@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_blank" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "surface-container-lowest": "#090e19", "on-tertiary-fixed-variant": "#005236", "background": "#0e131e", "on-surface": "#dee2f2", "surface": "#0e131e", "on-tertiary-container": "#006645", "secondary-fixed-dim": "#ffb2b9", "on-surface-variant": "#bac9cc", "secondary-container": "#b0003a", "surface-variant": "#303541", "surface-container-highest": "#303541", "tertiary": "#a8ffd2", "primary-container": "#00e5ff", "on-secondary-fixed-variant": "#91002f", "on-error": "#690005", "surface-dim": "#0e131e", "error-container": "#93000a", "tertiary-container": "#5be9ad", "surface-container-high": "#252a36", "primary": "#c3f5ff", "on-secondary": "#67001f", "on-primary-fixed": "#001f24", "primary-fixed": "#9cf0ff", "on-error-container": "#ffdad6", "on-primary-container": "#00626e", "surface-bright": "#343946", "outline-variant": "#3b494c", "primary-fixed-dim": "#00daf3", "tertiary-fixed-dim": "#4edea3", "surface-container": "#1b1f2b", "on-primary": "#00363d", "outline": "#849396", "surface-container-low": "#171b27", "inverse-on-surface": "#2b303c", "on-tertiary-fixed": "#002113", "secondary": "#ffb2b9", "on-secondary-container": "#ffbcc2", "on-secondary-fixed": "#400010", "inverse-surface": "#dee2f2", "on-background": "#dee2f2", "on-primary-fixed-variant": "#004f58", "tertiary-fixed": "#6ffbbe", "error": "#ffb4ab", "inverse-primary": "#006875", "surface-tint": "#00daf3", "on-tertiary": "#003824", "secondary-fixed": "#ffdadc" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "gutter": "1rem", "space-xs": "0.25rem", "space-xl": "1.5rem", "space-lg": "1rem", "space-md": "0.75rem", "space-sm": "0.5rem", "margin-desktop": "2rem", "margin": "1rem" }, "fontFamily": { "label-caps": ["Inter"], "title-md": ["Inter"], "headline-lg-mobile": ["Inter"], "headline-lg": ["Inter"], "numeric-stat": ["Inter"], "body-base": ["Inter"], "headline-md": ["Inter"], "display-lg": ["Inter"], "display-md": ["Inter"] }, "fontSize": { "label-caps": ["12px", { "lineHeight": "16px", "letterSpacing": "0.06em", "fontWeight": "700" }], "title-md": ["16px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "600" }], "headline-lg-mobile": ["28px", { "lineHeight": "36px", "letterSpacing": "0.04em", "fontWeight": "800" }], "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "0.01em", "fontWeight": "700" }], "numeric-stat": ["20px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "body-base": ["14px", { "lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400" }], "headline-md": ["20px", { "lineHeight": "28px", "letterSpacing": "0em", "fontWeight": "600" }], "display-lg": ["48px", { "lineHeight": "56px", "letterSpacing": "0.08em", "fontWeight": "800" }], "display-md": ["32px", { "lineHeight": "40px", "letterSpacing": "0.04em", "fontWeight": "800" }] } } } };</script><style>@layer base{html,body{width:100vw;margin:0;padding:0;background-color:#0e131e;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style></head><body class="bg-surface pt-safe pb-safe flex flex-col min-h-screen text-on-surface font-body-base text-body-base"><main class="flex flex-col relative w-full bg-surface min-h-screen"><div class="flex flex-col w-full relative overflow-hidden select-none px-gutter py-space-xl items-center justify-between">
+<!-- Subtle Background Grid Lattice -->
+<div class="absolute inset-0 pointer-events-none opacity-20 flex items-center justify-center">
+<svg class="w-full h-full text-outline-variant" fill="none" viewbox="0 0 400 800" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<pattern height="40" id="grid-pattern" patternunits="userSpaceOnUse" width="40">
+<path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" stroke-width="1"></path>
+</pattern>
+<radialgradient cx="50%" cy="40%" id="halo-fade" r="50%">
+<stop offset="0%" stop-color="#00e5ff" stop-opacity="0.35"></stop>
+<stop offset="60%" stop-color="#00e5ff" stop-opacity="0.05"></stop>
+<stop offset="100%" stop-color="#0e131e" stop-opacity="0"></stop>
+</radialgradient>
+</defs>
+<rect fill="url(#grid-pattern)" height="100%" width="100%"></rect>
+<circle cx="200" cy="340" fill="url(#halo-fade)" r="220"></circle>
+</svg>
+</div>
+<!-- Ambient Micro Light Accent (Top Corner) -->
+<div class="w-full flex items-center justify-between z-10 opacity-70">
+<div class="flex items-center gap-space-xs bg-surface-container-low px-space-md py-space-xs rounded-full">
+<span class="w-2 h-2 rounded-full bg-tertiary-container animate-ping"></span>
+<span class="font-label-caps text-label-caps text-tertiary tracking-wider">ONLINE ARENA</span>
+</div>
+<div class="flex items-center gap-space-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-title-md">wifi_tethering</span>
+<span class="font-label-caps text-label-caps">60 FPS</span>
+</div>
+</div>
+<!-- Centerpiece: Emblem, Brand Typography & Atmospheric Glow -->
+<div class="flex flex-col items-center justify-center my-auto w-full max-w-sm z-10 relative">
+<!-- Emblem Container with 2.5D Layered Depth -->
+<div class="relative flex items-center justify-center mb-space-xl">
+<!-- Outer Pulsing Glow Disc -->
+<div class="absolute w-44 h-44 rounded-full bg-primary-container/20 blur-xl animate-pulse"></div>
+<!-- Stepped Geometric Framing Slot -->
+<div class="relative w-36 h-36 rounded-xl bg-surface-container-lowest p-2 shadow-2xl flex items-center justify-center">
+<!-- Inner Micro Channel -->
+<div class="w-full h-full rounded-lg bg-surface-container flex items-center justify-center relative overflow-hidden">
+<!-- Ambient internal gradient -->
+<div class="absolute inset-0 bg-gradient-to-tr from-surface-container-lowest via-transparent to-primary-container/10"></div>
+<img alt="Wallforge Strategic Logo" class="w-24 h-24 object-contain relative z-10 drop-shadow-[0_0_16px_rgba(0,229,255,0.45)] transform hover:scale-105 transition-transform duration-300" src="https://lh3.googleusercontent.com/aida/AEtjO1Xltri2laTLvpFsjRQG9NUH3sEllnUDqUfvdH03OVPnzcsBvEgfAwBc0jSj62PxciAbf8EVd2BUOSMVyAg8YCvTu55CPfHxA4rwrhKyQ9xJ6mkq9qomuYoXpE6xCSWysbhcLV1p7GHEFbORSkmCIOnh_RsNINcf82z2AO9XanJxAGFdIf_ERIFDefm1jR99_ROmKT4PTGl5QGjatO15ZsI5xQixJj-uNKdoWuuDeQwWAopTd2q-dJq3_w"/>
+</div>
+</div>
+<!-- Perimeter Orbit Decorators -->
+<div class="absolute -top-1 -left-1 w-2.5 h-2.5 rounded-full bg-primary-container shadow-[0_0_8px_#00e5ff]"></div>
+<div class="absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full bg-tertiary-container shadow-[0_0_8px_#5be9ad]"></div>
+</div>
+<!-- Stylized Futuristic Typography -->
+<div class="text-center space-y-space-xs">
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile font-extrabold tracking-[0.25em] text-on-surface drop-shadow-sm flex items-center justify-center">
+        WALL<span class="text-primary-container">FORGE</span>
+</h1>
+<p class="font-label-caps text-label-caps text-on-surface-variant tracking-[0.3em] uppercase">
+        Strategic Grid Forge
+      </p>
+</div>
+<!-- Precision Telemetry Status Card -->
+<div class="w-full mt-space-xl bg-surface-container-low/80 backdrop-blur-md rounded-xl p-space-lg shadow-xl">
+<!-- Loading Metric Header -->
+<div class="flex items-center justify-between mb-space-sm">
+<span class="font-label-caps text-label-caps text-primary tracking-wide" id="load-status-label">INITIALIZING GAME ENGINE...</span>
+<span class="font-numeric-stat text-title-md font-bold text-on-surface" id="load-status-pct">94%</span>
+</div>
+<!-- Segmented Tactile Progress Bar -->
+<div class="w-full h-2.5 bg-surface-container-lowest rounded-full overflow-hidden p-0.5 relative">
+<div class="h-full rounded-full bg-gradient-to-r from-primary-container via-primary-fixed-dim to-tertiary-container shadow-[0_0_12px_rgba(0,229,255,0.6)] transition-all duration-700 ease-out" id="load-progress-bar" style="width: 94%;"></div>
+</div>
+<!-- Interactive Micro Metrics -->
+<div class="flex items-center justify-between mt-space-sm pt-space-xs">
+<div class="flex items-center gap-1.5 text-on-surface-variant">
+<span class="material-symbols-outlined text-[14px]">memory</span>
+<span class="font-label-caps text-label-caps">SHADERS: CACHED</span>
+</div>
+<div class="flex items-center gap-1.5 text-tertiary">
+<span class="material-symbols-outlined text-[14px]">verified</span>
+<span class="font-label-caps text-label-caps">9×9 ARENA READY</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Section: Tactic Tip & Version Details -->
+<div class="w-full max-w-sm flex flex-col gap-space-md z-10">
+<!-- Tactile Game Tip Bento Pill -->
+<div class="w-full bg-surface-container-lowest/90 rounded-xl p-space-md flex items-start gap-space-md shadow-md">
+<div class="p-2 rounded-lg bg-surface-container-high text-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-title-md">tips_and_updates</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-caps text-label-caps text-primary uppercase">TACTICAL DOCTRINE</span>
+<p class="font-body-base text-body-base text-on-surface-variant text-xs mt-0.5 leading-relaxed">
+          Walls cannot completely seal off an opponent's path to their goal strip. Always preserve at least one escape corridor.
+        </p>
+</div>
+</div>
+<!-- Footer Metadata Badge -->
+<div class="flex items-center justify-between px-space-sm text-outline">
+<span class="font-label-caps text-label-caps tracking-widest text-on-surface-variant/60">
+        V1.4.0 • FLUTTER ENGINE
+      </span>
+<div class="flex items-center gap-1 text-on-surface-variant/60">
+<span class="material-symbols-outlined text-body-base">lock_clock</span>
+<span class="font-label-caps text-label-caps tracking-wider">LOW LATENCY</span>
+</div>
+</div>
+</div>
+</div>
+<script>
+  // Dynamic subtle progress simulator to reinforce high-stakes Flutter tactile feeling
+  (function() {
+    let progress = 94;
+    const bar = document.getElementById('load-progress-bar');
+    const pct = document.getElementById('load-status-pct');
+    const label = document.getElementById('load-status-label');
+
+    const steps = [
+      { p: 96, text: 'CONFIGURING ARENA CHANNELS...' },
+      { p: 98, text: 'SYNCING TURN CLOCKS...' },
+      { p: 100, text: 'GRID STABILIZED. READY.' }
+    ];
+
+    let currentStep = 0;
+    const interval = setInterval(() => {
+      if (currentStep < steps.length) {
+        progress = steps[currentStep].p;
+        if (bar) bar.style.width = progress + '%';
+        if (pct) pct.textContent = progress + '%';
+        if (label) label.textContent = steps[currentStep].text;
+        currentStep++;
+      } else {
+        clearInterval(interval);
+      }
+    }, 900);
+  })();
+</script></main></body></html>

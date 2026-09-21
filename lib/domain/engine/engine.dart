@@ -2,6 +2,7 @@
 library;
 
 export 'action_validator.dart';
+export 'blocked_edges.dart';
 export 'game_engine.dart';
 export 'move_generator.dart';
 export 'pathfinder.dart';
