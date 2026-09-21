@@ -3,13 +3,14 @@ import 'package:flutter/material.dart';
 import '../../domain/models/cell.dart';
 import '../../domain/models/game_state.dart';
 import '../../domain/models/player_id.dart';
+import '../../domain/models/wall_orientation.dart';
 import 'board_geometry.dart';
 import 'board_painter.dart';
 
 /// A pure renderer that displays a Wallforge game board.
 ///
 /// Takes a [GameState] and optional overlays. Contains no rules and never
-/// mutates state. Interaction callbacks are Phase 4 — expose none yet.
+/// mutates state. Interaction is delegated to optional callbacks.
 class BoardView extends StatelessWidget {
   const BoardView({
     super.key,
@@ -20,6 +21,8 @@ class BoardView extends StatelessWidget {
     this.showCoordinates = true,
     this.activeGlow,
     this.maxSize = 640,
+    this.onCellTap,
+    this.onWallSlotTap,
   });
 
   /// The game state to render.
@@ -31,7 +34,7 @@ class BoardView extends StatelessWidget {
   /// Ghost wall preview (valid/invalid).
   final WallPreview? wallPreview;
 
-  /// Currently selected cell (for future interaction).
+  /// Currently selected cell.
   final Cell? selectedCell;
 
   /// Whether to show coordinate labels on first/last rows.
@@ -42,6 +45,12 @@ class BoardView extends StatelessWidget {
 
   /// Maximum board size in pixels (desktop/tablet cap from DESIGN.md).
   final double maxSize;
+
+  /// Called when a cell is tapped.
+  final ValueChanged<Cell>? onCellTap;
+
+  /// Called when a wall slot is tapped.
+  final void Function(Cell anchor, WallOrientation orientation)? onWallSlotTap;
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +64,9 @@ class BoardView extends StatelessWidget {
           areaSize: boardSize,
         );
 
-        return Semantics(
+        final hasCallbacks = onCellTap != null || onWallSlotTap != null;
+
+        Widget board = Semantics(
           label: _buildSemanticsLabel(),
           child: SizedBox(
             width: boardSize,
@@ -76,8 +87,36 @@ class BoardView extends StatelessWidget {
             ),
           ),
         );
+
+        if (hasCallbacks) {
+          board = GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapUp: (details) => _handleTap(details.localPosition, geometry),
+            child: board,
+          );
+        }
+
+        return board;
       },
     );
+  }
+
+  void _handleTap(Offset position, BoardGeometry geometry) {
+    // Check wall slot first (narrower targets take priority).
+    final wallAnchor = geometry.wallAnchorAt(position);
+    if (wallAnchor != null && onWallSlotTap != null) {
+      onWallSlotTap!(
+        Cell(row: wallAnchor.row, column: wallAnchor.col),
+        wallAnchor.orientation,
+      );
+      return;
+    }
+
+    // Check cell tap.
+    final cell = geometry.cellAt(position);
+    if (cell != null && onCellTap != null) {
+      onCellTap!(cell);
+    }
   }
 
   String _buildSemanticsLabel() {

@@ -155,8 +155,10 @@ class BoardPainter extends CustomPainter {
 
     // Top goal strip (Blue's goal = row 0)
     _drawGoalStrip(canvas, g.topGoalStrip, true);
+    _drawGoalStripLabel(canvas, g.topGoalStrip, 'P1 GOAL STRIP', true, g);
     // Bottom goal strip (Red's goal = row size-1)
     _drawGoalStrip(canvas, g.bottomGoalStrip, false);
+    _drawGoalStripLabel(canvas, g.bottomGoalStrip, 'P2 GOAL STRIP', false, g);
   }
 
   void _drawGoalStrip(Canvas canvas, Rect rect, bool isTop) {
@@ -174,6 +176,33 @@ class BoardPainter extends CustomPainter {
     canvas.drawRRect(
       RRect.fromRectAndRadius(rect, const Radius.circular(4)),
       gradientPaint,
+    );
+  }
+
+  void _drawGoalStripLabel(
+    Canvas canvas,
+    Rect rect,
+    String text,
+    bool isTop,
+    BoardGeometry g,
+  ) {
+    final fontSize = (9.0 * (g.boardSize / 9)).clamp(6.0, 12.0);
+    final tp = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          fontSize: fontSize,
+          fontFamily: 'Inter',
+          fontWeight: FontWeight.w900,
+          color: AppColors.onTertiaryContainer.withValues(alpha: 0.9),
+          letterSpacing: 0.12,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(
+      canvas,
+      Offset(rect.center.dx - tp.width / 2, rect.center.dy - tp.height / 2),
     );
   }
 

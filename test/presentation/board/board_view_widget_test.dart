@@ -1,36 +1,40 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wallforge/domain/engine/game_engine.dart';
 import 'package:wallforge/domain/models/board_config.dart';
 import 'package:wallforge/domain/models/cell.dart';
+import 'package:wallforge/domain/models/game_action.dart';
+import 'package:wallforge/domain/models/game_state.dart';
 import 'package:wallforge/domain/models/player_id.dart';
 import 'package:wallforge/domain/models/wall_orientation.dart';
-import 'package:wallforge/domain/wallforge_domain.dart';
 import 'package:wallforge/presentation/board/board.dart';
 
 void main() {
-  group('BoardView', () {
-    Widget buildTestApp({
-      required GameState state,
-      Set<Cell> legalMoves = const {},
-      bool showCoordinates = true,
-      double? width,
-      double? height,
-    }) {
-      return MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: width ?? 400,
-            height: height ?? 400,
-            child: BoardView(
-              state: state,
-              legalMoveTargets: legalMoves,
-              showCoordinates: showCoordinates,
-            ),
+  Widget buildTestApp({
+    required GameState state,
+    Set<Cell> legalMoves = const {},
+    bool showCoordinates = true,
+    double? width,
+    double? height,
+  }) {
+    return MaterialApp(
+      home: Scaffold(
+        body: SizedBox(
+          width: width ?? 400,
+          height: height ?? 400,
+          child: BoardView(
+            state: state,
+            legalMoveTargets: legalMoves,
+            showCoordinates: showCoordinates,
           ),
         ),
-      );
-    }
+      ),
+    );
+  }
 
+  group('BoardView', () {
     testWidgets('renders without overflow at 200x200', (tester) async {
       await tester.pumpWidget(
         buildTestApp(state: GameState.initial(), width: 200, height: 200),
@@ -110,8 +114,6 @@ void main() {
 
     testWidgets('handles board with walls placed', (tester) async {
       var state = GameState.initial();
-      final actions = <(PlayerId, dynamic)>[];
-      // Place a wall for blue.
       final wallAction = GameAction.wall(
         orientation: WallOrientation.h,
         anchor: const Cell(row: 4, column: 0),
@@ -124,7 +126,6 @@ void main() {
     });
 
     testWidgets('handles non-initial game state', (tester) async {
-      // Build a state with pawn moved.
       var state = GameState.initial();
       final moveAction = GameAction.move(const Cell(row: 7, column: 4));
       final r = GameEngine.apply(state, PlayerId.blue, moveAction);
@@ -214,14 +215,65 @@ void main() {
       for (var r = 0; r < size - 1; r++) {
         for (var c = 0; c < size - 1; c++) {
           final rect = g.wallRect(r, c, WallOrientation.h);
-          // Use the exact top edge of the rect (in the groove).
           final pos = Offset(rect.left + 1, rect.top + 1);
           final anchor = g.wallAnchorAt(pos);
-          // May or may not be detected depending on pixel precision, so just
-          // ensure no crash.
           expect(anchor, anyOf(isNull, isNotNull));
         }
       }
     });
   });
+
+  group('Seeded random states render without exception', () {
+    const viewports = [
+      (w: 320.0, h: 568.0, label: 'small'),
+      (w: 390.0, h: 844.0, label: 'medium'),
+      (w: 768.0, h: 1024.0, label: 'tablet'),
+      (w: 1440.0, h: 900.0, label: 'desktop'),
+    ];
+
+    const boardSizes = [5, 7, 9, 11];
+
+    for (final size in boardSizes) {
+      for (var seed = 0; seed < 50; seed++) {
+        final viewport = viewports[seed % viewports.length];
+        testWidgets('size=$size seed=$seed viewport=${viewport.label}', (
+          tester,
+        ) async {
+          final state = _generateRandomState(size: size, seed: seed);
+          await tester.pumpWidget(
+            MaterialApp(
+              home: Scaffold(
+                body: SizedBox(
+                  width: viewport.w,
+                  height: viewport.h,
+                  child: BoardView(state: state, showCoordinates: true),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(find.byType(BoardView), findsOneWidget);
+        });
+      }
+    }
+  });
+}
+
+/// Generates a random but valid game state by replaying random legal actions
+/// from a deterministic seed.
+GameState _generateRandomState({required int size, required int seed}) {
+  var state = GameState.initial(BoardConfig(size: size));
+  final rng = Random(seed);
+
+  for (var turn = 0; turn < 40; turn++) {
+    final actions = GameEngine.legalActions(state);
+    if (actions.isEmpty) break;
+
+    final pick = actions[rng.nextInt(actions.length)];
+    final result = GameEngine.apply(state, state.currentPlayer, pick);
+    if (result is SuccessResult) {
+      state = result.state;
+    }
+  }
+  return state;
 }

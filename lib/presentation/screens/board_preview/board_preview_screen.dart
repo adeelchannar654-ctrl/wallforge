@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/router/app_router.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
@@ -245,6 +246,33 @@ class _BoardPreviewScreenState extends State<BoardPreviewScreen> {
                   activeGlow: _state.status == GameStatus.inProgress
                       ? _state.currentPlayer
                       : null,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+
+              // --- Start local match button ---
+              Center(
+                child: TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pushNamed(AppRoutes.game);
+                  },
+                  style: TextButton.styleFrom(
+                    backgroundColor: AppColors.primaryContainer,
+                    foregroundColor: AppColors.onPrimaryContainer,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.xl,
+                      vertical: AppSpacing.md,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(
+                    'START LOCAL MATCH',
+                    style: AppTypography.labelCaps.copyWith(
+                      color: AppColors.onPrimaryContainer,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: AppSpacing.lg),
