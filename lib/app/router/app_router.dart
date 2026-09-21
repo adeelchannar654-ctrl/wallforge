@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../presentation/screens/home/home_screen.dart';
+import '../../presentation/screens/board_preview/board_preview_screen.dart';
 
 /// Canonical route paths for the application (see `architecture.md` §18).
 ///
@@ -27,7 +27,7 @@ class AppRouter {
       default:
         return MaterialPageRoute<void>(
           settings: settings,
-          builder: (_) => const HomeScreen(),
+          builder: (_) => const BoardPreviewScreen(),
         );
     }
   }

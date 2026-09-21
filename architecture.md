@@ -642,11 +642,17 @@ Use one appropriate match-state stream and derive UI state from it.
 
 ## 22. Design Reference Policy
 
-No Stitch folder is required.
+The Stitch design system in `stitch_wallforge_ui_design_system/` is the visual source of truth for production. The shipped Flutter app must look like these designs.
 
-The project must not depend on Stitch exports.
+Do not:
 
-`design.md` is the visual specification.
+- Read the Stitch folder at runtime.
+- Add Stitch files to `pubspec.yaml` assets.
+- Import HTML/Tailwind/CDN code into production.
+
+The app is built natively in Flutter and must build and run fully offline.
+
+`DESIGN.md` and the five screen files inside the Stitch folder provide tokens, measures and layout references. `game_spec.md` controls game rules. `design.md` provides supplementary visual guidance not covered by Stitch.
 
 Approved custom assets may be stored under:
 
@@ -654,6 +660,6 @@ Approved custom assets may be stored under:
 assets/
 ```
 
-The coding AI should read the MD files before implementation and inspect the actual project assets.
+The coding AI should read the MD files and screen references before implementation and inspect the actual project assets.
 
-If a future design reference is added, it is optional input only and must not override explicit rules in `design.md`, `rules.md`, or the actual product requirements.
+Owner decision: 2026-09-21.

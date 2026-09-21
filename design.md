@@ -751,20 +751,20 @@ Use vector assets where they provide a clear benefit.
 
 Avoid unnecessarily large raster images.
 
-Do not depend on the Stitch export folder.
-
 ---
 
 # 31. Design Source of Truth
 
 For this project:
 
-1. `design.md` defines the visual system.
-2. Approved assets define the actual artwork.
-3. Flutter implementation defines responsive behavior.
-4. Screenshots are references, not executable specifications.
+1. `game_spec.md` controls game rules, state and coordinates.
+2. `DESIGN.md` inside `stitch_wallforge_ui_design_system/` defines visual tokens (colours, typography, radii, spacing, elevation).
+3. The five screen PNGs and HTML prototypes inside the Stitch folder define layout measures and layering.
+4. `design.md` (this file) provides supplementary visual guidance not covered by Stitch.
+5. Flutter implementation defines responsive behaviour.
+6. Screenshots and prototypes are references, not executable specifications.
 
-The rejected Stitch output must not be treated as a required design reference.
+Owner decision: 2026-09-21.
 
 ---
 

@@ -86,24 +86,26 @@ The board should feel like a digital strategy arena with 3D-rendered pieces.
 
 # 4. Stitch Decision
 
-Google Stitch was explored for UI design.
+The Stitch design system in `stitch_wallforge_ui_design_system/` (design system "Tactical Neon Arena", 5 screens) is now the visual source of truth for production.
 
-The generated Stitch design did not match the desired board direction.
+Decision (2026-09-21):
 
-Decision:
+**The Stitch design system is the visual source of truth for production.**
 
-**Do not use the Stitch folder as a design dependency or required reference.**
+The shipped Flutter app must look like these Stitch designs. This means:
 
-Do not build the application around Stitch output.
+- The app's colours, typography, spacing, radii, elevation, board layers, goal strips, pawns, walls, ghost walls, legal-move rings, inventory notches, logo and wordmark all follow the Stitch designs natively in Flutter.
+- The app does NOT depend on the Stitch folder at build or run time (no HTML/Tailwind/CDN/PNG loading; native Flutter implementation).
+- The Stitch folder stays in the repo as design reference only.
 
-Use:
+This reverses the earlier "do not use Stitch" decision. All project documents (PRD, rules, architecture, design) have been updated accordingly.
 
-- `design.md`
-- Custom approved assets.
-- Product requirements.
-- Actual Flutter implementation.
+Stitch files referenced:
 
-The Stitch output can be ignored unless the user later explicitly changes this decision.
+- `stitch_wallforge_ui_design_system/stitch_wallforge_ui_design_system/tactical_neon_arena/DESIGN.md` (tokens)
+- `stitch_wallforge_ui_design_system/stitch_wallforge_ui_design_system/main_gameplay_screen/` (board measures)
+- `stitch_wallforge_ui_design_system/stitch_wallforge_ui_design_system/wallforge_strategic_logo/` (logo SVG)
+- Four other screens: splash, home_launcher, game_setup_modes
 
 ---
 
@@ -222,13 +224,11 @@ If strong competitive anti-cheat requirements emerge, revisit the backend archit
 ## Phase 1.2 — Second Specification Correction: COMPLETE
 ## Phase 1.3 — Third Specification Correction: COMPLETE
 ## Phase 1.4 — Fourth Specification Correction: COMPLETE
-## Phase 2 — Game Engine Implementation: IN PROGRESS (Phase 2.1)
+## Phase 2 — Game Engine Implementation: COMPLETE (commit c15d51a)
 
-The engine core is implemented (commit `d6c7af2`), but Phase 2 is **not** complete.
-Phase 2.1 is finishing docs, structured serialization, complete per-rule tests and
-quality gates. See §13g below for the Phase 2 record and its outstanding items.
+The engine core is implemented (commit `d6c7af2`) and hardened (commit `c15d51a`). Phase 2 is complete.
 
-See §13b, §13c, §13d, §13e, §13f, and §13g below for the Phase records.
+See §13b, §13c, §13d, §13e, §13f, §13g, and §13h below for the Phase records.
 
 ### Completed (Phase 0 + Phase 1 + Phase 1.1 + Phase 1.2 + Phase 1.3 + Phase 1.4)
 
@@ -351,7 +351,6 @@ Update this `memory.md`.
 
 AI must not assume:
 
-- Stitch is the final design.
 - A screenshot is an exact technical specification.
 - Firebase rules can perform arbitrary server-side game logic.
 - Client-side validation is sufficient for competitive security.
@@ -666,3 +665,72 @@ complete. (An earlier version of this record claimed "Clean (24 files)",
 - No game rules changed.
 - No new dependencies added.
 - `pubspec.yaml` and `analysis_options.yaml` untouched.
+
+---
+
+# 13h. Phase 3 Record (Stitch Design System + Board Rendering)
+
+Status: **in progress.**
+
+### Goal
+
+Build the visual identity and board rendering, using the Stitch design system as the visual source of truth. Replace the Phase 0 shell with a real board preview screen.
+
+### Design decision
+
+Stitch design system (`stitch_wallforge_ui_design_system/`) is the visual source of truth for production. App built natively in Flutter, no runtime dependency on Stitch folder.
+
+### Files created/modified (Phase 3)
+
+To be populated as files are created.
+
+### Source ledger
+
+| Design value | Source | File |
+|---|---|---|
+| Player 1 = Blue = cyan `#00E5FF` | DESIGN.md §Colors + game_spec.md D-03/D-04/D-05 | `lib/app/theme/app_colors.dart` |
+| Player 2 = Red = crimson `#FF4B6E` | DESIGN.md §Colors + game_spec.md D-03/D-04/D-05 | `lib/app/theme/app_colors.dart` |
+| Tile colour `#17233F` | main_gameplay_screen/code.html L89,91 | `lib/presentation/board/board_painter.dart` |
+| Groove `#2C3A5C` | main_gameplay_screen/code.html L89 (grid gap bg) | `lib/presentation/board/board_painter.dart` |
+| Grid surface `#090E19` | main_gameplay_screen/code.html L89 | `lib/presentation/board/board_painter.dart` |
+| Background `#0E131E` | DESIGN.md §Colors `surface` | `lib/app/theme/app_colors.dart` |
+| Board outer `#0E1526` | main_gameplay_screen/code.html L76 | `lib/presentation/board/board_painter.dart` |
+| Goal emerald `#10B981` | DESIGN.md §Colors `tertiary` | `lib/app/theme/app_colors.dart` |
+| Goal strip gradient | main_gameplay_screen/code.html L81 (20%→80%→20%) | `lib/presentation/board/board_painter.dart` |
+| Board corner radius 16px | main_gameplay_screen/code.html L76 `rounded-2xl` | `lib/presentation/board/board_painter.dart` |
+| Tile corner radius 6px | DESIGN.md §Shapes, code.html L91 `rounded` | `lib/presentation/board/board_painter.dart` |
+| Pawn gradient (P1) | main_gameplay_screen/code.html L168 `from-[#d9fbff] via-[#00daf3] to-[#004f58]` | `lib/presentation/board/board_painter.dart` |
+| Pawn gradient (P2) | main_gameplay_screen/code.html L120 `from-[#ff8fa3] via-[#e6004c] to-[#67001f]` | `lib/presentation/board/board_painter.dart` |
+| Pawn specular | code.html L169-170, DESIGN.md §Elevation | `lib/presentation/board/board_painter.dart` |
+| Pawn contact shadow | code.html L166, DESIGN.md §Elevation | `lib/presentation/board/board_painter.dart` |
+| Wall bevel catchlight | code.html L214-215, DESIGN.md §Elevation | `lib/presentation/board/board_painter.dart` |
+| Wall corner radius 4px | DESIGN.md §Shapes "4px corner radius" | `lib/presentation/board/board_painter.dart` |
+| Ghost wall 35% valid, crimson 50% invalid | DESIGN.md §Components | `lib/presentation/board/board_painter.dart` |
+| Legal move ring | main_gameplay_screen/code.html L146-148, DESIGN.md §Components | `lib/presentation/board/board_painter.dart` |
+| Active glow P1 `rgba(0,229,255,0.5)` | DESIGN.md §Elevation | `lib/presentation/board/board_painter.dart` |
+| Active glow P2 `rgba(255,75,110,0.5)` | DESIGN.md §Elevation | `lib/presentation/board/board_painter.dart` |
+| Notch 6×12px, lit = player colour | main_gameplay_screen/code.html L257-267 | `lib/presentation/board/wall_inventory_notches.dart` |
+| Coordinate label `9px mono 30% opacity` | main_gameplay_screen/code.html L91 | `lib/presentation/board/board_painter.dart` |
+| Coordinate naming `a1=(size-1,0)` | main_gameplay_screen/code.html L203-211 | `lib/presentation/board/board_painter.dart` |
+| Inter font family | DESIGN.md §Typography, code.html | `pubspec.yaml` |
+| Tabular figures for numerics | DESIGN.md §Typography | `lib/app/theme/app_theme.dart` |
+| Spacing 4px module | DESIGN.md §Spacing | `lib/app/theme/app_spacing.dart` |
+| Radii: 4,8,12,16,24,9999 | DESIGN.md §Rounded | `lib/app/theme/app_theme.dart` |
+| Max board 420px mobile, 640px desktop | DESIGN.md §Layout | `lib/presentation/board/board_view.dart` |
+| Min touch target 44×44px | DESIGN.md §Layout | `lib/presentation/board/board_geometry.dart` |
+| P1 goal = row 0 (top), P2 goal = row size-1 (bottom) | game_spec.md §3 | `lib/presentation/board/board_painter.dart` |
+| P1 (Blue) starts bottom, P2 (Red) starts top | game_spec.md D-03/D-04 | `lib/domain/models/board_config.dart` |
+| Wall H(r,c) blocks two edges | game_spec.md §3.6, BlockedEdges | `lib/presentation/board/board_geometry.dart` |
+| Wall V(r,c) blocks two edges | game_spec.md §3.6, BlockedEdges | `lib/presentation/board/board_geometry.dart` |
+
+### Open questions
+
+None at this time.
+
+### What is NOT built (deferred)
+
+- HUD cards, turn banner, action controls (Phase 4/11)
+- Chronometer/turn clocks (not in spec, Q-01/Q-03)
+- Undo, hint, shortest-path stat (later phases)
+- Splash telemetry (do not fake)
+- Online/AI/timer/rating/undo UI (out of scope)

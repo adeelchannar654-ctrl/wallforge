@@ -113,20 +113,20 @@ The project may use common strategy-game mechanics, but its presentation and imp
 
 ---
 
-## 3.2 Avoid Stitch dependency
+## 3.2 Stitch design system
 
-Do not require Google Stitch exports to build or run the application.
-
-The user explicitly decided not to use the Stitch folder because it did not match the desired design.
+The Stitch design system in `stitch_wallforge_ui_design_system/` (design system "Tactical Neon Arena", 5 screens) is the visual source of truth for production. The shipped Flutter app must look like these designs.
 
 Do not:
 
-- Import Stitch-generated code into production by default.
-- Treat Stitch screenshots as the source of truth.
-- Build the application around a Stitch folder.
-- Create a dependency on Stitch being installed.
+- Import Stitch-generated HTML/Tailwind/CDN code into production.
+- Read the Stitch folder at runtime or add it to `pubspec.yaml` assets.
+- Embed PNG screenshots or HTML prototypes in the app.
+- Create a build-time dependency on the Stitch folder.
 
-Use `design.md` and approved project assets instead.
+The app is built natively in Flutter and must build and run fully offline. `DESIGN.md` and the five screens inside the Stitch folder are design references; `game_spec.md` controls rules; `DESIGN.md` tokens control visuals.
+
+Owner decision: 2026-09-21.
 
 ---
 
@@ -744,7 +744,7 @@ Do not turn Wallforge into an isometric tabletop game.
 
 ### Rule 11
 
-Stitch is not a project dependency.
+Stitch design system (`stitch_wallforge_ui_design_system/`) is the visual source of truth. The app must not depend on the Stitch folder at build or run time.
 
 ### Rule 12
 

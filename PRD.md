@@ -272,17 +272,18 @@ The 3D effect comes primarily from:
 - Lighting.
 - Subtle board-edge depth.
 
-The visual language should be original and should not depend on the rejected Stitch output.
-
-The Stitch folder is **not a project dependency and must not be treated as the visual source of truth**.
+The visual language is original. The Stitch design system in `stitch_wallforge_ui_design_system/` (design system "Tactical Neon Arena", 5 screens) is the visual source of truth for production. The shipped Flutter app must look like these designs but must not depend on the Stitch folder at build or run time.
 
 The implementation source of truth is:
 
 1. This PRD for product requirements.
-2. `rules.md` for engineering constraints.
-3. `architecture.md` for structure.
-4. `design.md` for the visual system.
-5. The actual Flutter implementation and approved project assets.
+2. `game_spec.md` for game rules and state.
+3. `rules.md` for engineering constraints.
+4. `architecture.md` for structure.
+5. `DESIGN.md` inside the Stitch folder for visual tokens.
+6. The five screen PNGs and HTML prototypes for layout measures.
+7. `design.md` for supplementary visual guidance not covered by Stitch.
+8. The actual Flutter implementation.
 
 ---
 
