@@ -228,7 +228,15 @@ If strong competitive anti-cheat requirements emerge, revisit the backend archit
 
 The engine core is implemented (commit `d6c7af2`) and hardened (commit `c15d51a`). Phase 2 is complete.
 
-See §13b, §13c, §13d, §13e, §13f, §13g, and §13h below for the Phase records.
+## Phase 3 — Board Rendering: COMPLETE (commits 81923b4 + 7f0a2a5)
+
+The native Stitch-aligned board renderer, preview screen, geometry cross-checks, widget coverage, and goldens are complete. See §13h.
+
+## Phase 4 — Interactive Local Game: COMPLETE (Phase 4.1 verification 2026-09-25)
+
+The local pass-and-play controller, responsive game screen, route configuration, wall feedback, result overlay, and application/game-screen tests are complete. See §13i.
+
+See §13b, §13c, §13d, §13e, §13f, §13g, §13h, and §13i below for the Phase records.
 
 ### Completed (Phase 0 + Phase 1 + Phase 1.1 + Phase 1.2 + Phase 1.3 + Phase 1.4)
 
@@ -267,15 +275,12 @@ See §13b, §13c, §13d, §13e, §13f, §13g, and §13h below for the Phase reco
 
 ### Not yet completed
 
-- Board renderer.
-- Pawn renderer.
-- Wall renderer.
-- Local multiplayer.
 - AI.
 - Firebase integration.
 - Online rooms.
 - Online synchronization.
-- Complete UI screens.
+- Complete product UI/UX.
+- Local persistence.
 - Audio.
 - Haptics.
 - Production QA.
@@ -286,15 +291,15 @@ See §13b, §13c, §13d, §13e, §13f, §13g, and §13h below for the Phase reco
 
 The recommended next implementation order is:
 
-1. Finalize detailed game rules.
+1. Finalize detailed game rules. (DONE - Phase 1)
 2. Create Flutter project. (DONE - Phase 0 complete and verified)
-3. Create domain models.
-4. Implement game engine.
-5. Implement BFS/pathfinding.
-6. Implement wall validation.
-7. Write engine tests.
-8. Build board renderer.
-9. Build interactive local mode.
+3. Create domain models. (DONE - Phase 2)
+4. Implement game engine. (DONE - Phase 2)
+5. Implement BFS/pathfinding. (DONE - Phase 2)
+6. Implement wall validation. (DONE - Phase 2)
+7. Write engine tests. (DONE - Phase 2)
+8. Build board renderer. (DONE - Phase 3)
+9. Build interactive local mode. (DONE - Phase 4/4.1)
 10. Build AI.
 11. Add local persistence.
 12. Configure Firebase.
@@ -579,9 +584,7 @@ The independent consistency checker `tool/spec_verification/check_spec_consisten
 
 # 13g. Phase 2 Record (Game Engine Implementation)
 
-Status: **in progress — Phase 2.1.** (Commit `d6c7af2` "Phase 2 redo" replaced an
-incorrect 10x10 engine with one matching `game_spec.md` v1.0.4. The core is
-correct, but Phase 2 exit criteria are not yet met.)
+Status: **complete** (commit `c15d51a`; historical Phase 2.1 baseline retained below).
 
 ### Files that actually exist
 
@@ -670,7 +673,7 @@ complete. (An earlier version of this record claimed "Clean (24 files)",
 
 # 13h. Phase 3 Record (Stitch Design System + Board Rendering)
 
-Status: **in progress.**
+Status: **complete.** (Commits `81923b4` + `7f0a2a5`; Phase 4.1 verification 2026-09-25)
 
 ### Goal
 
@@ -682,7 +685,27 @@ Stitch design system (`stitch_wallforge_ui_design_system/`) is the visual source
 
 ### Files created/modified (Phase 3)
 
-To be populated as files are created.
+```text
+lib/app/app.dart                                  — Root MaterialApp with theme + router
+lib/app/theme/app_colors.dart                     — Design tokens: colours
+lib/app/theme/app_typography.dart                 — Design tokens: Inter family
+lib/app/theme/app_spacing.dart                    — Design tokens: 4px module
+lib/app/theme/app_radii.dart                      — Design tokens: corner radii
+lib/app/theme/app_elevation.dart                  — Design tokens: shadows
+lib/app/theme/app_theme.dart                      — ThemeData build
+lib/presentation/board/board.dart                 — Barrel (exports geometry, painter, view, notches)
+lib/presentation/board/board_geometry.dart         — Pure geometry — cellRect, wallRect, cellAt, wallAnchorAt
+lib/presentation/board/board_painter.dart          — CustomPainter — grid, goal strips, tiles, walls, pawns, ghost, legal rings, glow, coord labels, goal strip labels
+lib/presentation/board/board_view.dart             — StatelessWidget wrapping Painter + GestureDetector hit-testing
+lib/presentation/board/wall_inventory_notches.dart — Notch display widget
+lib/presentation/screens/board_preview/board_preview_screen.dart — Main preview screen
+lib/core/constants/app_info.dart                   — App name/tagline
+test/presentation/board/board_geometry_test.dart   — 73 geometry tests
+test/presentation/board/board_golden_test.dart     — 5 golden tests
+test/presentation/board/board_view_widget_test.dart — 219 widget tests (14 original + 200 seeded random)
+test/presentation/board/wall_geometry_cross_check_test.dart — 10 wall↔engine cross-check tests
+test/presentation/board/goldens/                   — 5 golden PNGs
+```
 
 ### Source ledger
 
@@ -723,9 +746,32 @@ To be populated as files are created.
 | Wall H(r,c) blocks two edges | game_spec.md §3.6, BlockedEdges | `lib/presentation/board/board_geometry.dart` |
 | Wall V(r,c) blocks two edges | game_spec.md §3.6, BlockedEdges | `lib/presentation/board/board_geometry.dart` |
 
+### Visual-conformance checklist
+
+| Stitch attribute | Status | Evidence |
+|---|---|---|
+| Front-facing dark navy grid | Yes | `board_painter.dart`; board geometry and five board goldens |
+| Rounded board and recessed surface | Yes | `BoardPainter._drawBoardArena`; board goldens |
+| Green goal strips | Partial | Goal strips render, but the token conflict between `#10B981` and `#5BE9AD` remains open |
+| Blue pawn | Yes | Blue gradient, specular highlight, contact shadow; board goldens |
+| Red pawn | Yes | Red gradient, specular highlight, contact shadow; board goldens |
+| Blue/red walls | Yes | Wall gradients and bevel catchlights; board goldens |
+| Ghost wall states | Yes | Valid/invalid alpha and colour paths in `BoardPainter`; Phase 4.1 game-screen goldens |
+| Legal move rings | Yes | `BoardPainter._drawLegalMoveRings`; board view widget tests |
+| Active-turn glow | Yes | `BoardPainter._drawActiveGlow`; game-screen widget tests |
+| Inventory notches | Yes | `wall_inventory_notches.dart`; desktop and mobile HUD tests |
+| Coordinate labels | Yes | `BoardPainter._drawCoordinates`; board geometry tests and goldens |
+| Inter typography and tabular numerals | Yes | Theme typography and numeric styles; game-screen goldens |
+| Responsive composition | Partial | Phase 4.1 verifies mobile and desktop game layouts; broader responsive product work remains Phase 14 |
+| Stitch gameplay HUD parity | Yes for Phase 4 scope | Player information, turn banner, board, mode toggle, wall counters, failure feedback, result overlay, restart/rematch |
+
 ### Open questions
 
-None at this time.
+- **Q-4.1 — Goal colour:** the Stitch references disagree between `#10B981` and `#5BE9AD`; the current token uses `AppColors.tertiaryContainer` (`#5BE9AD`). No rule decision is implied.
+- **Q-4.2 — Result statistics:** `design.md` §21 requires statistics, but does not define which statistics or retention rules. Phase 4.1 shows only state-backed turn and remaining-wall values; persistence is deferred.
+- **Q-4.3 — Wall orientation affordance:** the current board derives H/V from the tapped groove. A separate orientation selector may be preferable for accessibility, but no source defines its exact placement or interaction.
+- **Q-4.4 — Settings persistence:** confirm-wall-placement currently resets with the controller; persistence is deferred to the settings/persistence phase.
+- **Q-4.5 — Desktop hover feedback:** `design.md` §28 lists hover highlights, while Phase 4.1 verifies pointer/tap feedback; the exact hover treatment and accessibility behavior remain a later desktop polish decision.
 
 ### What is NOT built (deferred)
 
@@ -734,3 +780,135 @@ None at this time.
 - Undo, hint, shortest-path stat (later phases)
 - Splash telemetry (do not fake)
 - Online/AI/timer/rating/undo UI (out of scope)
+
+### Quality gates (real output, re-verified 2026-09-25)
+
+| Gate | Command | Result |
+|------|---------|--------|
+| Formatting | `dart format --set-exit-if-changed lib test` | `Formatted 60 files (0 changed)` |
+| Analyzer | `flutter analyze` | `No issues found! (ran in 13.8s)` |
+| Tests | `flutter test` | `835: All tests passed!` |
+| Build | `flutter build web` | `√ Built build\\web` |
+| Spec checker | `python tool/spec_verification/check_spec_consistency.py game_spec.md` | `OK: spec is consistent with the reference engine.` |
+| Oracle vectors | `gen_engine_vectors.py` compared with `test/fixtures/engine_vectors.json` | `IDENTICAL`; 1,240,761 bytes each |
+
+The earlier Phase 4 commit message claimed 313 passing tests without application-layer tests. That historical claim is not used as the current baseline; the count above is from the final Phase 4.1 run.
+
+### Phase 3 gap-closing steps (commit `7f0a2a5`)
+
+- Step 0.1: Wall-geometry ↔ engine cross-check test (10 tests, all sizes 5/7/9/11)
+- Step 0.2: Widget tests expanded to 219 (200 seeded random engine-played states × 4 viewports)
+- Step 0.3: Goal strip labels ("P1 GOAL STRIP" / "P2 GOAL STRIP") on both goal strips
+
+---
+
+# 13i. Phase 4 Record (Interactive Local Game)
+
+Status: **complete — Phase 4.1 correction verified 2026-09-25.** No Phase 5 work was started.
+
+### Scope and architecture choice
+
+Phase 4 remains a local pass-and-play mode. The implementation keeps the existing `lib/app/application` location rather than relocating it to `lib/application/game`; this is the current project convention and is now recorded consistently in the Phase 4.1 tests and documentation. The application controller imports `flutter/foundation.dart` only and delegates all rule decisions to the domain engine.
+
+### Files created/modified
+
+```text
+lib/app/application/local_game_controller.dart       — ChangeNotifier controller and pending-wall validation state
+lib/app/router/app_router.dart                       — Typed BoardConfig route argument with default fallback
+lib/domain/engine/game_engine.dart                    — Public validation wrapper; no rule behavior change
+lib/presentation/screens/board_preview/board_preview_screen.dart — Preset config navigation and narrow-width toggle wrapping
+lib/presentation/screens/game/game_screen.dart         — Mobile/desktop controls, validity feedback, result overlay
+lib/presentation/board/board_view.dart                 — Existing cell/wall callback surface used by GameScreen
+lib/app/application/application.dart                  — Application barrel
+test/application/local_game_controller_test.dart      — 317 controller/property tests
+test/presentation/screens/game/game_screen_test.dart   — 13 GameScreen/router/widget tests
+test/presentation/screens/game/game_screen_golden_test.dart — 3 golden tests tagged `golden`
+test/presentation/screens/game/goldens/                — Mobile valid/invalid and desktop toggle goldens
+test/presentation/board/board_hit_test.dart            — 12 hit-testing tests
+```
+
+### Controller API
+
+| Member | Purpose |
+|---|---|
+| `LocalGameController(config:)` | Starts a match with a supplied `BoardConfig` |
+| `startMatch(config:)` | Resets the match and presentation state |
+| `restart()` / `rematch()` | Resets while retaining the current config |
+| `setMode(InteractionMode)` | Switches MOVE/WALL and clears transient selection/pending state |
+| `toggleConfirmWallPlacement()` | Switches immediate versus confirmed wall placement |
+| `tapCell(Cell)` | Applies a legal move or records the engine failure |
+| `tapWallSlot(Cell, WallOrientation)` | Sets a pending wall or applies immediately when confirmation is off |
+| `pendingWallFailure` | Recomputes pending-wall legality through `GameEngine.validate` |
+| `confirm()` / `cancel()` | Confirms only a currently valid pending wall, or cancels it |
+| `dismissResult()` | Hides the finished-result overlay |
+| `state`, `mode`, `selectedCell`, `pendingWall`, `lastFailure`, `showingResult`, `winner` | Read-only presentation/application state |
+| `failureMessage(ActionFailure)` | Exhaustive switch over all 12 failure reasons |
+
+### Phase 4.1 root causes and fixes
+
+| Bug | Root cause | Fix |
+|---|---|---|
+| A — selected preset ignored | `BoardPreviewScreen` pushed `/game` without arguments; `AppRouter` always constructed the default controller | Pass `_state.boardConfig` as the named-route argument; read `BoardConfig` in the router and fall back to the default for deep links |
+| B — desktop wall mode unavailable | `_buildDesktopLayout` omitted `_buildModeToggle`, while mobile included it | Reuse `_buildModeToggle` in the desktop center column above the shared action controls |
+| C — invalid wall ghost looked valid | `GameScreen` hard-coded `WallPreview.isValid: true`; the controller exposed no pending-wall validation | Add `pendingWallFailure` backed by `GameEngine.validate`, render crimson invalid ghosts and the reason, disable Confirm, and make controller confirmation a safe no-op for invalid pending walls |
+
+The desktop audit found no additional mobile-only wall inventory, failure-feedback, Restart, or Back control: those already use shared methods and both side rails render inventory notches. The result overlay was missing despite the Phase 4 victory task; it was added with state-backed turn/wall statistics plus Rematch and Home actions. The shared action row was changed to `Wrap` so a failure message and controls remain usable at narrow widths.
+
+### P4 decision ledger
+
+The earlier Phase 4 brief did not persist stable P4 IDs in this file. The following ledger records the same decisions under stable IDs; sources are the earlier Phase 4 implementation brief, this Phase 4.1 owner prompt, and the cited project documents.
+
+| ID | Decision | Source |
+|---|---|---|
+| P4-1 | Local mode is two humans sharing one device; AI, online, timers, persistence, and rating remain out of scope | Earlier Phase 4 brief; `phase.md` Phase 4; this prompt §0 |
+| P4-2 | The application controller coordinates user actions; widgets never own authoritative rules | `architecture.md` §2.1–2.3; earlier Phase 4 brief |
+| P4-3 | Use one `ChangeNotifier` controller and `ListenableBuilder`; no new state-management dependency | `rules.md` §2.3 and §3.3; earlier Phase 4 brief |
+| P4-4 | Gameplay legality, turn changes, and victory remain engine-owned | `game_spec.md` §§3–6; `architecture.md` §2.1–2.3; this prompt §0 |
+| P4-5 | MOVE highlights legal destinations; WALL exposes logical wall-slot feedback | `design.md` §§10–11; earlier Phase 4 brief |
+| P4-6 | Wall confirmation is enabled by default in the current controller; Cancel remains available | `design.md` §11 and §23; earlier Phase 4 implementation brief; revisit only through an explicit owner decision |
+| P4-7 | Selected preview `BoardConfig` is the single source passed into the started match | This prompt Bug A; `board_preview_screen.dart` preset state |
+| P4-8 | Mobile and desktop use separate compositions while sharing the same game state and controls | `architecture.md` §17; `design.md` §16; this prompt Bug B |
+| P4-9 | Finished games expose a result state with Rematch and Home; statistics are limited to state-backed values | `design.md` §21; `phase.md` Phase 4 tasks |
+| P4-10 | No engine rule changes, dependencies, or runtime Stitch access; quality gates and tests are mandatory | This prompt §0 and §3; `rules.md` §§3.2–3.3 |
+
+### Tests and coverage
+
+- `test/application/local_game_controller_test.dart`: 317 tests, including the 17-action §15 replay with exact §16 JSON, all 12 failure messages, wall validity cases, finished-state locking, and 300 seeded legal/illegal property games.
+- `test/presentation/screens/game/game_screen_test.dart`: 13 tests covering mobile/desktop toggles, valid/invalid ghosts, disabled Confirm, failure feedback, result/Rematch/Home, Restart/Back, preview navigation, custom route config, default fallback, and the 768px desktop breakpoint.
+- `test/presentation/screens/game/game_screen_golden_test.dart`: 3 `golden`-tagged tests for mobile valid wall, mobile invalid wall plus message, and desktop mode toggle.
+- Targeted coverage run: 330 tests passed; `lib/app/application/local_game_controller.dart` 108/109 lines (99.08%), with only the unreachable wall-placement victory branch uncovered; `lib/presentation/screens/game/game_screen.dart` 180/180 lines (100%).
+
+### Quality gates (real output, final Phase 4.1 run)
+
+| Gate | Command | Result |
+|------|---------|--------|
+| Formatting | `dart format --set-exit-if-changed lib test` | `Formatted 60 files (0 changed)` |
+| Analyzer | `flutter analyze` | `No issues found! (ran in 13.8s)` |
+| Full tests | `flutter test` | `835: All tests passed!` |
+| Targeted coverage | `flutter test --coverage test/application/local_game_controller_test.dart test/presentation/screens/game/game_screen_test.dart` | `330: All tests passed!` |
+| Build | `flutter build web` | `√ Built build\\web` |
+| Spec checker | `python tool/spec_verification/check_spec_consistency.py game_spec.md` | `OK: spec is consistent with the reference engine.` |
+| Oracle vectors | `gen_engine_vectors.py` compared with fixture | `IDENTICAL`; generated and fixture sizes both 1,240,761 bytes |
+
+### Owner acceptance script
+
+Run these steps in Chrome after `flutter run -d chrome`:
+
+1. Open the preview screen and select `Initial 7×7`.
+2. Tap `START LOCAL MATCH`.
+3. Confirm the game route shows a 7×7 board, with Blue at `d1` and Red at `d7`.
+4. Resize to a wide desktop window. Confirm `PLAYER 1 | BOARD | PLAYER 2`, wall inventory notches, `MOVE`, `WALL`, `RESTART`, and `BACK` are visible.
+5. Switch to `WALL`, tap an open wall groove, and confirm the valid ghost and enabled `CONFIRM` appear.
+6. Confirm the wall. Confirm the turn changes and the wall inventory decreases.
+7. Switch to `WALL` again and tap a crossing slot. Confirm the crimson ghost, `Wall crosses an existing wall.`, disabled `CONFIRM`, and working `CANCEL`.
+8. Resize to a narrow browser window. Repeat steps 4–7; the MOVE/WALL control and valid/invalid feedback must remain usable.
+9. Finish a scripted or manually won match. Confirm the result overlay, Rematch, and Home actions.
+10. Use Restart and Back and confirm the expected reset/navigation behavior.
+
+Manual verification completed on 2026-09-25 against the current Chrome build: steps 1–8 were exercised, including the 7×7 route, wide and narrow layouts, valid placement, and crossing-slot invalid feedback. The browser showed the expected state labels, turn/wall-count changes, crimson ghost, reason text, and disabled Confirm.
+
+### Deferred and open
+
+- No Phase 5 AI work was started.
+- Local persistence, online play, clocks, undo, hints, audio, haptics, and rating remain deferred.
+- Open questions are listed with the Phase 3 visual-conformance record above, especially the goal-colour token conflict and result-statistics definition.

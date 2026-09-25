@@ -172,6 +172,19 @@ Build the Wallforge board visual.
 
 The board correctly represents any valid GameState.
 
+### Result
+
+Phase 3 was re-verified during the Phase 4.1 correction on 2026-09-25. The earlier 313-test claim from the Phase 4 commit was not an application-layer baseline and is not repeated here.
+
+- `dart format --set-exit-if-changed lib test` → `Formatted 60 files (0 changed)`.
+- `flutter analyze` → `No issues found! (ran in 13.8s)`.
+- `flutter test` → `835: All tests passed!`.
+- `flutter build web` → `√ Built build\\web`.
+- `check_spec_consistency.py` → `OK: spec is consistent with the reference engine.`
+- Oracle vectors → `IDENTICAL`; generated and fixture sizes both 1,240,761 bytes.
+
+Phase 3 deliverables include the native Stitch-aligned renderer, geometry/engine cross-checks, 219 board widget tests, five board goldens, goal-strip labels, and the visual-conformance checklist in `memory.md` §13h.
+
 ---
 
 # Phase 4 — Interactive Local Game
@@ -196,6 +209,25 @@ Make the board fully playable by two people.
 ### Exit criteria
 
 Two players can complete a match without internet.
+
+### Result
+
+Phase 4.1 is complete and verified on 2026-09-25. The implementation remains in `lib/app/application` rather than being relocated to `lib/application/game`; the choice is recorded in `memory.md` §13i.
+
+- Bug A fixed: the selected preview `BoardConfig` is passed as the `/game` route argument; deep links without arguments use the default config.
+- Bug B fixed: desktop reuses the MOVE/WALL toggle above the shared action controls.
+- Bug C fixed: pending wall validity is computed through the engine, invalid ghosts show their reason, and Confirm is disabled and controller-safe.
+- Desktop parity audit found no additional mobile-only inventory, failure, Restart, or Back controls; the missing result overlay was added.
+- Added 317 controller tests, 13 GameScreen/router tests, 12 board hit tests, and 3 tagged GameScreen goldens.
+- Targeted coverage: controller 99.08% (108/109; unreachable wall-victory branch), GameScreen 100% (180/180).
+- Full suite: `835: All tests passed!`.
+- `flutter analyze` → `No issues found!`.
+- `flutter build web` → `√ Built build\\web`.
+- `check_spec_consistency.py` → `OK: spec is consistent with the reference engine.`
+- Oracle vectors → `IDENTICAL`; generated and fixture sizes both 1,240,761 bytes.
+- Manual Chrome acceptance was completed for 7×7 routing, wide and narrow layouts, valid wall placement, and invalid crossing feedback.
+
+No Phase 5 work was started. Owner acceptance steps are recorded in `memory.md` §13i.
 
 ---
 
