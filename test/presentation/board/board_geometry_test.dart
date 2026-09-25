@@ -63,7 +63,7 @@ void main() {
 
           final topRight = g.cellLabel(0, size - 1);
           final lastFile = String.fromCharCode(0x61 + size - 1);
-          expect(topRight, '${lastFile}$size');
+          expect(topRight, '$lastFile$size');
         });
 
         test('cellLabel: file increments with column', () {
@@ -99,7 +99,7 @@ void main() {
         });
 
         test('wallRectFromModel matches wallRect', () {
-          final wall = Wall(
+          const wall = Wall(
             owner: PlayerId.blue,
             orientation: WallOrientation.h,
             anchorRow: 0,
@@ -121,7 +121,7 @@ void main() {
         test('cellAt returns null outside board', () {
           final outside = g.cellAt(const Offset(-10, -10));
           expect(outside, isNull);
-          final outside2 = g.cellAt(Offset(500, 500));
+          final outside2 = g.cellAt(const Offset(500, 500));
           expect(outside2, isNull);
         });
 
@@ -170,7 +170,7 @@ void main() {
 
     group('edge cases', () {
       test('boardSize=5 with padding', () {
-        final g = BoardGeometry(boardSize: 5, areaSize: 300, padding: 20);
+        const g = BoardGeometry(boardSize: 5, areaSize: 300, padding: 20);
         expect(g.boardArea, 260);
         expect(g.cellSize, 52);
         final rect = g.cellRect(0, 0);
@@ -179,7 +179,7 @@ void main() {
       });
 
       test('boardSize=7 areaSize=500', () {
-        final g = BoardGeometry(boardSize: 7, areaSize: 500);
+        const g = BoardGeometry(boardSize: 7, areaSize: 500);
         expect(g.cellSize, closeTo(500 / 7, 0.001));
       });
     });

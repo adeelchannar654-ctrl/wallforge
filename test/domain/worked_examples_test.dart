@@ -15,7 +15,7 @@ void main() {
       final r = GameEngine.apply(
         s,
         PlayerId.blue,
-        GameAction.move(const Cell(row: 7, column: 4)),
+        const GameAction.move(Cell(row: 7, column: 4)),
       );
       expect(r, isA<SuccessResult>());
       final after = (r as SuccessResult).state;
@@ -47,7 +47,7 @@ void main() {
       final r = GameEngine.apply(
         s,
         PlayerId.blue,
-        GameAction.move(const Cell(row: 4, column: 4)),
+        const GameAction.move(Cell(row: 4, column: 4)),
       );
       expect(r, isA<FailureResult>());
       expect((r as FailureResult).failure, ActionFailure.moveBlockedByWall);
@@ -75,7 +75,7 @@ void main() {
       final r = GameEngine.apply(
         s,
         PlayerId.blue,
-        GameAction.move(const Cell(row: 5, column: 4)),
+        const GameAction.move(Cell(row: 5, column: 4)),
       );
       expect(r, isA<FailureResult>());
       expect((r as FailureResult).failure, ActionFailure.moveBlockedByWall);
@@ -103,7 +103,7 @@ void main() {
       final r = GameEngine.apply(
         s,
         PlayerId.blue,
-        GameAction.move(const Cell(row: 4, column: 4)),
+        const GameAction.move(Cell(row: 4, column: 4)),
       );
       expect(r, isA<FailureResult>());
       expect((r as FailureResult).failure, ActionFailure.moveBlockedByWall);
@@ -131,7 +131,7 @@ void main() {
       final r = GameEngine.apply(
         s,
         PlayerId.blue,
-        GameAction.move(const Cell(row: 5, column: 3)),
+        const GameAction.move(Cell(row: 5, column: 3)),
       );
       expect(r, isA<FailureResult>());
       expect((r as FailureResult).failure, ActionFailure.moveBlockedByWall);
@@ -159,7 +159,7 @@ void main() {
       final r = GameEngine.apply(
         s,
         PlayerId.blue,
-        GameAction.move(const Cell(row: 4, column: 8)),
+        const GameAction.move(Cell(row: 4, column: 8)),
       );
       expect(r, isA<FailureResult>());
       expect((r as FailureResult).failure, ActionFailure.moveBlockedByWall);
@@ -187,7 +187,7 @@ void main() {
       final r = GameEngine.apply(
         s,
         PlayerId.blue,
-        GameAction.move(const Cell(row: 5, column: 5)),
+        const GameAction.move(Cell(row: 5, column: 5)),
       );
       expect(r, isA<FailureResult>());
       expect((r as FailureResult).failure, ActionFailure.moveBlockedByWall);
@@ -208,7 +208,7 @@ void main() {
       final r = GameEngine.apply(
         s,
         PlayerId.blue,
-        GameAction.move(const Cell(row: -1, column: 4)),
+        const GameAction.move(Cell(row: -1, column: 4)),
       );
       expect(r, isA<FailureResult>());
       expect((r as FailureResult).failure, ActionFailure.moveOutOfBoard);
@@ -219,9 +219,9 @@ void main() {
       final r = GameEngine.apply(
         s,
         PlayerId.blue,
-        GameAction.wall(
+        const GameAction.wall(
           orientation: WallOrientation.h,
-          anchor: const Cell(row: 0, column: 0),
+          anchor: Cell(row: 0, column: 0),
         ),
       );
       expect(r, isA<SuccessResult>());
@@ -237,9 +237,9 @@ void main() {
       final r = GameEngine.apply(
         s,
         PlayerId.blue,
-        GameAction.wall(
+        const GameAction.wall(
           orientation: WallOrientation.h,
-          anchor: const Cell(row: 8, column: 0),
+          anchor: Cell(row: 8, column: 0),
         ),
       );
       expect(r, isA<FailureResult>());
@@ -268,9 +268,9 @@ void main() {
       final r = GameEngine.apply(
         s,
         PlayerId.blue,
-        GameAction.wall(
+        const GameAction.wall(
           orientation: WallOrientation.h,
-          anchor: const Cell(row: 3, column: 3),
+          anchor: Cell(row: 3, column: 3),
         ),
       );
       expect(r, isA<FailureResult>());
@@ -299,9 +299,9 @@ void main() {
       final r = GameEngine.apply(
         s,
         PlayerId.blue,
-        GameAction.wall(
+        const GameAction.wall(
           orientation: WallOrientation.h,
-          anchor: const Cell(row: 3, column: 4),
+          anchor: Cell(row: 3, column: 4),
         ),
       );
       expect(r, isA<FailureResult>());
@@ -330,9 +330,9 @@ void main() {
       final r = GameEngine.apply(
         s,
         PlayerId.blue,
-        GameAction.wall(
+        const GameAction.wall(
           orientation: WallOrientation.h,
-          anchor: const Cell(row: 3, column: 5),
+          anchor: Cell(row: 3, column: 5),
         ),
       );
       expect(r, isA<SuccessResult>());
@@ -360,9 +360,9 @@ void main() {
       final r = GameEngine.apply(
         s,
         PlayerId.blue,
-        GameAction.wall(
+        const GameAction.wall(
           orientation: WallOrientation.v,
-          anchor: const Cell(row: 3, column: 3),
+          anchor: Cell(row: 3, column: 3),
         ),
       );
       expect(r, isA<FailureResult>());
@@ -391,9 +391,9 @@ void main() {
       final r = GameEngine.apply(
         s,
         PlayerId.blue,
-        GameAction.wall(
+        const GameAction.wall(
           orientation: WallOrientation.v,
-          anchor: const Cell(row: 4, column: 3),
+          anchor: Cell(row: 4, column: 3),
         ),
       );
       expect(r, isA<SuccessResult>());
@@ -414,7 +414,7 @@ void main() {
       final r = GameEngine.apply(
         s,
         PlayerId.blue,
-        GameAction.move(const Cell(row: 3, column: 4)),
+        const GameAction.move(Cell(row: 3, column: 4)),
       );
       expect(r, isA<SuccessResult>());
       final after = (r as SuccessResult).state;
@@ -447,7 +447,7 @@ void main() {
       final r = GameEngine.apply(
         s,
         PlayerId.blue,
-        GameAction.move(const Cell(row: 4, column: 3)),
+        const GameAction.move(Cell(row: 4, column: 3)),
       );
       expect(r, isA<SuccessResult>());
       final after = (r as SuccessResult).state;
@@ -469,7 +469,7 @@ void main() {
       final r = GameEngine.apply(
         s,
         PlayerId.blue,
-        GameAction.move(const Cell(row: 0, column: 4)),
+        const GameAction.move(Cell(row: 0, column: 4)),
       );
       expect(r, isA<SuccessResult>());
       final after = (r as SuccessResult).state;
@@ -480,7 +480,7 @@ void main() {
       final r2 = GameEngine.apply(
         after,
         PlayerId.red,
-        GameAction.move(const Cell(row: 4, column: 2)),
+        const GameAction.move(Cell(row: 4, column: 2)),
       );
       expect(r2, isA<FailureResult>());
       expect((r2 as FailureResult).failure, ActionFailure.matchFinished);
@@ -492,7 +492,7 @@ void main() {
       final r = GameEngine.apply(
         s,
         PlayerId.red,
-        GameAction.move(const Cell(row: 1, column: 4)),
+        const GameAction.move(Cell(row: 1, column: 4)),
       );
       expect(r, isA<FailureResult>());
       expect((r as FailureResult).failure, ActionFailure.wrongTurn);
@@ -513,9 +513,9 @@ void main() {
       final r1 = GameEngine.apply(
         s,
         PlayerId.blue,
-        GameAction.wall(
+        const GameAction.wall(
           orientation: WallOrientation.h,
-          anchor: const Cell(row: 5, column: 5),
+          anchor: Cell(row: 5, column: 5),
         ),
       );
       expect(r1, isA<SuccessResult>());
@@ -526,7 +526,7 @@ void main() {
       final rRed = GameEngine.apply(
         afterWall,
         PlayerId.red,
-        GameAction.move(const Cell(row: 1, column: 4)),
+        const GameAction.move(Cell(row: 1, column: 4)),
       );
       expect(rRed, isA<SuccessResult>());
       final afterRed = (rRed as SuccessResult).state;
@@ -536,9 +536,9 @@ void main() {
       final r2 = GameEngine.apply(
         afterRed,
         PlayerId.blue,
-        GameAction.wall(
+        const GameAction.wall(
           orientation: WallOrientation.h,
-          anchor: const Cell(row: 0, column: 0),
+          anchor: Cell(row: 0, column: 0),
         ),
       );
       expect(r2, isA<FailureResult>());

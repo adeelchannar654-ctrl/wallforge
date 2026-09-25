@@ -114,9 +114,9 @@ void main() {
 
     testWidgets('handles board with walls placed', (tester) async {
       var state = GameState.initial();
-      final wallAction = GameAction.wall(
+      const wallAction = GameAction.wall(
         orientation: WallOrientation.h,
-        anchor: const Cell(row: 4, column: 0),
+        anchor: Cell(row: 4, column: 0),
       );
       final r = GameEngine.apply(state, PlayerId.blue, wallAction);
       if (r is SuccessResult) state = r.state;
@@ -127,7 +127,7 @@ void main() {
 
     testWidgets('handles non-initial game state', (tester) async {
       var state = GameState.initial();
-      final moveAction = GameAction.move(const Cell(row: 7, column: 4));
+      const moveAction = GameAction.move(Cell(row: 7, column: 4));
       final r = GameEngine.apply(state, PlayerId.blue, moveAction);
       if (r is SuccessResult) state = r.state;
 
@@ -159,7 +159,7 @@ void main() {
   group('BoardGeometry', () {
     test('all anchors on size 5 produce valid rects', () {
       const size = 5;
-      final g = BoardGeometry(boardSize: size, areaSize: 450);
+      const g = BoardGeometry(boardSize: size, areaSize: 450);
       for (var r = 0; r < size - 1; r++) {
         for (var c = 0; c < size - 1; c++) {
           final h = g.wallRect(r, c, WallOrientation.h);
@@ -172,7 +172,7 @@ void main() {
 
     test('all anchors on size 7 produce valid rects', () {
       const size = 7;
-      final g = BoardGeometry(boardSize: size, areaSize: 450);
+      const g = BoardGeometry(boardSize: size, areaSize: 450);
       for (var r = 0; r < size - 1; r++) {
         for (var c = 0; c < size - 1; c++) {
           final h = g.wallRect(r, c, WallOrientation.h);
@@ -185,7 +185,7 @@ void main() {
 
     test('all anchors on size 9 produce valid rects', () {
       const size = 9;
-      final g = BoardGeometry(boardSize: size, areaSize: 450);
+      const g = BoardGeometry(boardSize: size, areaSize: 450);
       for (var r = 0; r < size - 1; r++) {
         for (var c = 0; c < size - 1; c++) {
           final h = g.wallRect(r, c, WallOrientation.h);
@@ -198,7 +198,7 @@ void main() {
 
     test('all anchors on size 11 produce valid rects', () {
       const size = 11;
-      final g = BoardGeometry(boardSize: size, areaSize: 450);
+      const g = BoardGeometry(boardSize: size, areaSize: 450);
       for (var r = 0; r < size - 1; r++) {
         for (var c = 0; c < size - 1; c++) {
           final h = g.wallRect(r, c, WallOrientation.h);
@@ -211,7 +211,7 @@ void main() {
 
     test('wallAnchorAt cross-check: every valid H wall anchor can be hit', () {
       const size = 9;
-      final g = BoardGeometry(boardSize: size, areaSize: 450);
+      const g = BoardGeometry(boardSize: size, areaSize: 450);
       for (var r = 0; r < size - 1; r++) {
         for (var c = 0; c < size - 1; c++) {
           final rect = g.wallRect(r, c, WallOrientation.h);
@@ -246,7 +246,7 @@ void main() {
                 body: SizedBox(
                   width: viewport.w,
                   height: viewport.h,
-                  child: BoardView(state: state, showCoordinates: true),
+                  child: BoardView(state: state),
                 ),
               ),
             ),

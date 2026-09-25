@@ -16,7 +16,7 @@ void main() {
       var r = GameEngine.apply(
         state,
         PlayerId.blue,
-        GameAction.move(const Cell(row: 7, column: 4)),
+        const GameAction.move(Cell(row: 7, column: 4)),
       );
       expect(r, isA<SuccessResult>());
       state = (r as SuccessResult).state;
@@ -27,7 +27,7 @@ void main() {
       r = GameEngine.apply(
         state,
         PlayerId.red,
-        GameAction.move(const Cell(row: 1, column: 4)),
+        const GameAction.move(Cell(row: 1, column: 4)),
       );
       expect(r, isA<SuccessResult>());
       state = (r as SuccessResult).state;
@@ -38,7 +38,7 @@ void main() {
       r = GameEngine.apply(
         state,
         PlayerId.blue,
-        GameAction.move(const Cell(row: 6, column: 4)),
+        const GameAction.move(Cell(row: 6, column: 4)),
       );
       expect(r, isA<SuccessResult>());
       state = (r as SuccessResult).state;
@@ -49,7 +49,7 @@ void main() {
       r = GameEngine.apply(
         state,
         PlayerId.red,
-        GameAction.move(const Cell(row: 2, column: 4)),
+        const GameAction.move(Cell(row: 2, column: 4)),
       );
       expect(r, isA<SuccessResult>());
       state = (r as SuccessResult).state;
@@ -60,7 +60,7 @@ void main() {
       r = GameEngine.apply(
         state,
         PlayerId.blue,
-        GameAction.move(const Cell(row: 5, column: 4)),
+        const GameAction.move(Cell(row: 5, column: 4)),
       );
       expect(r, isA<SuccessResult>());
       state = (r as SuccessResult).state;
@@ -71,9 +71,9 @@ void main() {
       r = GameEngine.apply(
         state,
         PlayerId.red,
-        GameAction.wall(
+        const GameAction.wall(
           orientation: WallOrientation.v,
-          anchor: const Cell(row: 6, column: 3),
+          anchor: Cell(row: 6, column: 3),
         ),
       );
       expect(r, isA<SuccessResult>());
@@ -85,9 +85,9 @@ void main() {
       r = GameEngine.apply(
         state,
         PlayerId.blue,
-        GameAction.wall(
+        const GameAction.wall(
           orientation: WallOrientation.h,
-          anchor: const Cell(row: 6, column: 5),
+          anchor: Cell(row: 6, column: 5),
         ),
       );
       expect(r, isA<SuccessResult>());
@@ -99,7 +99,7 @@ void main() {
       r = GameEngine.apply(
         state,
         PlayerId.red,
-        GameAction.move(const Cell(row: 3, column: 4)),
+        const GameAction.move(Cell(row: 3, column: 4)),
       );
       expect(r, isA<SuccessResult>());
       state = (r as SuccessResult).state;
@@ -110,7 +110,7 @@ void main() {
       r = GameEngine.apply(
         state,
         PlayerId.blue,
-        GameAction.move(const Cell(row: 4, column: 4)),
+        const GameAction.move(Cell(row: 4, column: 4)),
       );
       expect(r, isA<SuccessResult>());
       state = (r as SuccessResult).state;
@@ -121,9 +121,9 @@ void main() {
       r = GameEngine.apply(
         state,
         PlayerId.red,
-        GameAction.wall(
+        const GameAction.wall(
           orientation: WallOrientation.h,
-          anchor: const Cell(row: 1, column: 3),
+          anchor: Cell(row: 1, column: 3),
         ),
       );
       expect(r, isA<SuccessResult>());
@@ -135,7 +135,7 @@ void main() {
       r = GameEngine.apply(
         state,
         PlayerId.blue,
-        GameAction.move(const Cell(row: 2, column: 4)),
+        const GameAction.move(Cell(row: 2, column: 4)),
       );
       expect(r, isA<SuccessResult>());
       state = (r as SuccessResult).state;
@@ -146,7 +146,7 @@ void main() {
       r = GameEngine.apply(
         state,
         PlayerId.red,
-        GameAction.move(const Cell(row: 4, column: 4)),
+        const GameAction.move(Cell(row: 4, column: 4)),
       );
       expect(r, isA<SuccessResult>());
       state = (r as SuccessResult).state;
@@ -157,7 +157,7 @@ void main() {
       r = GameEngine.apply(
         state,
         PlayerId.blue,
-        GameAction.move(const Cell(row: 2, column: 5)),
+        const GameAction.move(Cell(row: 2, column: 5)),
       );
       expect(r, isA<SuccessResult>());
       state = (r as SuccessResult).state;
@@ -168,7 +168,7 @@ void main() {
       r = GameEngine.apply(
         state,
         PlayerId.red,
-        GameAction.move(const Cell(row: 5, column: 4)),
+        const GameAction.move(Cell(row: 5, column: 4)),
       );
       expect(r, isA<SuccessResult>());
       state = (r as SuccessResult).state;
@@ -179,7 +179,7 @@ void main() {
       r = GameEngine.apply(
         state,
         PlayerId.blue,
-        GameAction.move(const Cell(row: 1, column: 5)),
+        const GameAction.move(Cell(row: 1, column: 5)),
       );
       expect(r, isA<SuccessResult>());
       state = (r as SuccessResult).state;
@@ -190,7 +190,7 @@ void main() {
       r = GameEngine.apply(
         state,
         PlayerId.red,
-        GameAction.move(const Cell(row: 6, column: 4)),
+        const GameAction.move(Cell(row: 6, column: 4)),
       );
       expect(r, isA<SuccessResult>());
       state = (r as SuccessResult).state;
@@ -201,7 +201,7 @@ void main() {
       r = GameEngine.apply(
         state,
         PlayerId.blue,
-        GameAction.move(const Cell(row: 0, column: 5)),
+        const GameAction.move(Cell(row: 0, column: 5)),
       );
       expect(r, isA<SuccessResult>());
       state = (r as SuccessResult).state;
@@ -246,41 +246,41 @@ void main() {
 
       // Replay all 17 actions
       final actions = [
-        (PlayerId.blue, GameAction.move(const Cell(row: 7, column: 4))),
-        (PlayerId.red, GameAction.move(const Cell(row: 1, column: 4))),
-        (PlayerId.blue, GameAction.move(const Cell(row: 6, column: 4))),
-        (PlayerId.red, GameAction.move(const Cell(row: 2, column: 4))),
-        (PlayerId.blue, GameAction.move(const Cell(row: 5, column: 4))),
+        (PlayerId.blue, const GameAction.move(Cell(row: 7, column: 4))),
+        (PlayerId.red, const GameAction.move(Cell(row: 1, column: 4))),
+        (PlayerId.blue, const GameAction.move(Cell(row: 6, column: 4))),
+        (PlayerId.red, const GameAction.move(Cell(row: 2, column: 4))),
+        (PlayerId.blue, const GameAction.move(Cell(row: 5, column: 4))),
         (
           PlayerId.red,
-          GameAction.wall(
+          const GameAction.wall(
             orientation: WallOrientation.v,
-            anchor: const Cell(row: 6, column: 3),
+            anchor: Cell(row: 6, column: 3),
           ),
         ),
         (
           PlayerId.blue,
-          GameAction.wall(
+          const GameAction.wall(
             orientation: WallOrientation.h,
-            anchor: const Cell(row: 6, column: 5),
+            anchor: Cell(row: 6, column: 5),
           ),
         ),
-        (PlayerId.red, GameAction.move(const Cell(row: 3, column: 4))),
-        (PlayerId.blue, GameAction.move(const Cell(row: 4, column: 4))),
+        (PlayerId.red, const GameAction.move(Cell(row: 3, column: 4))),
+        (PlayerId.blue, const GameAction.move(Cell(row: 4, column: 4))),
         (
           PlayerId.red,
-          GameAction.wall(
+          const GameAction.wall(
             orientation: WallOrientation.h,
-            anchor: const Cell(row: 1, column: 3),
+            anchor: Cell(row: 1, column: 3),
           ),
         ),
-        (PlayerId.blue, GameAction.move(const Cell(row: 2, column: 4))),
-        (PlayerId.red, GameAction.move(const Cell(row: 4, column: 4))),
-        (PlayerId.blue, GameAction.move(const Cell(row: 2, column: 5))),
-        (PlayerId.red, GameAction.move(const Cell(row: 5, column: 4))),
-        (PlayerId.blue, GameAction.move(const Cell(row: 1, column: 5))),
-        (PlayerId.red, GameAction.move(const Cell(row: 6, column: 4))),
-        (PlayerId.blue, GameAction.move(const Cell(row: 0, column: 5))),
+        (PlayerId.blue, const GameAction.move(Cell(row: 2, column: 4))),
+        (PlayerId.red, const GameAction.move(Cell(row: 4, column: 4))),
+        (PlayerId.blue, const GameAction.move(Cell(row: 2, column: 5))),
+        (PlayerId.red, const GameAction.move(Cell(row: 5, column: 4))),
+        (PlayerId.blue, const GameAction.move(Cell(row: 1, column: 5))),
+        (PlayerId.red, const GameAction.move(Cell(row: 6, column: 4))),
+        (PlayerId.blue, const GameAction.move(Cell(row: 0, column: 5))),
       ];
 
       for (final (player, action) in actions) {

@@ -127,13 +127,13 @@ List<GameAction> _allCandidates(int n) {
     }
   }
   cands.add(
-    GameAction.wall(
+    const GameAction.wall(
       orientation: WallOrientation.h,
       anchor: Cell(row: -1, column: 0),
     ),
   );
   cands.add(
-    GameAction.wall(
+    const GameAction.wall(
       orientation: WallOrientation.v,
       anchor: Cell(row: 0, column: -1),
     ),

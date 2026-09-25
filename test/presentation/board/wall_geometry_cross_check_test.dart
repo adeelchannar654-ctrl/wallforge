@@ -261,7 +261,7 @@ void main() {
         expect(centerNeighbors.length, 4);
 
         // Corner cell: 2 neighbors.
-        final corner = Cell(row: 0, column: 0);
+        const corner = Cell(row: 0, column: 0);
         final cornerNeighbors = blocked.neighborsOf(corner);
         expect(cornerNeighbors.length, 2);
 

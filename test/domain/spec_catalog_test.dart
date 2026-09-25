@@ -42,49 +42,49 @@ void main() {
   test(
     'T-MOVE-001: Blue(8,4), Red(0,4), no walls, Blue turn -> Blue M 7,4',
     () {
-      var s = _state(blue: (8, 4), red: (0, 4));
-      final a = GameAction.move(Cell(row: 7, column: 4));
+      var s = _state();
+      const a = GameAction.move(Cell(row: 7, column: 4));
       final r = GameEngine.apply(s, PlayerId.blue, a);
       expect(r, isA<SuccessResult>());
       s = (r as SuccessResult).state;
-      expect(s.pawnPosition(PlayerId.blue), Cell(row: 7, column: 4));
+      expect(s.pawnPosition(PlayerId.blue), const Cell(row: 7, column: 4));
     },
   );
   test(
     'T-MOVE-002: Blue(3,3), Red(0,4), no walls, Blue turn -> Blue M 4,3',
     () {
-      var s = _state(blue: (3, 3), red: (0, 4));
-      final a = GameAction.move(Cell(row: 4, column: 3));
+      var s = _state(blue: (3, 3));
+      const a = GameAction.move(Cell(row: 4, column: 3));
       final r = GameEngine.apply(s, PlayerId.blue, a);
       expect(r, isA<SuccessResult>());
       s = (r as SuccessResult).state;
-      expect(s.pawnPosition(PlayerId.blue), Cell(row: 4, column: 3));
+      expect(s.pawnPosition(PlayerId.blue), const Cell(row: 4, column: 3));
     },
   );
   test('T-MOVE-003: Blue(5,4), Red(0,0), Red turn -> Red M -1,0', () {
-    var s = _state(blue: (5, 4), red: (0, 0), turnNumber: 1);
-    final a = GameAction.move(Cell(row: -1, column: 0));
+    final s = _state(blue: (5, 4), red: (0, 0), turnNumber: 1);
+    const a = GameAction.move(Cell(row: -1, column: 0));
     final r = GameEngine.apply(s, PlayerId.red, a);
     expect(r, isA<FailureResult>());
     expect((r as FailureResult).failure, ActionFailure.moveOutOfBoard);
   });
   test('T-MOVE-004: Blue(5,4), Red(0,0), Red turn -> Red M 0,-1', () {
-    var s = _state(blue: (5, 4), red: (0, 0), turnNumber: 1);
-    final a = GameAction.move(Cell(row: 0, column: -1));
+    final s = _state(blue: (5, 4), red: (0, 0), turnNumber: 1);
+    const a = GameAction.move(Cell(row: 0, column: -1));
     final r = GameEngine.apply(s, PlayerId.red, a);
     expect(r, isA<FailureResult>());
     expect((r as FailureResult).failure, ActionFailure.moveOutOfBoard);
   });
   test('T-MOVE-005: Blue(8,8), Red(0,4), Blue turn -> Blue M 8,9', () {
-    var s = _state(blue: (8, 8), red: (0, 4));
-    final a = GameAction.move(Cell(row: 8, column: 9));
+    final s = _state(blue: (8, 8));
+    const a = GameAction.move(Cell(row: 8, column: 9));
     final r = GameEngine.apply(s, PlayerId.blue, a);
     expect(r, isA<FailureResult>());
     expect((r as FailureResult).failure, ActionFailure.moveOutOfBoard);
   });
   test('T-MOVE-006: Blue(8,8), Red(0,4), Blue turn -> Blue M 9,8', () {
-    var s = _state(blue: (8, 8), red: (0, 4));
-    final a = GameAction.move(Cell(row: 9, column: 8));
+    final s = _state(blue: (8, 8));
+    const a = GameAction.move(Cell(row: 9, column: 8));
     final r = GameEngine.apply(s, PlayerId.blue, a);
     expect(r, isA<FailureResult>());
     expect((r as FailureResult).failure, ActionFailure.moveOutOfBoard);
@@ -92,12 +92,8 @@ void main() {
   test(
     'T-MOVE-007: Blue(3,4), Red(0,4), Wall H(3,4), Blue turn -> Blue M 4,4',
     () {
-      var s = _state(
-        blue: (3, 4),
-        red: (0, 4),
-        walls: [_wall('H', 3, 4, PlayerId.blue)],
-      );
-      final a = GameAction.move(Cell(row: 4, column: 4));
+      final s = _state(blue: (3, 4), walls: [_wall('H', 3, 4, PlayerId.blue)]);
+      const a = GameAction.move(Cell(row: 4, column: 4));
       final r = GameEngine.apply(s, PlayerId.blue, a);
       expect(r, isA<FailureResult>());
       expect((r as FailureResult).failure, ActionFailure.moveBlockedByWall);
@@ -106,12 +102,8 @@ void main() {
   test(
     'T-MOVE-008: Blue(5,3), Red(0,4), Wall V(5,3), Blue turn -> Blue M 5,4',
     () {
-      var s = _state(
-        blue: (5, 3),
-        red: (0, 4),
-        walls: [_wall('V', 5, 3, PlayerId.blue)],
-      );
-      final a = GameAction.move(Cell(row: 5, column: 4));
+      final s = _state(blue: (5, 3), walls: [_wall('V', 5, 3, PlayerId.blue)]);
+      const a = GameAction.move(Cell(row: 5, column: 4));
       final r = GameEngine.apply(s, PlayerId.blue, a);
       expect(r, isA<FailureResult>());
       expect((r as FailureResult).failure, ActionFailure.moveBlockedByWall);
@@ -120,8 +112,8 @@ void main() {
   test(
     'T-MOVE-009: Blue(5,4), Red(4,4), no walls, Blue turn -> Blue M 4,4',
     () {
-      var s = _state(blue: (5, 4), red: (4, 4));
-      final a = GameAction.move(Cell(row: 4, column: 4));
+      final s = _state(blue: (5, 4), red: (4, 4));
+      const a = GameAction.move(Cell(row: 4, column: 4));
       final r = GameEngine.apply(s, PlayerId.blue, a);
       expect(r, isA<FailureResult>());
       expect((r as FailureResult).failure, ActionFailure.moveOntoPawn);
@@ -129,7 +121,7 @@ void main() {
   );
   test('T-MOVE-010: Blue(1,4), Red(3,2), Blue turn -> Blue M 0,4', () {
     var s = _state(blue: (1, 4), red: (3, 2));
-    final a = GameAction.move(Cell(row: 0, column: 4));
+    const a = GameAction.move(Cell(row: 0, column: 4));
     final r = GameEngine.apply(s, PlayerId.blue, a);
     expect(r, isA<SuccessResult>());
     s = (r as SuccessResult).state;
@@ -137,8 +129,8 @@ void main() {
     expect(s.winner, PlayerId.blue);
   });
   test('T-MOVE-011: Blue(8,4), Red(0,4), Blue turn -> Red M 1,4', () {
-    var s = _state(blue: (8, 4), red: (0, 4), turnNumber: 0);
-    final a = GameAction.move(Cell(row: 1, column: 4));
+    final s = _state();
+    const a = GameAction.move(Cell(row: 1, column: 4));
     final r = GameEngine.apply(s, PlayerId.red, a);
     expect(r, isA<FailureResult>());
     expect((r as FailureResult).failure, ActionFailure.wrongTurn);
@@ -149,21 +141,21 @@ void main() {
       winner: PlayerId.blue,
       blue: (0, 4),
     );
-    final a = GameAction.move(Cell(row: 1, column: 4));
+    const a = GameAction.move(Cell(row: 1, column: 4));
     final r = GameEngine.apply(s, PlayerId.blue, a);
     expect(r, isA<FailureResult>());
     expect((r as FailureResult).failure, ActionFailure.matchFinished);
   });
   test('T-MOVE-013: Blue(5,5), Red(0,4), Blue turn -> Blue M 5,4', () {
-    var s = _state(blue: (5, 5), red: (0, 4));
-    final a = GameAction.move(Cell(row: 5, column: 4));
+    var s = _state(blue: (5, 5));
+    const a = GameAction.move(Cell(row: 5, column: 4));
     final r = GameEngine.apply(s, PlayerId.blue, a);
     expect(r, isA<SuccessResult>());
     s = (r as SuccessResult).state;
   });
   test('T-MOVE-014: Blue(5,5), Red(0,4), Blue turn -> Blue M 4,5', () {
-    var s = _state(blue: (5, 5), red: (0, 4));
-    final a = GameAction.move(Cell(row: 4, column: 5));
+    var s = _state(blue: (5, 5));
+    const a = GameAction.move(Cell(row: 4, column: 5));
     final r = GameEngine.apply(s, PlayerId.blue, a);
     expect(r, isA<SuccessResult>());
     s = (r as SuccessResult).state;
@@ -171,12 +163,8 @@ void main() {
   test(
     'T-MOVE-015: Blue(4,4), Red(0,4), Wall H(3,3), Blue turn -> Blue M 3,4',
     () {
-      var s = _state(
-        blue: (4, 4),
-        red: (0, 4),
-        walls: [_wall('H', 3, 3, PlayerId.blue)],
-      );
-      final a = GameAction.move(Cell(row: 3, column: 4));
+      final s = _state(blue: (4, 4), walls: [_wall('H', 3, 3, PlayerId.blue)]);
+      const a = GameAction.move(Cell(row: 3, column: 4));
       final r = GameEngine.apply(s, PlayerId.blue, a);
       expect(r, isA<FailureResult>());
       expect((r as FailureResult).failure, ActionFailure.moveBlockedByWall);
@@ -185,12 +173,8 @@ void main() {
   test(
     'T-MOVE-016: Blue(3,4), Red(0,4), Wall H(3,3), Blue turn -> Blue M 4,4',
     () {
-      var s = _state(
-        blue: (3, 4),
-        red: (0, 4),
-        walls: [_wall('H', 3, 3, PlayerId.blue)],
-      );
-      final a = GameAction.move(Cell(row: 4, column: 4));
+      final s = _state(blue: (3, 4), walls: [_wall('H', 3, 3, PlayerId.blue)]);
+      const a = GameAction.move(Cell(row: 4, column: 4));
       final r = GameEngine.apply(s, PlayerId.blue, a);
       expect(r, isA<FailureResult>());
       expect((r as FailureResult).failure, ActionFailure.moveBlockedByWall);
@@ -199,12 +183,8 @@ void main() {
   test(
     'T-MOVE-017: Blue(5,4), Red(0,4), Wall V(4,3), Blue turn -> Blue M 5,3',
     () {
-      var s = _state(
-        blue: (5, 4),
-        red: (0, 4),
-        walls: [_wall('V', 4, 3, PlayerId.blue)],
-      );
-      final a = GameAction.move(Cell(row: 5, column: 3));
+      final s = _state(blue: (5, 4), walls: [_wall('V', 4, 3, PlayerId.blue)]);
+      const a = GameAction.move(Cell(row: 5, column: 3));
       final r = GameEngine.apply(s, PlayerId.blue, a);
       expect(r, isA<FailureResult>());
       expect((r as FailureResult).failure, ActionFailure.moveBlockedByWall);
@@ -213,12 +193,8 @@ void main() {
   test(
     'T-MOVE-018: Blue(5,4), Red(0,4), Wall V(4,4), Blue turn -> Blue M 5,5',
     () {
-      var s = _state(
-        blue: (5, 4),
-        red: (0, 4),
-        walls: [_wall('V', 4, 4, PlayerId.blue)],
-      );
-      final a = GameAction.move(Cell(row: 5, column: 5));
+      final s = _state(blue: (5, 4), walls: [_wall('V', 4, 4, PlayerId.blue)]);
+      const a = GameAction.move(Cell(row: 5, column: 5));
       final r = GameEngine.apply(s, PlayerId.blue, a);
       expect(r, isA<FailureResult>());
       expect((r as FailureResult).failure, ActionFailure.moveBlockedByWall);
@@ -227,12 +203,8 @@ void main() {
   test(
     'T-MOVE-019: Blue(3,8), Red(0,4), Wall H(3,7), Blue turn -> Blue M 4,8',
     () {
-      var s = _state(
-        blue: (3, 8),
-        red: (0, 4),
-        walls: [_wall('H', 3, 7, PlayerId.blue)],
-      );
-      final a = GameAction.move(Cell(row: 4, column: 8));
+      final s = _state(blue: (3, 8), walls: [_wall('H', 3, 7, PlayerId.blue)]);
+      const a = GameAction.move(Cell(row: 4, column: 8));
       final r = GameEngine.apply(s, PlayerId.blue, a);
       expect(r, isA<FailureResult>());
       expect((r as FailureResult).failure, ActionFailure.moveBlockedByWall);
@@ -241,27 +213,23 @@ void main() {
   test(
     'T-MOVE-020: Blue(5,4), Red(0,4), Wall V(4,3), Blue turn -> Blue M 5,5',
     () {
-      var s = _state(
-        blue: (5, 4),
-        red: (0, 4),
-        walls: [_wall('V', 4, 3, PlayerId.blue)],
-      );
-      final a = GameAction.move(Cell(row: 5, column: 5));
+      var s = _state(blue: (5, 4), walls: [_wall('V', 4, 3, PlayerId.blue)]);
+      const a = GameAction.move(Cell(row: 5, column: 5));
       final r = GameEngine.apply(s, PlayerId.blue, a);
       expect(r, isA<SuccessResult>());
       s = (r as SuccessResult).state;
-      expect(s.pawnPosition(PlayerId.blue), Cell(row: 5, column: 5));
+      expect(s.pawnPosition(PlayerId.blue), const Cell(row: 5, column: 5));
     },
   );
   test(
     'T-JUMP-001: Blue(5,4), Red(4,4), no walls, Blue turn -> Blue M 3,4',
     () {
       var s = _state(blue: (5, 4), red: (4, 4));
-      final a = GameAction.move(Cell(row: 3, column: 4));
+      const a = GameAction.move(Cell(row: 3, column: 4));
       final r = GameEngine.apply(s, PlayerId.blue, a);
       expect(r, isA<SuccessResult>());
       s = (r as SuccessResult).state;
-      expect(s.pawnPosition(PlayerId.blue), Cell(row: 3, column: 4));
+      expect(s.pawnPosition(PlayerId.blue), const Cell(row: 3, column: 4));
     },
   );
   test(
@@ -272,11 +240,11 @@ void main() {
         red: (4, 4),
         walls: [_wall('H', 3, 4, PlayerId.blue)],
       );
-      final a = GameAction.move(Cell(row: 4, column: 3));
+      const a = GameAction.move(Cell(row: 4, column: 3));
       final r = GameEngine.apply(s, PlayerId.blue, a);
       expect(r, isA<SuccessResult>());
       s = (r as SuccessResult).state;
-      expect(s.pawnPosition(PlayerId.blue), Cell(row: 4, column: 3));
+      expect(s.pawnPosition(PlayerId.blue), const Cell(row: 4, column: 3));
     },
   );
   test(
@@ -287,48 +255,40 @@ void main() {
         red: (4, 4),
         walls: [_wall('H', 3, 4, PlayerId.blue)],
       );
-      final a = GameAction.move(Cell(row: 4, column: 5));
+      const a = GameAction.move(Cell(row: 4, column: 5));
       final r = GameEngine.apply(s, PlayerId.blue, a);
       expect(r, isA<SuccessResult>());
       s = (r as SuccessResult).state;
-      expect(s.pawnPosition(PlayerId.blue), Cell(row: 4, column: 5));
+      expect(s.pawnPosition(PlayerId.blue), const Cell(row: 4, column: 5));
     },
   );
   test(
     'T-JUMP-004: Blue(1,4), Red(0,4), Wall V(0,3), Blue turn -> Blue M 0,5',
     () {
-      var s = _state(
-        blue: (1, 4),
-        red: (0, 4),
-        walls: [_wall('V', 0, 3, PlayerId.blue)],
-      );
-      final a = GameAction.move(Cell(row: 0, column: 5));
+      var s = _state(blue: (1, 4), walls: [_wall('V', 0, 3, PlayerId.blue)]);
+      const a = GameAction.move(Cell(row: 0, column: 5));
       final r = GameEngine.apply(s, PlayerId.blue, a);
       expect(r, isA<SuccessResult>());
       s = (r as SuccessResult).state;
-      expect(s.pawnPosition(PlayerId.blue), Cell(row: 0, column: 5));
+      expect(s.pawnPosition(PlayerId.blue), const Cell(row: 0, column: 5));
     },
   );
   test(
     'T-JUMP-005: Blue(1,4), Red(0,4), no walls, Blue turn -> Blue M 0,3',
     () {
-      var s = _state(blue: (1, 4), red: (0, 4));
-      final a = GameAction.move(Cell(row: 0, column: 3));
+      var s = _state(blue: (1, 4));
+      const a = GameAction.move(Cell(row: 0, column: 3));
       final r = GameEngine.apply(s, PlayerId.blue, a);
       expect(r, isA<SuccessResult>());
       s = (r as SuccessResult).state;
-      expect(s.pawnPosition(PlayerId.blue), Cell(row: 0, column: 3));
+      expect(s.pawnPosition(PlayerId.blue), const Cell(row: 0, column: 3));
     },
   );
   test(
     'T-JUMP-006: Blue(1,4), Red(0,4), Wall V(0,3), Blue turn -> Blue M 0,3',
     () {
-      var s = _state(
-        blue: (1, 4),
-        red: (0, 4),
-        walls: [_wall('V', 0, 3, PlayerId.blue)],
-      );
-      final a = GameAction.move(Cell(row: 0, column: 3));
+      final s = _state(blue: (1, 4), walls: [_wall('V', 0, 3, PlayerId.blue)]);
+      const a = GameAction.move(Cell(row: 0, column: 3));
       final r = GameEngine.apply(s, PlayerId.blue, a);
       expect(r, isA<FailureResult>());
       expect((r as FailureResult).failure, ActionFailure.moveIllegalJump);
@@ -337,8 +297,8 @@ void main() {
   test(
     'T-JUMP-007: Blue(1,4), Red(0,4), no walls, Blue turn -> Blue M 0,4',
     () {
-      var s = _state(blue: (1, 4), red: (0, 4));
-      final a = GameAction.move(Cell(row: 0, column: 4));
+      final s = _state(blue: (1, 4));
+      const a = GameAction.move(Cell(row: 0, column: 4));
       final r = GameEngine.apply(s, PlayerId.blue, a);
       expect(r, isA<FailureResult>());
       expect((r as FailureResult).failure, ActionFailure.moveOntoPawn);
@@ -348,7 +308,7 @@ void main() {
     'T-JUMP-008: Blue(5,4), Red(4,4), no walls, Blue turn -> Blue M 3,4',
     () {
       var s = _state(blue: (5, 4), red: (4, 4));
-      final a = GameAction.move(Cell(row: 3, column: 4));
+      const a = GameAction.move(Cell(row: 3, column: 4));
       final r = GameEngine.apply(s, PlayerId.blue, a);
       expect(r, isA<SuccessResult>());
       s = (r as SuccessResult).state;
@@ -358,12 +318,12 @@ void main() {
   test(
     'T-JUMP-009: Blue(5,4), Red(4,4), Wall H(3,4), Blue turn -> Blue M 3,4',
     () {
-      var s = _state(
+      final s = _state(
         blue: (5, 4),
         red: (4, 4),
         walls: [_wall('H', 3, 4, PlayerId.blue)],
       );
-      final a = GameAction.move(Cell(row: 3, column: 4));
+      const a = GameAction.move(Cell(row: 3, column: 4));
       final r = GameEngine.apply(s, PlayerId.blue, a);
       expect(r, isA<FailureResult>());
       expect((r as FailureResult).failure, ActionFailure.moveIllegalJump);
@@ -377,7 +337,7 @@ void main() {
         red: (4, 4),
         walls: [_wall('H', 3, 4, PlayerId.blue)],
       );
-      final a = GameAction.move(Cell(row: 4, column: 3));
+      const a = GameAction.move(Cell(row: 4, column: 3));
       final r = GameEngine.apply(s, PlayerId.blue, a);
       expect(r, isA<SuccessResult>());
       s = (r as SuccessResult).state;
@@ -391,7 +351,7 @@ void main() {
         red: (4, 4),
         walls: [_wall('H', 2, 4, PlayerId.blue)],
       );
-      final a = GameAction.move(Cell(row: 3, column: 4));
+      const a = GameAction.move(Cell(row: 3, column: 4));
       final r = GameEngine.apply(s, PlayerId.blue, a);
       expect(r, isA<SuccessResult>());
       s = (r as SuccessResult).state;
@@ -400,23 +360,23 @@ void main() {
   test(
     'T-JUMP-012: Blue(5,4), Red(4,4), no walls, Blue turn -> Blue M 4,3',
     () {
-      var s = _state(blue: (5, 4), red: (4, 4));
-      final a = GameAction.move(Cell(row: 4, column: 3));
+      final s = _state(blue: (5, 4), red: (4, 4));
+      const a = GameAction.move(Cell(row: 4, column: 3));
       final r = GameEngine.apply(s, PlayerId.blue, a);
       expect(r, isA<FailureResult>());
       expect((r as FailureResult).failure, ActionFailure.moveIllegalJump);
     },
   );
   test('T-JUMP-013: Blue(5,4), Red(0,4), Blue turn -> Blue M 3,4', () {
-    var s = _state(blue: (5, 4), red: (0, 4));
-    final a = GameAction.move(Cell(row: 3, column: 4));
+    final s = _state(blue: (5, 4));
+    const a = GameAction.move(Cell(row: 3, column: 4));
     final r = GameEngine.apply(s, PlayerId.blue, a);
     expect(r, isA<FailureResult>());
     expect((r as FailureResult).failure, ActionFailure.moveNotAdjacent);
   });
   test('T-WALL-001: Blue(8,4), Red(0,4), 10 walls, Blue turn -> W H 0,0', () {
-    var s = _state(blue: (8, 4), red: (0, 4));
-    final a = GameAction.wall(
+    var s = _state();
+    const a = GameAction.wall(
       orientation: WallOrientation.h,
       anchor: Cell(row: 0, column: 0),
     );
@@ -425,8 +385,8 @@ void main() {
     s = (r as SuccessResult).state;
   });
   test('T-WALL-002: Blue(8,4), Red(0,4), Blue turn -> W H 8,0', () {
-    var s = _state(blue: (8, 4), red: (0, 4));
-    final a = GameAction.wall(
+    final s = _state();
+    const a = GameAction.wall(
       orientation: WallOrientation.h,
       anchor: Cell(row: 8, column: 0),
     );
@@ -435,8 +395,8 @@ void main() {
     expect((r as FailureResult).failure, ActionFailure.wallOutOfBounds);
   });
   test('T-WALL-003: Blue(8,4), Red(0,4), Blue turn -> W V 0,8', () {
-    var s = _state(blue: (8, 4), red: (0, 4));
-    final a = GameAction.wall(
+    final s = _state();
+    const a = GameAction.wall(
       orientation: WallOrientation.v,
       anchor: Cell(row: 0, column: 8),
     );
@@ -445,8 +405,8 @@ void main() {
     expect((r as FailureResult).failure, ActionFailure.wallOutOfBounds);
   });
   test('T-WALL-004: Wall H(3,3) exists, Blue turn -> W H 3,3', () {
-    var s = _state(walls: [_wall('H', 3, 3, PlayerId.blue)]);
-    final a = GameAction.wall(
+    final s = _state(walls: [_wall('H', 3, 3, PlayerId.blue)]);
+    const a = GameAction.wall(
       orientation: WallOrientation.h,
       anchor: Cell(row: 3, column: 3),
     );
@@ -455,8 +415,8 @@ void main() {
     expect((r as FailureResult).failure, ActionFailure.wallOverlaps);
   });
   test('T-WALL-005: Wall H(3,3) exists, Blue turn -> W H 3,4', () {
-    var s = _state(walls: [_wall('H', 3, 3, PlayerId.blue)]);
-    final a = GameAction.wall(
+    final s = _state(walls: [_wall('H', 3, 3, PlayerId.blue)]);
+    const a = GameAction.wall(
       orientation: WallOrientation.h,
       anchor: Cell(row: 3, column: 4),
     );
@@ -466,7 +426,7 @@ void main() {
   });
   test('T-WALL-006: Wall H(3,3) exists, Blue turn -> W H 3,5', () {
     var s = _state(walls: [_wall('H', 3, 3, PlayerId.blue)]);
-    final a = GameAction.wall(
+    const a = GameAction.wall(
       orientation: WallOrientation.h,
       anchor: Cell(row: 3, column: 5),
     );
@@ -475,8 +435,8 @@ void main() {
     s = (r as SuccessResult).state;
   });
   test('T-WALL-007: Wall H(3,3) exists, Blue turn -> W V 3,3', () {
-    var s = _state(walls: [_wall('H', 3, 3, PlayerId.blue)]);
-    final a = GameAction.wall(
+    final s = _state(walls: [_wall('H', 3, 3, PlayerId.blue)]);
+    const a = GameAction.wall(
       orientation: WallOrientation.v,
       anchor: Cell(row: 3, column: 3),
     );
@@ -486,7 +446,7 @@ void main() {
   });
   test('T-WALL-008: Wall H(3,3) exists, Blue turn -> W V 4,3', () {
     var s = _state(walls: [_wall('H', 3, 3, PlayerId.blue)]);
-    final a = GameAction.wall(
+    const a = GameAction.wall(
       orientation: WallOrientation.v,
       anchor: Cell(row: 4, column: 3),
     );
@@ -496,7 +456,7 @@ void main() {
   });
   test('T-WALL-009: Wall H(3,3) exists, Blue turn -> W H 3,5', () {
     var s = _state(walls: [_wall('H', 3, 3, PlayerId.blue)]);
-    final a = GameAction.wall(
+    const a = GameAction.wall(
       orientation: WallOrientation.h,
       anchor: Cell(row: 3, column: 5),
     );
@@ -510,7 +470,7 @@ void main() {
     s = _state(
       walls: List.generate(10, (i) => _wall('H', i % 8, i % 8, PlayerId.blue)),
     );
-    final a = GameAction.wall(
+    const a = GameAction.wall(
       orientation: WallOrientation.h,
       anchor: Cell(row: 3, column: 3),
     );
@@ -521,12 +481,8 @@ void main() {
   test(
     'T-WALL-011: Blue(8,0), Red(0,4), Wall H(7,0), Blue turn -> W V 7,1',
     () {
-      var s = _state(
-        blue: (8, 0),
-        red: (0, 4),
-        walls: [_wall('H', 7, 0, PlayerId.blue)],
-      );
-      final a = GameAction.wall(
+      final s = _state(blue: (8, 0), walls: [_wall('H', 7, 0, PlayerId.blue)]);
+      const a = GameAction.wall(
         orientation: WallOrientation.v,
         anchor: Cell(row: 7, column: 1),
       );
@@ -538,12 +494,8 @@ void main() {
   test(
     'T-WALL-012: Blue(8,4), Red(0,4), Wall V(4,4), Blue turn -> W V 4,3',
     () {
-      var s = _state(
-        blue: (8, 4),
-        red: (0, 4),
-        walls: [_wall('V', 4, 4, PlayerId.blue)],
-      );
-      final a = GameAction.wall(
+      var s = _state(walls: [_wall('V', 4, 4, PlayerId.blue)]);
+      const a = GameAction.wall(
         orientation: WallOrientation.v,
         anchor: Cell(row: 4, column: 3),
       );
@@ -553,8 +505,8 @@ void main() {
     },
   );
   test('T-WALL-013: Blue(8,0), Wall H(7,0), Blue turn -> Blue W V 7,1', () {
-    var s = _state(blue: (8, 0), walls: [_wall('H', 7, 0, PlayerId.blue)]);
-    final a = GameAction.wall(
+    final s = _state(blue: (8, 0), walls: [_wall('H', 7, 0, PlayerId.blue)]);
+    const a = GameAction.wall(
       orientation: WallOrientation.v,
       anchor: Cell(row: 7, column: 1),
     );
@@ -563,7 +515,7 @@ void main() {
     expect((r as FailureResult).failure, ActionFailure.wallBlocksPath);
   });
   test('T-PATH-001: Open board, Blue(8,4), Red(0,4) -> Check routes', () {
-    var s = _state(blue: (8, 4), red: (0, 4));
+    final s = _state();
     final blueHasRoute = Pathfinder.canReachGoal(
       from: s.pawnPosition(PlayerId.blue),
       goalRow: s.boardConfig.blueGoalRow,
@@ -580,11 +532,7 @@ void main() {
     expect(redHasRoute, isTrue);
   });
   test('T-PATH-002: Blue(8,4), Red(0,4), Wall H(4,3) -> Check routes', () {
-    var s = _state(
-      blue: (8, 4),
-      red: (0, 4),
-      walls: [_wall('H', 4, 3, PlayerId.blue)],
-    );
+    final s = _state(walls: [_wall('H', 4, 3, PlayerId.blue)]);
     final blueHasRoute = Pathfinder.canReachGoal(
       from: s.pawnPosition(PlayerId.blue),
       goalRow: s.boardConfig.blueGoalRow,
@@ -601,9 +549,7 @@ void main() {
     expect(redHasRoute, isTrue);
   });
   test('T-PATH-003: Blue(8,4), Red(0,4), walls=[(3,3,H),(5,3,V),(4,3,H)] -> Check routes', () {
-    var s = _state(
-      blue: (8, 4),
-      red: (0, 4),
+    final s = _state(
       walls: [
         _wall('H', 3, 3, PlayerId.blue),
         _wall('V', 5, 3, PlayerId.blue),
@@ -626,12 +572,8 @@ void main() {
     expect(redHasRoute, isTrue);
   });
   test('T-PATH-004: Blue(8,0), Red(0,4), Wall H(7,0) -> Attempt W V 7,1', () {
-    var s = _state(
-      blue: (8, 0),
-      red: (0, 4),
-      walls: [_wall('H', 7, 0, PlayerId.blue)],
-    );
-    final a = GameAction.wall(
+    final s = _state(blue: (8, 0), walls: [_wall('H', 7, 0, PlayerId.blue)]);
+    const a = GameAction.wall(
       orientation: WallOrientation.v,
       anchor: Cell(row: 7, column: 1),
     );
@@ -642,7 +584,7 @@ void main() {
   test(
     'T-PATH-005: Blue(2,0), Red(0,4), open board -> Check route Blue→row 0',
     () {
-      var s = _state(blue: (2, 0), red: (0, 4));
+      final s = _state(blue: (2, 0));
       final dist = Pathfinder.shortestRouteLength(
         from: s.pawnPosition(PlayerId.blue),
         goalRow: 0,
@@ -653,11 +595,7 @@ void main() {
     },
   );
   test('T-PATH-006: Blue(8,4), Red(0,4), Wall H(4,3) -> BFS vs DFS', () {
-    var s = _state(
-      blue: (8, 4),
-      red: (0, 4),
-      walls: [_wall('H', 4, 3, PlayerId.blue)],
-    );
+    final s = _state(walls: [_wall('H', 4, 3, PlayerId.blue)]);
     final bfs = Pathfinder.canReachGoal(
       from: s.pawnPosition(PlayerId.blue),
       goalRow: 0,
@@ -674,7 +612,7 @@ void main() {
   });
   test('T-WIN-001: Blue(1,4), Red(3,2), Blue turn -> Blue M 0,4', () {
     var s = _state(blue: (1, 4), red: (3, 2));
-    final a = GameAction.move(Cell(row: 0, column: 4));
+    const a = GameAction.move(Cell(row: 0, column: 4));
     final r = GameEngine.apply(s, PlayerId.blue, a);
     expect(r, isA<SuccessResult>());
     s = (r as SuccessResult).state;
@@ -683,7 +621,7 @@ void main() {
   });
   test('T-WIN-002: Red(7,4), Blue(3,2), Red turn -> Red M 8,4', () {
     var s = _state(blue: (3, 2), red: (7, 4), turnNumber: 1);
-    final a = GameAction.move(Cell(row: 8, column: 4));
+    const a = GameAction.move(Cell(row: 8, column: 4));
     final r = GameEngine.apply(s, PlayerId.red, a);
     expect(r, isA<SuccessResult>());
     s = (r as SuccessResult).state;
@@ -692,7 +630,7 @@ void main() {
   });
   test('T-WIN-003: Blue(7,4), Red(1,4), Red turn -> Red M 0,4', () {
     var s = _state(blue: (7, 4), red: (1, 4), turnNumber: 1);
-    final a = GameAction.move(Cell(row: 0, column: 4));
+    const a = GameAction.move(Cell(row: 0, column: 4));
     final r = GameEngine.apply(s, PlayerId.red, a);
     expect(r, isA<SuccessResult>());
     s = (r as SuccessResult).state;
@@ -703,11 +641,11 @@ void main() {
       winner: PlayerId.blue,
       blue: (0, 4),
     );
-    final moveAction = GameAction.move(Cell(row: 1, column: 4));
+    const moveAction = GameAction.move(Cell(row: 1, column: 4));
     final r1 = GameEngine.apply(s, PlayerId.blue, moveAction);
     expect(r1, isA<FailureResult>());
     expect((r1 as FailureResult).failure, ActionFailure.matchFinished);
-    final wallAction = GameAction.wall(
+    const wallAction = GameAction.wall(
       orientation: WallOrientation.h,
       anchor: Cell(row: 3, column: 3),
     );
@@ -716,8 +654,8 @@ void main() {
     expect((r2 as FailureResult).failure, ActionFailure.matchFinished);
   });
   test('T-WIN-005: Blue(1,4), Red(0,4), Blue turn -> Blue M 0,3 (jump)', () {
-    var s = _state(blue: (1, 4), red: (0, 4));
-    final a = GameAction.move(Cell(row: 0, column: 3));
+    var s = _state(blue: (1, 4));
+    const a = GameAction.move(Cell(row: 0, column: 3));
     final r = GameEngine.apply(s, PlayerId.blue, a);
     expect(r, isA<SuccessResult>());
     s = (r as SuccessResult).state;
@@ -725,30 +663,30 @@ void main() {
   });
   test('T-WIN-006: Blue(7,4), Red(3,2), Blue turn -> Blue M 8,4', () {
     var s = _state(blue: (7, 4), red: (3, 2));
-    final a = GameAction.move(Cell(row: 8, column: 4));
+    const a = GameAction.move(Cell(row: 8, column: 4));
     final r = GameEngine.apply(s, PlayerId.blue, a);
     expect(r, isA<SuccessResult>());
     s = (r as SuccessResult).state;
   });
   test('T-TURN-001: Blue(8,4), Red(0,4), turn=0 -> Blue M 7,4', () {
-    var s = _state(blue: (8, 4), red: (0, 4), turnNumber: 0);
-    final a = GameAction.move(Cell(row: 7, column: 4));
+    var s = _state();
+    const a = GameAction.move(Cell(row: 7, column: 4));
     final r = GameEngine.apply(s, PlayerId.blue, a);
     expect(r, isA<SuccessResult>());
     s = (r as SuccessResult).state;
     expect(s.turnNumber, 1);
   });
   test('T-TURN-002: Blue(7,4), Red(0,4), turn=1 -> Red M 1,4', () {
-    var s = _state(blue: (7, 4), red: (0, 4), turnNumber: 1);
-    final a = GameAction.move(Cell(row: 1, column: 4));
+    var s = _state(blue: (7, 4), turnNumber: 1);
+    const a = GameAction.move(Cell(row: 1, column: 4));
     final r = GameEngine.apply(s, PlayerId.red, a);
     expect(r, isA<SuccessResult>());
     s = (r as SuccessResult).state;
     expect(s.turnNumber, 2);
   });
   test('T-TURN-003: Blue(8,4), Red(0,4), turn=0 -> Blue W H 0,0', () {
-    var s = _state(blue: (8, 4), red: (0, 4), turnNumber: 0);
-    final a = GameAction.wall(
+    var s = _state();
+    const a = GameAction.wall(
       orientation: WallOrientation.h,
       anchor: Cell(row: 0, column: 0),
     );
@@ -764,7 +702,7 @@ void main() {
     expect(s.status, GameStatus.inProgress);
   });
   test('T-TURN-005: turn=0 -> After action', () {
-    final s = _state(turnNumber: 0);
+    final s = _state();
     expect(s.currentPlayer, PlayerId.blue);
   });
   test('T-TURN-006: turn=1 -> After action', () {
@@ -803,7 +741,7 @@ void main() {
     expect((r as DeserializationSuccess).state, s);
   });
   test('T-SERIAL-004: JSON with schemaVersion=999 -> fromJson', () {
-    var s = _state();
+    final s = _state();
     final j = GameStateSerializer.toJson(s);
     j['schemaVersion'] = 999;
     final r = GameStateSerializer.fromJson(j);
@@ -814,7 +752,6 @@ void main() {
     );
   });
   test('T-SERIAL-005: Malformed JSON -> fromJson', () {
-    var s = _state();
     final r = GameStateSerializer.decode('{}');
     expect(r, isA<DeserializationFailure>());
     expect(
@@ -823,7 +760,7 @@ void main() {
     );
   });
   test('T-SERIAL-006: JSON violating R-STATE-01 -> fromJson', () {
-    var s = _state();
+    final s = _state();
     final j = GameStateSerializer.toJson(s);
     j['pawnPositions']['blue'] = j['pawnPositions']['red'];
     final r = GameStateSerializer.fromJson(j);
@@ -834,22 +771,22 @@ void main() {
     );
   });
   test('T-DET-001: Initial state -> Generate legalActions', () {
-    var s = _state();
+    final s = _state();
     final legals = GameEngine.legalActions(s);
-    expect(legals.first, GameAction.move(Cell(row: 7, column: 4)));
+    expect(legals.first, const GameAction.move(Cell(row: 7, column: 4)));
   });
   test('T-DET-002: Initial state -> Count moves', () {
-    var s = _state();
+    final s = _state();
     final legals = GameEngine.legalActions(s);
     expect(legals.whereType<MoveAction>().length, 3);
   });
   test('T-DET-003: Initial state -> Count walls', () {
-    var s = _state();
+    final s = _state();
     final legals = GameEngine.legalActions(s);
     expect(legals.whereType<WallAction>().length, 128);
   });
   test('T-DET-004: Initial state -> Total actions', () {
-    var s = _state();
+    final s = _state();
     final legals = GameEngine.legalActions(s);
     expect(legals.length, 131);
   });

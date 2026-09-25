@@ -44,10 +44,10 @@ void main() {
       var s = _initialState();
       // Play a few moves
       for (final dest in [
-        Cell(row: 7, column: 4),
-        Cell(row: 1, column: 4),
-        Cell(row: 6, column: 4),
-        Cell(row: 2, column: 4),
+        const Cell(row: 7, column: 4),
+        const Cell(row: 1, column: 4),
+        const Cell(row: 6, column: 4),
+        const Cell(row: 2, column: 4),
       ]) {
         final r = GameEngine.apply(s, s.currentPlayer, GameAction.move(dest));
         if (r is SuccessResult) s = r.state;
@@ -67,9 +67,9 @@ void main() {
       final r = GameEngine.apply(
         s,
         PlayerId.blue,
-        GameAction.wall(
+        const GameAction.wall(
           orientation: WallOrientation.h,
-          anchor: const Cell(row: 3, column: 3),
+          anchor: Cell(row: 3, column: 3),
         ),
       );
       expect(r, isA<SuccessResult>());
@@ -89,7 +89,7 @@ void main() {
     test('BFS and DFS agree on all states in random play', () {
       final rng = Random(42);
       for (var i = 0; i < 100; i++) {
-        var s = _initialState(size: 9, wpp: 10);
+        var s = _initialState();
         for (var turn = 0; turn < 200; turn++) {
           final legals = GameEngine.legalActions(s);
           if (legals.isEmpty) break;
@@ -145,7 +145,7 @@ void main() {
     test('every successful apply maintains invariants', () {
       final rng = Random(123);
       for (var i = 0; i < 500; i++) {
-        var s = _initialState(size: 9, wpp: 10);
+        var s = _initialState();
         for (var turn = 0; turn < 100; turn++) {
           final legals = GameEngine.legalActions(s);
           if (legals.isEmpty) break;
@@ -239,7 +239,7 @@ void main() {
       final result = GameEngine.apply(
         s,
         PlayerId.blue,
-        GameAction.move(const Cell(row: 7, column: 4)),
+        const GameAction.move(Cell(row: 7, column: 4)),
       );
       expect(result, isA<FailureResult>());
       expect((result as FailureResult).failure, ActionFailure.wrongTurn);
@@ -261,7 +261,7 @@ void main() {
       final result = GameEngine.apply(
         s,
         PlayerId.blue,
-        GameAction.move(const Cell(row: 1, column: 4)),
+        const GameAction.move(Cell(row: 1, column: 4)),
       );
       expect(result, isA<FailureResult>());
       expect((result as FailureResult).failure, ActionFailure.matchFinished);
@@ -290,8 +290,8 @@ void main() {
       expect(c, d);
       expect(c.hashCode, d.hashCode);
 
-      const e = BoardConfig(size: 9, wallsPerPlayer: 10);
-      const f = BoardConfig(size: 9, wallsPerPlayer: 10);
+      const e = BoardConfig();
+      const f = BoardConfig();
       expect(e, f);
       expect(e.hashCode, f.hashCode);
     });

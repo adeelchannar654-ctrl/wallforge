@@ -165,7 +165,7 @@ void main() {
     });
 
     test('state with walls round-trip', () {
-      final config = const BoardConfig();
+      const config = BoardConfig();
       final walls = [
         const Wall(
           anchorRow: 3,
@@ -435,7 +435,7 @@ void main() {
 
     test('validated throws for invalid config', () {
       expect(
-        () => BoardConfig.validated(size: 8, wallsPerPlayer: 10),
+        () => BoardConfig.validated(size: 8),
         throwsA(isA<ArgumentError>()),
       );
     });

@@ -26,11 +26,7 @@ void main() {
               child: SizedBox(
                 width: 400,
                 height: 400,
-                child: BoardView(
-                  state: GameState.initial(),
-                  showCoordinates: true,
-                  activeGlow: null,
-                ),
+                child: BoardView(state: GameState.initial()),
               ),
             ),
           ),
@@ -47,20 +43,20 @@ void main() {
       var state = GameState.initial();
       // Play a few moves.
       final actions = [
-        (PlayerId.blue, GameAction.move(Cell(row: 7, column: 4))),
-        (PlayerId.red, GameAction.move(Cell(row: 1, column: 4))),
-        (PlayerId.blue, GameAction.move(Cell(row: 6, column: 4))),
-        (PlayerId.red, GameAction.move(Cell(row: 2, column: 4))),
+        (PlayerId.blue, const GameAction.move(Cell(row: 7, column: 4))),
+        (PlayerId.red, const GameAction.move(Cell(row: 1, column: 4))),
+        (PlayerId.blue, const GameAction.move(Cell(row: 6, column: 4))),
+        (PlayerId.red, const GameAction.move(Cell(row: 2, column: 4))),
         (
           PlayerId.red,
-          GameAction.wall(
+          const GameAction.wall(
             orientation: WallOrientation.v,
             anchor: Cell(row: 6, column: 3),
           ),
         ),
         (
           PlayerId.blue,
-          GameAction.wall(
+          const GameAction.wall(
             orientation: WallOrientation.h,
             anchor: Cell(row: 6, column: 5),
           ),
@@ -79,11 +75,7 @@ void main() {
               child: SizedBox(
                 width: 400,
                 height: 400,
-                child: BoardView(
-                  state: state,
-                  showCoordinates: true,
-                  activeGlow: PlayerId.blue,
-                ),
+                child: BoardView(state: state, activeGlow: PlayerId.blue),
               ),
             ),
           ),
@@ -136,8 +128,7 @@ void main() {
                 width: 300,
                 height: 300,
                 child: BoardView(
-                  state: GameState.initial(BoardConfig(size: 5)),
-                  showCoordinates: true,
+                  state: GameState.initial(const BoardConfig(size: 5)),
                 ),
               ),
             ),
@@ -161,8 +152,7 @@ void main() {
                 width: 500,
                 height: 500,
                 child: BoardView(
-                  state: GameState.initial(BoardConfig(size: 11)),
-                  showCoordinates: true,
+                  state: GameState.initial(const BoardConfig(size: 11)),
                 ),
               ),
             ),
