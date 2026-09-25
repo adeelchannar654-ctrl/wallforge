@@ -12,6 +12,12 @@ import 'move_generator.dart';
 ///
 /// Mirrors spec §6 (state transitions) and §3.3 (turn structure).
 class GameEngine {
+  static ActionFailure? validate(
+    GameState state,
+    PlayerId player,
+    GameAction action,
+  ) => ActionValidator.validate(state, player, action);
+
   /// Validates and applies [action] for [player] in [state].
   ///
   /// Returns an [ActionResult] with either the new state or the failure.
@@ -20,7 +26,7 @@ class GameEngine {
     PlayerId player,
     GameAction action,
   ) {
-    final failure = ActionValidator.validate(state, player, action);
+    final failure = validate(state, player, action);
     if (failure != null) {
       return ActionResult.failure(failure);
     }

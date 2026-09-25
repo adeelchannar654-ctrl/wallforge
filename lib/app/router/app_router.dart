@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../domain/models/board_config.dart';
 import '../../app/application/local_game_controller.dart';
 import '../../presentation/screens/board_preview/board_preview_screen.dart';
 import '../../presentation/screens/game/game_screen.dart';
@@ -22,9 +23,13 @@ class AppRouter {
   static Route<void> onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
       case AppRoutes.game:
+        final config = settings.arguments is BoardConfig
+            ? settings.arguments! as BoardConfig
+            : const BoardConfig();
         return MaterialPageRoute<void>(
           settings: settings,
-          builder: (_) => GameScreen(controller: LocalGameController()),
+          builder: (_) =>
+              GameScreen(controller: LocalGameController(config: config)),
         );
       case AppRoutes.home:
       default:

@@ -28,10 +28,16 @@ class GameScreen extends StatelessWidget {
         final isDesktop = MediaQuery.sizeOf(context).width >= 768;
         return Scaffold(
           backgroundColor: AppColors.background,
-          body: SafeArea(
-            child: isDesktop
-                ? _buildDesktopLayout(context)
-                : _buildMobileLayout(context),
+          body: Stack(
+            children: [
+              SafeArea(
+                child: isDesktop
+                    ? _buildDesktopLayout(context)
+                    : _buildMobileLayout(context),
+              ),
+              if (controller.showingResult)
+                Positioned.fill(child: _buildResultOverlay(context)),
+            ],
           ),
         );
       },
@@ -51,7 +57,9 @@ class GameScreen extends StatelessWidget {
               _buildTurnBanner(),
               const SizedBox(height: AppSpacing.md),
               Expanded(child: _buildBoardArea()),
-              const SizedBox(height: AppSpacing.md),
+              const SizedBox(height: AppSpacing.sm),
+              _buildModeToggle(),
+              const SizedBox(height: AppSpacing.sm),
               _buildActionButtons(context),
               const SizedBox(height: AppSpacing.lg),
             ],
@@ -89,23 +97,52 @@ class GameScreen extends StatelessWidget {
   }
 
   Widget _buildBoardArea() {
-    return Center(
-      child: BoardView(
-        state: controller.state,
-        legalMoveTargets: controller.legalMoveTargets,
-        wallPreview: controller.pendingWall != null
-            ? WallPreview(
-                anchor: controller.pendingWall!.anchor,
-                orientation: controller.pendingWall!.orientation,
-                isValid: true,
-              )
-            : null,
-        activeGlow: controller.state.status == GameStatus.inProgress
-            ? controller.currentPlayer
-            : null,
-        onCellTap: controller.tapCell,
-        onWallSlotTap: controller.tapWallSlot,
-      ),
+    final pendingFailure = controller.pendingWallFailure;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final reservedHeight = pendingFailure == null ? 0.0 : AppSpacing.xxl;
+        final boardSize = (constraints.biggest.shortestSide - reservedHeight)
+            .clamp(280.0, 640.0);
+        return Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: boardSize,
+                height: boardSize,
+                child: BoardView(
+                  state: controller.state,
+                  legalMoveTargets: controller.legalMoveTargets,
+                  wallPreview: controller.pendingWall != null
+                      ? WallPreview(
+                          anchor: controller.pendingWall!.anchor,
+                          orientation: controller.pendingWall!.orientation,
+                          isValid: pendingFailure == null,
+                        )
+                      : null,
+                  activeGlow: controller.state.status == GameStatus.inProgress
+                      ? controller.currentPlayer
+                      : null,
+                  onCellTap: controller.tapCell,
+                  onWallSlotTap: controller.tapWallSlot,
+                ),
+              ),
+              if (pendingFailure != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.xs),
+                  child: Text(
+                    LocalGameController.failureMessage(pendingFailure),
+                    key: const ValueKey('pending-wall-failure'),
+                    style: AppTypography.bodyBase.copyWith(
+                      color: AppColors.error,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -183,28 +220,29 @@ class GameScreen extends StatelessWidget {
   Widget _buildActionButtons(BuildContext context) {
     final hasPending = controller.pendingWall != null;
     final hasFailure = controller.lastFailure != null;
+    final pendingFailure = controller.pendingWallFailure;
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    return Wrap(
+      alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: AppSpacing.sm,
+      runSpacing: AppSpacing.xs,
       children: [
         if (hasFailure)
-          Padding(
-            padding: const EdgeInsets.only(right: AppSpacing.sm),
-            child: Text(
-              LocalGameController.failureMessage(controller.lastFailure!),
-              style: AppTypography.bodyBase.copyWith(
-                color: AppColors.error,
-                fontSize: 12,
-              ),
+          Text(
+            LocalGameController.failureMessage(controller.lastFailure!),
+            style: AppTypography.bodyBase.copyWith(
+              color: AppColors.error,
+              fontSize: 12,
             ),
           ),
         if (hasPending) ...[
           _buildButton('CANCEL', AppColors.onSurfaceVariant, controller.cancel),
-          const SizedBox(width: AppSpacing.sm),
           _buildButton(
             'CONFIRM',
             AppColors.primaryContainer,
             controller.confirm,
+            enabled: pendingFailure == null,
           ),
         ] else ...[
           _buildButton(
@@ -212,7 +250,6 @@ class GameScreen extends StatelessWidget {
             AppColors.onSurfaceVariant,
             controller.restart,
           ),
-          const SizedBox(width: AppSpacing.sm),
           _buildButton(
             'BACK',
             AppColors.onSurfaceVariant,
@@ -223,22 +260,114 @@ class GameScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildButton(String label, Color color, VoidCallback onPressed) {
+  Widget _buildButton(
+    String label,
+    Color color,
+    VoidCallback onPressed, {
+    bool enabled = true,
+  }) {
+    final effectiveColor = enabled ? color : AppColors.onSurfaceVariant;
     return TextButton(
-      onPressed: onPressed,
+      onPressed: enabled ? onPressed : null,
       style: TextButton.styleFrom(
-        backgroundColor: color.withValues(alpha: 0.15),
-        foregroundColor: color,
+        backgroundColor: effectiveColor.withValues(
+          alpha: enabled ? 0.15 : 0.08,
+        ),
+        foregroundColor: effectiveColor,
+        disabledForegroundColor: AppColors.onSurfaceVariant,
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md,
           vertical: AppSpacing.sm,
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadii.md),
-          side: BorderSide(color: color.withValues(alpha: 0.3)),
+          side: BorderSide(color: effectiveColor.withValues(alpha: 0.3)),
         ),
       ),
-      child: Text(label, style: AppTypography.labelCaps.copyWith(color: color)),
+      child: Text(
+        label,
+        style: AppTypography.labelCaps.copyWith(color: effectiveColor),
+      ),
+    );
+  }
+
+  Widget _buildResultOverlay(BuildContext context) {
+    final winner = controller.winner;
+    final heading = winner == null
+        ? 'MATCH COMPLETE'
+        : '${winner.name.toUpperCase()} WINS!';
+    return ColoredBox(
+      color: Colors.black.withValues(alpha: 0.72),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: Container(
+            key: const ValueKey('game-result-overlay'),
+            width: double.infinity,
+            margin: const EdgeInsets.all(AppSpacing.lg),
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerHigh,
+              borderRadius: BorderRadius.circular(AppRadii.xl),
+              border: Border.all(color: AppColors.outlineVariant),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  heading,
+                  key: const ValueKey('result-heading'),
+                  style: AppTypography.labelCaps.copyWith(
+                    color: AppColors.tertiary,
+                    fontSize: 18,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  'MATCH COMPLETE',
+                  style: AppTypography.bodyBase.copyWith(
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Text(
+                  'TURN ${controller.state.turnNumber}',
+                  style: AppTypography.numericStat.copyWith(
+                    color: AppColors.onSurface,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  'BLUE ${controller.state.wallsRemaining(PlayerId.blue)} WALLS  •  '
+                  'RED ${controller.state.wallsRemaining(PlayerId.red)} WALLS',
+                  style: AppTypography.bodyBase.copyWith(
+                    color: AppColors.onSurfaceVariant,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.xs,
+                  children: [
+                    _buildButton(
+                      'REMATCH',
+                      AppColors.primaryContainer,
+                      controller.rematch,
+                    ),
+                    _buildButton(
+                      'HOME',
+                      AppColors.onSurfaceVariant,
+                      () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -323,7 +452,6 @@ class GameScreen extends StatelessWidget {
             playerColor: color,
             notchWidth: 4,
             notchHeight: 8,
-            showCount: true,
           ),
         ],
       ),

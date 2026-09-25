@@ -75,41 +75,41 @@ class _BoardPreviewScreenState extends State<BoardPreviewScreen> {
   }
 
   static final List<(PlayerId, GameAction)> _scriptedActions = [
-    (PlayerId.blue, GameAction.move(Cell(row: 7, column: 4))),
-    (PlayerId.red, GameAction.move(Cell(row: 1, column: 4))),
-    (PlayerId.blue, GameAction.move(Cell(row: 6, column: 4))),
-    (PlayerId.red, GameAction.move(Cell(row: 2, column: 4))),
-    (PlayerId.blue, GameAction.move(Cell(row: 5, column: 4))),
+    (PlayerId.blue, const GameAction.move(Cell(row: 7, column: 4))),
+    (PlayerId.red, const GameAction.move(Cell(row: 1, column: 4))),
+    (PlayerId.blue, const GameAction.move(Cell(row: 6, column: 4))),
+    (PlayerId.red, const GameAction.move(Cell(row: 2, column: 4))),
+    (PlayerId.blue, const GameAction.move(Cell(row: 5, column: 4))),
     (
       PlayerId.red,
-      GameAction.wall(
+      const GameAction.wall(
         orientation: WallOrientation.v,
         anchor: Cell(row: 6, column: 3),
       ),
     ),
     (
       PlayerId.blue,
-      GameAction.wall(
+      const GameAction.wall(
         orientation: WallOrientation.h,
         anchor: Cell(row: 6, column: 5),
       ),
     ),
-    (PlayerId.red, GameAction.move(Cell(row: 3, column: 4))),
-    (PlayerId.blue, GameAction.move(Cell(row: 4, column: 4))),
+    (PlayerId.red, const GameAction.move(Cell(row: 3, column: 4))),
+    (PlayerId.blue, const GameAction.move(Cell(row: 4, column: 4))),
     (
       PlayerId.red,
-      GameAction.wall(
+      const GameAction.wall(
         orientation: WallOrientation.h,
         anchor: Cell(row: 1, column: 3),
       ),
     ),
-    (PlayerId.blue, GameAction.move(Cell(row: 2, column: 4))),
-    (PlayerId.red, GameAction.move(Cell(row: 4, column: 4))),
-    (PlayerId.blue, GameAction.move(Cell(row: 2, column: 5))),
-    (PlayerId.red, GameAction.move(Cell(row: 5, column: 4))),
-    (PlayerId.blue, GameAction.move(Cell(row: 1, column: 5))),
-    (PlayerId.red, GameAction.move(Cell(row: 6, column: 4))),
-    (PlayerId.blue, GameAction.move(Cell(row: 0, column: 5))),
+    (PlayerId.blue, const GameAction.move(Cell(row: 2, column: 4))),
+    (PlayerId.red, const GameAction.move(Cell(row: 4, column: 4))),
+    (PlayerId.blue, const GameAction.move(Cell(row: 2, column: 5))),
+    (PlayerId.red, const GameAction.move(Cell(row: 5, column: 4))),
+    (PlayerId.blue, const GameAction.move(Cell(row: 1, column: 5))),
+    (PlayerId.red, const GameAction.move(Cell(row: 6, column: 4))),
+    (PlayerId.blue, const GameAction.move(Cell(row: 0, column: 5))),
   ];
 
   // --- Pre-built states ------------------------------------------------------
@@ -129,42 +129,42 @@ class _BoardPreviewScreenState extends State<BoardPreviewScreen> {
     final wallActions = <(PlayerId, GameAction)>[
       (
         PlayerId.blue,
-        GameAction.wall(
+        const GameAction.wall(
           orientation: WallOrientation.h,
           anchor: Cell(row: 4, column: 0),
         ),
       ),
       (
         PlayerId.red,
-        GameAction.wall(
+        const GameAction.wall(
           orientation: WallOrientation.h,
           anchor: Cell(row: 4, column: 2),
         ),
       ),
       (
         PlayerId.blue,
-        GameAction.wall(
+        const GameAction.wall(
           orientation: WallOrientation.v,
           anchor: Cell(row: 3, column: 4),
         ),
       ),
       (
         PlayerId.red,
-        GameAction.wall(
+        const GameAction.wall(
           orientation: WallOrientation.v,
           anchor: Cell(row: 3, column: 5),
         ),
       ),
       (
         PlayerId.blue,
-        GameAction.wall(
+        const GameAction.wall(
           orientation: WallOrientation.h,
           anchor: Cell(row: 6, column: 5),
         ),
       ),
       (
         PlayerId.red,
-        GameAction.wall(
+        const GameAction.wall(
           orientation: WallOrientation.h,
           anchor: Cell(row: 2, column: 5),
         ),
@@ -176,10 +176,10 @@ class _BoardPreviewScreenState extends State<BoardPreviewScreen> {
     }
     // Move pawns into the scene.
     final moveActions = <(PlayerId, GameAction)>[
-      (PlayerId.blue, GameAction.move(Cell(row: 7, column: 4))),
-      (PlayerId.red, GameAction.move(Cell(row: 1, column: 4))),
-      (PlayerId.blue, GameAction.move(Cell(row: 6, column: 4))),
-      (PlayerId.red, GameAction.move(Cell(row: 2, column: 4))),
+      (PlayerId.blue, const GameAction.move(Cell(row: 7, column: 4))),
+      (PlayerId.red, const GameAction.move(Cell(row: 1, column: 4))),
+      (PlayerId.blue, const GameAction.move(Cell(row: 6, column: 4))),
+      (PlayerId.red, const GameAction.move(Cell(row: 2, column: 4))),
     ];
     for (final (player, action) in moveActions) {
       final r = GameEngine.apply(state, player, action);
@@ -254,7 +254,9 @@ class _BoardPreviewScreenState extends State<BoardPreviewScreen> {
               Center(
                 child: TextButton(
                   onPressed: () {
-                    Navigator.of(context).pushNamed(AppRoutes.game);
+                    Navigator.of(
+                      context,
+                    ).pushNamed(AppRoutes.game, arguments: _state.boardConfig);
                   },
                   style: TextButton.styleFrom(
                     backgroundColor: AppColors.primaryContainer,
@@ -399,7 +401,6 @@ class _BoardPreviewScreenState extends State<BoardPreviewScreen> {
         ),
         Slider(
           value: _scriptedStep.toDouble(),
-          min: 0,
           max: _scriptedActions.length.toDouble(),
           divisions: _scriptedActions.length,
           activeColor: AppColors.primaryContainer,
@@ -415,17 +416,17 @@ class _BoardPreviewScreenState extends State<BoardPreviewScreen> {
   }
 
   Widget _buildToggles() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: AppSpacing.sm,
+      runSpacing: AppSpacing.xs,
       children: [
         _buildToggle('Legal Moves', _showLegalMoves, (v) {
           setState(() => _showLegalMoves = v);
         }),
-        const SizedBox(width: AppSpacing.sm),
         _buildToggle('Coordinates', _showCoordinates, (v) {
           setState(() => _showCoordinates = v);
         }),
-        const SizedBox(width: AppSpacing.sm),
         _buildToggle('Ghost Wall', _showGhostWall, (v) {
           setState(() => _showGhostWall = v);
         }),
@@ -533,7 +534,7 @@ class _BoardPreviewScreenState extends State<BoardPreviewScreen> {
         ),
         IconButton(
           iconSize: 16,
-          icon: Icon(Icons.remove, color: AppColors.onSurfaceVariant),
+          icon: const Icon(Icons.remove, color: AppColors.onSurfaceVariant),
           onPressed: value > 0 ? () => onChanged(value - 1) : null,
         ),
         SizedBox(
@@ -549,7 +550,7 @@ class _BoardPreviewScreenState extends State<BoardPreviewScreen> {
         ),
         IconButton(
           iconSize: 16,
-          icon: Icon(Icons.add, color: AppColors.onSurfaceVariant),
+          icon: const Icon(Icons.add, color: AppColors.onSurfaceVariant),
           onPressed: value < max ? () => onChanged(value + 1) : null,
         ),
       ],

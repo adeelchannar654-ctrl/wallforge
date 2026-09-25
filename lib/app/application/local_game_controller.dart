@@ -44,6 +44,16 @@ class LocalGameController extends ChangeNotifier {
   bool get confirmWallPlacement => _confirmWallPlacement;
   Cell? get selectedCell => _selectedCell;
   ({Cell anchor, WallOrientation orientation})? get pendingWall => _pendingWall;
+  ActionFailure? get pendingWallFailure {
+    final pending = _pendingWall;
+    if (pending == null) return null;
+    return GameEngine.validate(
+      _state,
+      _state.currentPlayer,
+      GameAction.wall(orientation: pending.orientation, anchor: pending.anchor),
+    );
+  }
+
   ActionFailure? get lastFailure => _lastFailure;
   bool get showingResult => _showingResult;
 
@@ -95,6 +105,7 @@ class LocalGameController extends ChangeNotifier {
 
   /// Toggle the confirm-wall-placement setting.
   void toggleConfirmWallPlacement() {
+    if (_state.status == GameStatus.finished) return;
     _confirmWallPlacement = !_confirmWallPlacement;
     notifyListeners();
   }
@@ -145,13 +156,13 @@ class LocalGameController extends ChangeNotifier {
 
   /// Confirm the pending wall placement.
   void confirm() {
-    if (_pendingWall != null) {
-      _applyWall(_pendingWall!.anchor, _pendingWall!.orientation);
-    }
+    if (_pendingWall == null || pendingWallFailure != null) return;
+    _applyWall(_pendingWall!.anchor, _pendingWall!.orientation);
   }
 
   /// Cancel the pending wall placement.
   void cancel() {
+    if (_state.status == GameStatus.finished) return;
     _pendingWall = null;
     _lastFailure = null;
     notifyListeners();
