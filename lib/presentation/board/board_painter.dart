@@ -140,7 +140,7 @@ class BoardPainter extends CustomPainter {
   void _drawTiles(Canvas canvas, Size size) {
     final g = geometry;
     final tilePaint = Paint()..color = AppColors.tileColor;
-    final tileRadius = Radius.circular(6);
+    const tileRadius = Radius.circular(6);
 
     for (var row = 0; row < g.boardSize; row++) {
       for (var col = 0; col < g.boardSize; col++) {
@@ -276,7 +276,7 @@ class BoardPainter extends CustomPainter {
     final gradientPaint = Paint()
       ..shader = ui.Gradient.linear(
         rect.topLeft,
-        isP1 ? const Offset(1, 0) : Offset(0, 1),
+        isP1 ? const Offset(1, 0) : const Offset(0, 1),
         isP1
             ? [AppColors.primaryFixed, AppColors.primaryContainer]
             : [AppColors.onSecondaryContainer, AppColors.secondaryContainer],

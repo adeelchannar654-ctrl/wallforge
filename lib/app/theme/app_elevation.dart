@@ -8,12 +8,12 @@ class AppElevation {
 
   /// P1 glow: `0 0 12px rgba(0, 229, 255, 0.5)`.
   static List<BoxShadow> get p1Glow => const [
-    BoxShadow(color: Color(0x8000E5FF), blurRadius: 12, spreadRadius: 0),
+    BoxShadow(color: Color(0x8000E5FF), blurRadius: 12),
   ];
 
   /// P2 glow: `0 0 12px rgba(255, 75, 110, 0.5)`.
   static List<BoxShadow> get p2Glow => const [
-    BoxShadow(color: Color(0x80FF4B6E), blurRadius: 12, spreadRadius: 0),
+    BoxShadow(color: Color(0x80FF4B6E), blurRadius: 12),
   ];
 
   // --- HUD shadow (Level 2) -------------------------------------------------
@@ -58,7 +58,7 @@ class AppElevation {
 
   /// Goal strip glow: `0 0 12px rgba(91, 233, 173, 0.5)`.
   static List<BoxShadow> get goalGlow => const [
-    BoxShadow(color: Color(0x805BE9AD), blurRadius: 12, spreadRadius: 0),
+    BoxShadow(color: Color(0x805BE9AD), blurRadius: 12),
   ];
 
   // --- Ambient underglow (Level 0-1) ----------------------------------------

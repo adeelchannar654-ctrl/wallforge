@@ -39,9 +39,9 @@ class _LogoPainter extends CustomPainter {
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [Color(0xFF1E293B), Color(0xFF0B101B)],
-      ).createShader(Rect.fromLTWH(16, 16, 128, 128));
+      ).createShader(const Rect.fromLTWH(16, 16, 128, 128));
     final bgRrect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(16, 16, 128, 128),
+      const Rect.fromLTWH(16, 16, 128, 128),
       const Radius.circular(28),
     );
     canvas.drawRRect(bgRrect, bgPaint);
@@ -65,10 +65,10 @@ class _LogoPainter extends CustomPainter {
     final wallCyanPaint = Paint()
       ..shader = const LinearGradient(
         colors: [Color(0xFF38BDF8), Color(0xFF00E5FF)],
-      ).createShader(Rect.fromLTWH(42, 52, 76, 10));
+      ).createShader(const Rect.fromLTWH(42, 52, 76, 10));
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTWH(42, 52, 76, 10),
+        const Rect.fromLTWH(42, 52, 76, 10),
         const Radius.circular(5),
       ),
       wallCyanPaint,
@@ -78,7 +78,7 @@ class _LogoPainter extends CustomPainter {
     final wallRedPaint = Paint()..color = const Color(0xFFFF4B6E);
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTWH(75, 60, 10, 52),
+        const Rect.fromLTWH(75, 60, 10, 52),
         const Radius.circular(5),
       ),
       wallRedPaint,
