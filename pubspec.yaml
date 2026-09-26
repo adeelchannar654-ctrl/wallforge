@@ -41,6 +41,9 @@ dependencies:
   # new dependency. Phase 7 swaps in a Firebase implementation behind the same
   # repository interfaces; this package is not used for online state.
   shared_preferences: ^2.3.2
+  firebase_core: ^4.15.0
+  cloud_firestore: ^6.10.0
+  firebase_auth: ^6.7.0
 
 dev_dependencies:
   flutter_test:
