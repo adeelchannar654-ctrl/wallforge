@@ -296,6 +296,54 @@ void main() {
           },
         );
 
+        test(
+          'DIAGNOSTIC 4.3: an H wall footprint resolves to one anchor across '
+          'its full rendered width',
+          () {
+            const r = 3;
+            const c = 3;
+            final rect = g.wallRect(r, c, WallOrientation.h);
+            final lineY = g.padding + (r + 1) * g.cellSize;
+            final expected = (row: r, col: c, orientation: WallOrientation.h);
+
+            final mismatches = <String>[];
+            for (var i = 1; i <= 19; i++) {
+              final x = rect.left + rect.width * i / 20;
+              final anchor = g.wallAnchorAt(Offset(x, lineY));
+              if (anchor != expected) {
+                mismatches.add(
+                  'x=${x.toStringAsFixed(2)} (t=${(x / g.cellSize).toStringAsFixed(2)}) -> $anchor',
+                );
+              }
+            }
+            expect(mismatches, isEmpty, reason: mismatches.join(' | '));
+          },
+        );
+
+        test(
+          'DIAGNOSTIC 4.3: a V wall footprint resolves to one anchor across '
+          'its full rendered height',
+          () {
+            const r = 3;
+            const c = 3;
+            final rect = g.wallRect(r, c, WallOrientation.v);
+            final lineX = g.padding + (c + 1) * g.cellSize;
+            final expected = (row: r, col: c, orientation: WallOrientation.v);
+
+            final mismatches = <String>[];
+            for (var i = 1; i <= 19; i++) {
+              final y = rect.top + rect.height * i / 20;
+              final anchor = g.wallAnchorAt(Offset(lineX, y));
+              if (anchor != expected) {
+                mismatches.add(
+                  'y=${y.toStringAsFixed(2)} (t=${(y / g.cellSize).toStringAsFixed(2)}) -> $anchor',
+                );
+              }
+            }
+            expect(mismatches, isEmpty, reason: mismatches.join(' | '));
+          },
+        );
+
         test('topGoalStrip is above board', () {
           expect(g.topGoalStrip.bottom, closeTo(g.padding, 0.001));
           expect(g.topGoalStrip.top, lessThan(g.padding));
