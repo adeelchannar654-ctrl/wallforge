@@ -329,6 +329,36 @@ applied between Phase 4 and Phase 5.
 - Full record, ledger and Open Questions: `memory.md` §13l; process recorded as
   `rules.md` Rule 19.
 
+---
+
+# Phase 5 — Offline AI
+
+## Goal
+
+Create an AI opponent.
+
+### Version 1
+
+Use:
+
+- Shortest path.
+- Opponent shortest path.
+- Wall impact.
+- Immediate tactical opportunities.
+
+### Difficulty
+
+- Easy.
+- Medium.
+- Hard.
+- Expert.
+
+Difficulty should be achieved through controlled search/evaluation complexity rather than simply random behavior.
+
+### Exit criteria
+
+AI completes legal matches without breaking game rules.
+
 ### Result — Phase 5 (2026-09-26)
 
 Offline AI opponent. No game rule changed; the oracle vectors are byte-identical.
@@ -375,36 +405,6 @@ Offline AI opponent. No game rule changed; the oracle vectors are byte-identical
 - Open: Q-5.1 (resolve Q-01 to close the stalemate), Q-5.2 (no AI screen is
   designed in `design.md` §20; a real one is Phase 11 UI work), Q-5.3 (no per-move
   time budget). Full record in `memory.md` §13m.
-
----
-
-# Phase 5 — Offline AI
-
-## Goal
-
-Create an AI opponent.
-
-### Version 1
-
-Use:
-
-- Shortest path.
-- Opponent shortest path.
-- Wall impact.
-- Immediate tactical opportunities.
-
-### Difficulty
-
-- Easy.
-- Medium.
-- Hard.
-- Expert.
-
-Difficulty should be achieved through controlled search/evaluation complexity rather than simply random behavior.
-
-### Exit criteria
-
-AI completes legal matches without breaking game rules.
 
 ---
 
