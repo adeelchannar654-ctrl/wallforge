@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../data/local/in_memory_repositories.dart';
-import '../../data/local/shared_preferences_settings_repository.dart';
-import '../../data/local/shared_preferences_statistics_repository.dart';
-import '../../data/local/shared_preferences_unfinished_match_repository.dart';
 import '../../domain/models/board_config.dart';
 import '../../app/application/ai/ai_difficulty.dart';
 import '../../app/application/local_game_controller.dart';
+import '../../app/application/persistence_factory.dart';
 import '../../app/application/match_setup.dart';
 import '../../presentation/screens/board_preview/board_preview_screen.dart';
 import '../../presentation/screens/game/game_screen.dart';
@@ -72,21 +70,18 @@ class AppRouter {
     return _withPersistence(LocalGameController(config: config));
   }
 
-  /// Attaches the device-backed repositories and kicks off the async load.
+  /// Attaches the default (local) repositories and kicks off the async load.
   ///
-  /// The application layer still only sees the domain repository interfaces, so
-  /// Phase 7 can replace these with a Firebase implementation without touching
-  /// anything above this line. [SharedPreferencesSettingsRepository] and
-  /// friends never throw, so this cannot fail the app at startup; if storage is
-  /// unavailable the controller simply runs with defaults and forgets on exit.
-  static LocalGameController _withPersistence(LocalGameController controller) =>
-      controller
-        ..attachPersistence(
-          settings: const SharedPreferencesSettingsRepository(),
-          statistics: const SharedPreferencesStatisticsRepository(),
-          unfinishedMatch: const SharedPreferencesUnfinishedMatchRepository(),
-        )
-        ..loadPersisted();
+  /// Phase 7: the app still defaults to `shared_preferences` because Phase 7's
+  /// goal is to connect Firebase "without changing local game behavior". When a
+  /// Firebase project is configured, [PersistenceFactory.attachRemote] supplies
+  /// the Firestore-backed implementations of the same interfaces instead —
+  /// nothing above this line changes, which is the Phase 6 boundary doing its
+  /// job.
+  static LocalGameController _withPersistence(LocalGameController controller) {
+    PersistenceFactory.attachLocal(controller);
+    return controller;
+  }
 
   /// Builds a controller with in-memory persistence. Used by tests and by any
   /// caller that explicitly wants a throwaway, non-persistent match.

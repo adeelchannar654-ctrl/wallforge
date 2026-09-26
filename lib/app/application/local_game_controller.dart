@@ -206,9 +206,21 @@ class LocalGameController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _cancelAiTurn();
     super.dispose();
   }
+
+  /// Set in [dispose] so async persistence work that lands afterwards becomes a
+  /// no-op instead of notifying a disposed [ChangeNotifier].
+  ///
+  /// This is not hypothetical: [loadPersisted] and the save methods are
+  /// deliberately unawaited, so a route popped while a slow read is still in
+  /// flight would otherwise hit Flutter's "used after dispose" assertion. With
+  /// `shared_preferences` the window is tiny, but the Firestore repositories added
+  /// in Phase 7 make the read genuinely asynchronous and network-bound, which
+  /// turns the window from theoretical to routine.
+  bool _disposed = false;
 
   /// Toggle between move and wall interaction modes.
   void setMode(InteractionMode mode) {
@@ -308,10 +320,12 @@ class LocalGameController extends ChangeNotifier {
     final settingsRepo = _settingsRepository;
     if (settingsRepo != null) {
       final loaded = await settingsRepo.load();
+      if (_disposed) return;
       _settings = loaded;
       _confirmWallPlacement = loaded.confirmWallPlacement;
       _aiDifficulty = _difficultyFromName(loaded.aiDifficulty);
     }
+    if (_disposed) return;
     notifyListeners();
   }
 
@@ -329,7 +343,9 @@ class LocalGameController extends ChangeNotifier {
   Future<void> refreshResumableMatch() async {
     final repo = _unfinishedMatchRepository;
     if (repo == null) return;
-    _resumableMatch = await repo.load();
+    final loaded = await repo.load();
+    if (_disposed) return;
+    _resumableMatch = loaded;
     notifyListeners();
   }
 
