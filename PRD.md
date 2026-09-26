@@ -136,9 +136,10 @@ side-step when the straight jump is blocked.
 ### Walls
 
 Each player starts with 10 walls. Walls are horizontal or vertical, 2 cells
-long, placed on grid lines between cells. Walls cannot overlap, cannot cross at
-the same anchor, and must preserve at least one route for each player to their
-goal.
+long, placed on grid lines between cells. Walls cannot overlap, and may cross:
+a horizontal and a vertical wall may share the same anchor to form a "+" at an
+intersection. Every placement must preserve at least one route for each player
+to their goal.
 
 ### Win
 

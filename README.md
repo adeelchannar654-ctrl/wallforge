@@ -17,17 +17,17 @@ A wall may never remove the last route to either player's goal.
 
 ## Status
 
-**Phase 1 — Core Game Specification** is complete: the game rules are frozen
-in [`game_spec.md`](game_spec.md) (v1.0.4) with deterministic answers for every rule,
+**Phase 1 â€” Core Game Specification** is complete: the game rules are frozen
+in [`game_spec.md`](game_spec.md) (v2.0.0) with deterministic answers for every rule,
 a test catalog, an error taxonomy, and a decision log. The independent checker
 `tool/spec_verification/check_spec_consistency.py` prints
 `OK: spec is consistent with the reference engine.`
 
-**Phase 0 — Project Foundation** is also complete: the Flutter project, platform
+**Phase 0 â€” Project Foundation** is also complete: the Flutter project, platform
 targets, folder structure, lint/format standards, test structure and a minimal
 application shell are in place.
 
-**Phase 2 — Game Engine** is **in progress (Phase 2.1)**. The pure-Dart engine
+**Phase 2 â€” Game Engine** is **in progress (Phase 2.1)**. The pure-Dart engine
 core in [`lib/domain/`](lib/domain/README.md) matches `game_spec.md` (commit
 `d6c7af2`), but docs, structured serialization, complete per-rule tests and
 quality gates are still being finished. Board rendering (Phase 3) and online
@@ -44,7 +44,7 @@ multiplayer are **not** implemented yet. See [`phase.md`](phase.md) for the plan
 ## Tech stack
 
 - **Framework:** Flutter (stable) / Dart
-- **Backend (later):** Firebase — Authentication and Cloud Firestore, on the
+- **Backend (later):** Firebase â€” Authentication and Cloud Firestore, on the
   Spark/no-cost plan
 
 ---
@@ -64,7 +64,7 @@ Read these before contributing. They are the source of truth.
 | [`game_spec.md`](game_spec.md) | Frozen game specification (Phase 1) |
 
 > The Google Stitch design output is **not** a project dependency and must not
-> be treated as the visual source of truth. See [`memory.md`](memory.md) §4.
+> be treated as the visual source of truth. See [`memory.md`](memory.md) Â§4.
 
 ---
 
@@ -72,11 +72,11 @@ Read these before contributing. They are the source of truth.
 
 ```text
 Presentation
-    ↓
+    â†“
 Application
-    ↓
+    â†“
 Domain / Game Engine
-    ↑
+    â†‘
 Data / Repositories
 ```
 
@@ -85,13 +85,13 @@ Flutter or Firebase.
 
 ```text
 lib/
-├── main.dart
-├── app/            # app root, router, theme
-├── core/           # constants, logging, errors, utilities
-├── domain/         # game engine (Phase 2)
-├── application/    # use cases / controllers
-├── data/           # local + Firebase repositories
-└── presentation/   # screens, widgets, board rendering
+â”œâ”€â”€ main.dart
+â”œâ”€â”€ app/            # app root, router, theme
+â”œâ”€â”€ core/           # constants, logging, errors, utilities
+â”œâ”€â”€ domain/         # game engine (Phase 2)
+â”œâ”€â”€ application/    # use cases / controllers
+â”œâ”€â”€ data/           # local + Firebase repositories
+â””â”€â”€ presentation/   # screens, widgets, board rendering
 ```
 
 ---

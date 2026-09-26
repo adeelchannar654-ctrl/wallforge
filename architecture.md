@@ -208,11 +208,14 @@ Checks include:
 
 1. Player has a wall remaining.
 2. Position is inside valid wall slots.
-3. It does not overlap an existing wall.
-4. It does not illegally cross an existing wall.
-5. It does not eliminate every path to either goal.
-6. The match is still active.
-7. It is the requesting player's turn.
+3. It does not overlap an existing wall of the same orientation.
+4. It does not eliminate every path to either goal.
+5. The match is still active.
+6. It is the requesting player's turn.
+
+Since spec v2.0.0 there is no crossing check: a horizontal and a vertical wall
+may share an anchor (a legal "+"), so shape validation only rejects
+same-orientation overlap.
 
 ---
 

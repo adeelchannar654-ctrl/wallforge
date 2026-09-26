@@ -638,11 +638,13 @@ Required tests include:
 ### Walls
 
 - Valid wall.
-- Overlap.
-- Illegal crossing.
+- Overlap with a same-orientation wall.
 - No walls remaining.
 - Outside board.
 - Wall that blocks a goal route.
+
+Same-anchor crossing of a horizontal and a vertical wall is legal since spec
+v2.0.0 (Rule 19).
 
 ### Pathfinding
 
@@ -789,3 +791,16 @@ symmetric region around its own centre. When a value is computed by division and
 compared against a half-cell boundary, an exact tie must resolve identically on
 every board size, including sizes whose cell size is not exactly representable in
 binary. Established in Phase 4.3; recorded in `memory.md` §13k.
+
+### Rule 19
+
+A change to the set of legal actions is a breaking rule change: bump
+`game_spec.md` to a new major version with a dated changelog entry, repurpose
+the affected decision-log row rather than deleting it, update the test catalog
+row **and** add a replacement row so the coverage the old row carried is not
+lost, and re-verify the independent spec checker and oracle vectors. A failure
+reason that the change makes unreachable is **retired, not deleted**: it stays
+declared and documented so the taxonomy, the engine enum, and the oracle
+fixture stay aligned, and it is removed from the validation precedence chain.
+Established by the v2.0.0 owner-approved crossing rule change (2026-09-26);
+recorded in `memory.md` §13l.

@@ -1233,3 +1233,138 @@ Blue 8 / Red 8. Screenshots: `wf43-prefix-repro.png` (pre-fix rejection) and
   board taps are still unverifiable through CDP. Worth capturing as a repeatable
   script if more manual browser verification is needed.
 - No Phase 5 work was started.
+
+---
+
+# 13l. Part A Record — Rule change v2.0.0 (crossing walls are now legal)
+
+Date: 2026-09-26. **Deliberate, owner-approved rule change — not a bug fix.**
+No Phase 5 work was started.
+
+## What changed
+
+A horizontal wall `H(r,c)` and a vertical wall `V(r,c)` may now both exist at the
+same anchor, forming a "+". Each still blocks exactly its own two edges
+(R-WALL-05 / R-WALL-06 are untouched), so the pair blocks four distinct edges
+around that corner. Rationale recorded in the changelog: denser, more tactical
+wall play at intersections.
+
+Unchanged and re-verified: same-orientation overlap (R-WALL-07 / D-11), anchor
+bounds (R-WALL-04), inventory (R-WALL-10), path preservation (R-PATH-01), win
+condition, turn order, jump rules, and the initial legal-action counts
+(**3 moves / 128 walls**, pinned by the checker's own sanity assertion) — no wall
+exists on the first move, so a crossing cannot arise there.
+
+## IDs — verified in the file, not assumed
+
+The brief said "verify the exact ID, do not assume". Confirmed by reading
+`game_spec.md`: **R-WALL-08** was the crossing rule, **R-WALL-07** the
+same-orientation overlap rule, **D-12** the crossing decision, **D-11** the
+overlap decision, **T-WALL-007** the crossing catalog row, **Example 10** the
+crossing worked example. D-12 was repurposed rather than deleted so D-01…D-18
+numbering stays intact, and R-WALL-08 was rewritten rather than superseded so
+§14 and the coverage matrix keep resolving.
+
+## The `wallCrosses` fate decision — retired, not deleted
+
+**Decision: keep `ActionFailure.wallCrosses` declared and documented as
+retired/unreachable.** Justification:
+
+1. The owner-supplied `test/fixtures/engine_vectors.json` and
+   `gen_engine_vectors.py` — which must not be edited — still list `wallCrosses`
+   in their `REASONS` table and still reserve its code `k`
+   (`CODE = {r: chr(ord("a")+i) ...}`, so `wallOverlaps`='j', `wallCrosses`='k',
+   `wallBlocksPath`='l'). Deleting the Dart enum value would desynchronise the
+   engine from the independent ground truth I am required to match.
+2. `wallBlocksPath` keeps code `l` only because `wallCrosses` still occupies `k`.
+   Removing the enum without touching the fixture would invite exactly the kind
+   of silent drift the oracle exists to catch.
+3. It is part of the published §5 taxonomy surface; keeping it costs one
+   documented enum member and makes a future reintroduction trivial.
+
+So: removed from the **validation precedence chain** (§5.2, `ActionValidator`),
+kept in the **declared** taxonomy (§5.1) marked unreachable, kept in the Dart
+enum, and the controller's exhaustive `failureMessage` switch keeps its case with
+a comment. Spec language now reads "12 named failure reasons, of which 11 are
+reachable". Verified unreachable by an exhaustive test over every wall candidate
+on the default board in a state that already contains a crossing pair.
+
+## Engine changes (scoped to the one check)
+
+- `action_validator.dart`: deleted the same-anchor opposite-orientation loop.
+- `move_generator.dart`: **this was a second, easily-missed copy of the rule** —
+  `_overlapsOrCrosses` pruned crossing candidates before the validator ever saw
+  them. Renamed to `_overlaps` and the crossing branch removed, otherwise
+  `legalActions` would still have hidden crossing walls from the player (and the
+  oracle comparison would have failed).
+- `blocked_edges.dart`: **no change needed**, as expected. It unions every
+  wall's two edges into a set regardless of orientation, so a crossing pair
+  blocks all four edges automatically. Re-verified by test through the engine's
+  own `BlockedEdges`, not a re-derivation.
+- `action_failure.dart` / `local_game_controller.dart`: documentation of the
+  retired value only; no logic.
+
+## Independent ground truth — before/after
+
+| Check | Before | After |
+|-------|--------|-------|
+| `check_spec_consistency.py` vs unmodified spec | `2 PROBLEM(S)`: `[T-WALL-007] Then says wallCrosses but reference engine says legal`, `[Example 10] Result says wallCrosses, reference engine says legal` | `Checked game_spec.md: 80 catalog rows, 65 rule IDs, 65 in matrix.` / `OK: spec is consistent with the reference engine.` |
+| `gen_engine_vectors.py` vs fixture | — | byte-identical, SHA-256 `6F1E3C05…94BA96`, 1,229,568 bytes both sides |
+| Oracle vectors test | 114 games replaying under the old rule | 114 games replay **unchanged** against the new fixture with no test edit — the strongest evidence the engine matches the reference exactly |
+
+`cmp` is not available on this Windows shell, so determinism was verified with a
+raw-byte `cmd /c` redirect plus SHA-256 comparison; the first attempt via
+PowerShell `>` produced a 2× file from UTF-16 re-encoding and was discarded as a
+harness artefact, not a real difference.
+
+## Tests
+
+- `test/domain/crossing_walls_test.dart` (**new, 19 tests**): for sizes 5/7/9/11
+  — the crossing pair blocks all four edges of the 2×2 corner (asserted via
+  `BlockedEdges.fromWalls`, the engine's own function, and proven symmetric);
+  the crossing placement validates and coexists with inventory/turn effects;
+  all four same-orientation duplicate/offset cases still return `wallOverlaps`;
+  path preservation still rejects a crossing that would seal a pocket; the
+  crossing candidate is offered by `MoveGenerator` while the same-orientation
+  duplicates are still pruned; both owners may hold one wall each at an anchor
+  and a third is always `wallOverlaps`; plus an exhaustive proof that no input
+  produces `wallCrosses`.
+- `spec_catalog_test.dart`: T-WALL-007 rewritten to expect success; **T-WALL-014
+  added** (`V(3,3)` exists → `W V 3,3` → `wallOverlaps`). T-WALL-004 already
+  covered the H/H identical duplicate, so the new row deliberately covers the
+  previously-untested V/V mirror rather than duplicating T-WALL-004.
+- `worked_examples_test.dart`: Example 10 now expects success and asserts the
+  full after-state.
+- `cross_checks_test.dart`: the **independent naive validator** re-implemented the
+  crossing rule; updated so the cross-check still tracks the engine.
+- `local_game_controller_test.dart`: the two crossing tests now assert the new
+  legal behaviour and that the wall saves and passes the turn; a new test keeps
+  the same-anchor same-orientation duplicate asserting `wallOverlaps` and a
+  no-op confirm. The 12-entry `failureMessage` map is unchanged (the enum value
+  still exists, as decided).
+- `board_hit_test.dart`: the Phase 4.2 tolerance test used a crossing wall as its
+  conflict fixture. Rather than delete it and lose the Phase 4.2 coverage, it was
+  **re-based onto a same-orientation neighbour** (identical tap geometry) and
+  now asserts `wallOverlaps`. A **new** widget test covers the v2.0.0 behaviour
+  through the real `tester.tapAt` path: tapping the crossing shows a *valid*
+  ghost and saves.
+- `game_screen_golden_test.dart` + golden: the `…_crossing_own_wall.png` golden
+  depicted a now-impossible state, so it was **re-based onto an overlap**, renamed
+  to `game_screen_mobile_overlap_own_wall.png`, and regenerated deliberately
+  (only that one test, via `--update-goldens`) and visually reviewed. The other
+  three game-screen goldens and all seven board goldens are byte-unchanged.
+- Nothing was silently deleted; every re-based test carries a comment naming what
+  changed and why.
+
+## Open Questions
+
+- **Q-2.1 (new)** — the owner-supplied fixture still declares
+  `"specVersion": "1.0.4"` even though the spec is now v2.0.0. Harmless today
+  because no test reads that field (the oracle test replays `games` only), and
+  the file must not be edited, so it was left alone. If a future test starts
+  asserting the version, the fixture needs regenerating.
+- Q-4.1 … Q-4.10 from Phase 4 are unaffected by this change.
+- Historical phase records above that state the old rule (e.g. §13h "Crossing:
+  H and V at same anchor are illegal", Phase 4.1/4.2 browser notes) were
+  deliberately **not** rewritten: they are dated records of what was true then.
+  This section supersedes them.

@@ -300,6 +300,35 @@ aimed at. No game rule changed.
   CDP blocker was solved by enabling Flutter's semantics tree and dispatching real
   `PointerEvent`s; see `memory.md` §13k.
 
+### Addendum — rule change v2.0.0 applied after Phase 4 (2026-09-26)
+
+Not a numbered phase — a deliberate, owner-approved change to the frozen rules,
+applied between Phase 4 and Phase 5.
+
+- A horizontal and a vertical wall may now share an anchor (a legal "+").
+  `R-WALL-08` and `D-12` rewritten; `T-WALL-007` now expects success and new row
+  `T-WALL-014` preserves overlap coverage; `Example 10` rewritten as a legal
+  worked example; `game_spec.md` bumped to **2.0.0**.
+- `wallCrosses` is **retired, not deleted**: unreachable, kept declared in §5.1 and
+  in the Dart enum so the taxonomy, engine, and the owner-supplied oracle fixture
+  (which still reserves code `k`) stay aligned. Removed from the §5.2 precedence
+  chain and from `ActionValidator`/`MoveGenerator`.
+- The generator's `_overlapsOrCrosses` was a second copy of the rule; removing it
+  was required, otherwise crossing candidates stayed hidden from the player.
+- Initial legal-action counts verified unchanged: **3 moves / 128 walls**.
+- `check_spec_consistency.py` (owner-supplied, unmodified) → 2 problems before
+  (T-WALL-007, Example 10) → `OK: spec is consistent with the reference engine.`
+  with 80 catalog rows, 65 rule IDs, 65 in matrix.
+- Oracle vectors → byte-identical to the new fixture (SHA-256 match, 1,229,568
+  bytes); all 114 games replay with **no change to the oracle test**.
+- `dart format --set-exit-if-changed lib test` → `Formatted 61 files (0 changed)`.
+- `flutter analyze` → `No issues found!`
+- `flutter test` → `913: All tests passed!` (was 891; +19 new crossing tests,
+  +1 controller, +1 board hit, +1 catalog row)
+- `flutter build web` → `√ Built build\web`
+- Full record, ledger and Open Questions: `memory.md` §13l; process recorded as
+  `rules.md` Rule 19.
+
 ---
 
 # Phase 5 — Offline AI
