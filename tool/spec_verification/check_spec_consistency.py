@@ -51,12 +51,16 @@ def route_len(start, goal_row, n, walls):
             if v not in seen and edge(u, v) not in b: seen[v] = seen[u]+1; q.append(v)
     return None
 def wall_shape_problem(walls, w, n):
+    # v2.0.0 rule change (owner-approved): same-anchor, opposite-orientation
+    # walls MAY coexist (a "+" crossing is legal). Same-orientation overlap
+    # (offset <= 1 along the wall's own axis) remains illegal. "wallCrosses"
+    # is retired; no candidate can ever produce it. Any T-WALL catalog row
+    # whose Then still expects "wallCrosses" is stale spec content that must
+    # be rewritten (either to a legal outcome, or replaced by an overlap case).
     o, r, c = w
     if not (0 <= r <= n-2 and 0 <= c <= n-2): return "wallOutOfBounds"
     for o2, r2, c2 in walls:
         if o2 == o and ((o == "H" and r2 == r and abs(c2-c) <= 1) or (o == "V" and c2 == c and abs(r2-r) <= 1)): return "wallOverlaps"
-    for o2, r2, c2 in walls:
-        if o2 != o and (r2, c2) == (r, c): return "wallCrosses"
     return None
 def jump_targets(s, p):
     """legal jump destinations for player p (straight if available else diagonals)"""

@@ -62,12 +62,14 @@ class G:
         }
 
 def wall_shape_problem(walls, w, n):
+    # v2.0.0 rule change (owner-approved): same-anchor, opposite-orientation
+    # walls MAY coexist (a "+" crossing is legal). Same-orientation overlap
+    # (offset <= 1 along the wall's own axis) remains illegal. "wallCrosses"
+    # is retired; no candidate can ever produce it.
     o, r, c = w
     if not (0 <= r <= n-2 and 0 <= c <= n-2): return "wallOutOfBounds"
     for o2, r2, c2 in walls:
         if o2 == o and ((o == "H" and r2 == r and abs(c2-c) <= 1) or (o == "V" and c2 == c and abs(r2-r) <= 1)): return "wallOverlaps"
-    for o2, r2, c2 in walls:
-        if o2 != o and (r2, c2) == (r, c): return "wallCrosses"
     return None
 def jump_targets(g, p):
     me, op, n = g.pos[p], g.pos[g.opp(p)], g.n
@@ -170,7 +172,7 @@ def main():
     seed = 1000
     for n, wpp, count, wp, every, maxcp, gr in plan:
         for _ in range(count):
-            seed += 1; games.append(play(n, wpp, seed, 320, wp, every, maxcp, gr))
+            seed += 1; games.append(play(n, wpp, seed, 600, wp, every, maxcp, gr))
     out = {"specVersion": "1.0.4", "reasons": REASONS, "codes": {"legal": ".", **{r: CODE[r] for r in REASONS}},
            "candidateOrder": "moves: every on-board cell row-major, then (-1,0),(0,-1),(n,0),(0,n),(-1,-1),(n,n); "
                              "walls: H at every (r,c) in 0..n-1 row-major, then V likewise, then H(-1,0), V(0,-1). "
