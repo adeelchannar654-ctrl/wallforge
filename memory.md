@@ -236,7 +236,11 @@ The native Stitch-aligned board renderer, preview screen, geometry cross-checks,
 
 The local pass-and-play controller, responsive game screen, route configuration, wall feedback, result overlay, and application/game-screen tests are complete. See §13i.
 
-See §13b, §13c, §13d, §13e, §13f, §13g, §13h, and §13i below for the Phase records.
+## Phase 4.2 — Wall Hit Tolerance + Invalid-Ghost Clarity: COMPLETE (2026-09-26)
+
+Wall taps snap to the nearest logical slot within a documented tolerance, and an invalid ghost can no longer be mistaken for a solid wall of either owner. See §13j.
+
+See §13b, §13c, §13d, §13e, §13f, §13g, §13h, §13i, and §13j below for the Phase records.
 
 ### Completed (Phase 0 + Phase 1 + Phase 1.1 + Phase 1.2 + Phase 1.3 + Phase 1.4)
 
@@ -299,7 +303,7 @@ The recommended next implementation order is:
 6. Implement wall validation. (DONE - Phase 2)
 7. Write engine tests. (DONE - Phase 2)
 8. Build board renderer. (DONE - Phase 3)
-9. Build interactive local mode. (DONE - Phase 4/4.1)
+9. Build interactive local mode. (DONE - Phase 4/4.1/4.2)
 10. Build AI.
 11. Add local persistence.
 12. Configure Firebase.
@@ -772,6 +776,8 @@ test/presentation/board/goldens/                   — 5 golden PNGs
 - **Q-4.3 — Wall orientation affordance:** the current board derives H/V from the tapped groove. A separate orientation selector may be preferable for accessibility, but no source defines its exact placement or interaction.
 - **Q-4.4 — Settings persistence:** confirm-wall-placement currently resets with the controller; persistence is deferred to the settings/persistence phase.
 - **Q-4.5 — Desktop hover feedback:** `design.md` §28 lists hover highlights, while Phase 4.1 verifies pointer/tap feedback; the exact hover treatment and accessibility behavior remain a later desktop polish decision.
+- **Q-4.6 — Dense-board wall target (raised in Phase 4.2):** the Stitch minimum is 44×44 px, but a cell centre sits exactly half a cell from its two bounding grooves, so a 22 px radius cannot be honoured on boards where `cellSize/2 < 22.5` without capturing cell-centre taps. Phase 4.2 caps the radius at `cellSize/2 - 0.5 px` (39.9 px target on an 11×11 board rendered at 450 px). Open: raise the minimum rendered board size, add an explicit orientation selector, or accept the smaller target on dense boards. Related: Q-4.3.
+- **Q-4.7 — Invalid-ghost colour token (raised in Phase 4.2):** Stitch `tactical_neon_arena/DESIGN.md` §Components specifies the invalid ghost as `#EF4444` at 50%, while the token actually in use is `AppColors.error` = `#FFB4AB` (Stitch front-matter `error`). The owner instruction for Phase 4.2 was to keep `AppColors.error`, so it was kept. Open: align the ghost with `#EF4444` or amend the Stitch prose.
 
 ### What is NOT built (deferred)
 
@@ -912,3 +918,137 @@ Manual verification completed on 2026-09-25 against the current Chrome build: st
 - No Phase 5 AI work was started.
 - Local persistence, online play, clocks, undo, hints, audio, haptics, and rating remain deferred.
 - Open questions are listed with the Phase 3 visual-conformance record above, especially the goal-colour token conflict and result-statistics definition.
+
+---
+
+# 13j. Phase 4.2 Record (Wall Hit Tolerance + Invalid-Ghost Clarity)
+
+Status: **complete — verified 2026-09-26.** No Phase 5 work was started. No game rule changed.
+
+## Confirmed root causes (from my own reading of the code)
+
+**Bug D — wall hit-testing had no tolerance and no snapping.** The pre-fix
+`BoardGeometry.wallAnchorAt` (`board_geometry.dart`, old lines 97-138) looped over
+the horizontal grooves and then the vertical grooves and returned the first
+rectangle that *exactly contained* the tap. There was no nearest-slot search and
+no tolerance. The target band was `grooveWidth * 1.5` where
+`grooveWidth = cellSize * 0.04`, so on the 640 px 9×9 board the band was ~4.3 px
+tall and ~2.8 px wide. A tap a few pixels off returned `null`, and a tap that
+drifted into a neighbouring band silently returned that neighbour's anchor.
+`BoardView._handleTap` (`board_view.dart:104-120`) tested the wall slot first and
+only then the cell, so a near-miss was also swallowed instead of falling through.
+
+**Bug E — the invalid ghost had no pattern and no link to the conflicting wall.**
+The pre-fix `BoardPainter._drawGhostWall` (`board_painter.dart`, old lines
+307-329) drew every invalid ghost as a flat `AppColors.error` fill at 50% alpha
+plus a 40%-alpha stroke, with no pattern. When the collision was with a wall of
+the *same owner* the translucent crimson sat on top of the owner's solid bar, and
+the two read as one shape. Nothing marked which placed wall was involved.
+
+## Fixes
+
+**D — nearest-slot snapping (`board_geometry.dart`).** The return type and
+semantics are unchanged: `({int row, int col, WallOrientation orientation})?`.
+- `_anchorCellIndex` keeps the pre-4.2 along-wall mapping
+  (`floor((coord - padding) / cellSize)`, clipped to `0..boardSize - 2`) so each
+  anchor stays centred on its own two-cell bar.
+- `_nearestAnchorLine` finds the nearest interior grid line on the perpendicular
+  axis (index = `line - 1`, clipped to the valid anchor range).
+- The closer of the two lines decides the orientation; a tap farther than
+  `wallHitTolerance` from both returns `null`, so a cell-centre tap is never
+  reported as a wall slot and `BoardView` falls through to the cell.
+- `GameScreen` now passes only the callback for the active `InteractionMode`
+  (`game_screen.dart:126-131`), so wall snapping can never swallow a move tap
+  and a move tap can never be read as a wall.
+
+**E — invalid-ghost clarity (`board_painter.dart`).** The invalid ghost keeps the
+DESIGN-specified 50% crimson fill and gains a white dashed centre line plus a
+95%-alpha outline. A 2 px `AppColors.error` ring is painted *behind* every placed
+wall whose rect overlaps the ghost, so the placed wall stays fully visible while
+the conflict is still obvious. The highlight is purely geometric
+(`Rect.overlaps`) and never decides legality; end-to-end touching walls do not
+overlap and are not marked. `pendingWallFailure` from Phase 4.1 is still the only
+source of validity.
+
+## Phase 4.2 source ledger
+
+| ID | Value / behaviour implemented | Source |
+|----|--------------------------------|--------|
+| P4.2-1 | Tolerance radius = 22 px (half of the 44×44 minimum target) | Stitch `tactical_neon_arena/DESIGN.md` §Layout & Spacing: "Interactive grid points, wall slots, and control pills require an absolute minimum hit-target clearance of 44×44px." `design.md` §26 and §28 contain **no** numeric minimum — the Stitch file is the only source. |
+| P4.2-2 | Radius is capped at `cellSize / 2 - 0.5 px` | Own decision, forced by the requirement that a cell-centre tap is never captured: a cell centre sits exactly half a cell from its two bounding grooves, so any radius ≥ half a cell would capture it. The 0.5 px guard keeps an exactly centred tap outside the band. |
+| P4.2-3 | The reachable target is `2 × wallHitTolerance` | Consequence of P4.2-2. 9×9 at 640 px → 22 px radius (44 px target); 9×9 at 450 px → 21.72 px; 11×11 at 450 px → 19.95 px (39.9 px target). Below the DESIGN minimum on dense boards — logged as **Q-4.6**. |
+| P4.2-4 | An exact H/V distance tie resolves to horizontal | `game_spec.md` §3.10 R-ORDER-03 orders walls H before V; the pre-fix scan also tested H first. |
+| P4.2-5 | A coordinate exactly between two parallel lines resolves to the higher line index | Deterministic rounding. No source defines it. |
+| P4.2-6 | Along-wall anchor index = the cell containing the tap | Preserves the pre-4.2 mapping; keeps each anchor centred on its own two-cell bar. |
+| P4.2-7 | Invalid ghost = 50% `AppColors.error` fill + white dashed centre line + 95% outline | Stitch DESIGN.md §Components "Wall Ghost" specifies only "Flashes intense translucent crimson (#EF4444) at 50%" and **no pattern**. A diagonal hatch was implemented first and rejected: at the rendered bar thickness (`grooveWidth * 1.5` ≈ 2.8-4.3 px) 1.5 px diagonal strokes merge into a solid fill. A dashed centre line stays legible at every board size and is independent of owner colour. |
+| P4.2-8 | Conflict emphasis = 2 px `AppColors.error` ring behind each overlapping placed wall | `design.md` §11 and §29 specify no treatment. Smallest change that ties the failure to the existing segment without hiding it. |
+| P4.2-9 | Mode-exclusive board callbacks | `design.md` §11 (wall feedback) and §28 (input); `architecture.md` §2.1 keeps input handling in presentation. |
+| P4.2-10 | The prompt's claim that `design.md` §26 states a minimum touch target is **not** supported by the file | `design.md` read in full; the number exists only in the Stitch DESIGN.md (§Layout & Spacing). Recorded because the file wins over the prompt. |
+
+## Tests added or updated
+
+- `test/presentation/board/board_geometry_test.dart`: 102 tests (73 in the §13h record). New
+  per-size cases for board sizes 5/7/9/11: tolerance derivation, every cell
+  centre returns null, out-of-board returns null, every valid anchor resolves at
+  its grid line, a tap up to 95% of the tolerance off the groove keeps the same
+  anchor, the tolerance boundary is inclusive, the cell-centre band is null, a
+  near-miss does not drift to the neighbouring groove, and the nearer of two
+  equidistant grooves wins deterministically (H on a tie).
+- `test/presentation/board/board_hit_test.dart`: 16 tests (was 12). New widget
+  cases for a tap inside the tolerance, a tap beyond the tolerance falling
+  through to the cell, a cell-centre tap never becoming a wall, and the owner's
+  scenario end-to-end: a near-miss 90% of the tolerance from the conflicting
+  groove still resolves to the same anchor and still reports `wallCrosses`.
+- `test/application/local_game_controller_test.dart`: 321 tests (was 317). Legal
+  touching walls stay valid through the engine — T-junction `V(4,3)` after
+  `H(3,3)` (spec §8 Example 11), L-junction `V(3,4)` after `H(3,3)`, end-to-end
+  `H(3,5)` after `H(3,3)` (Example 9) — plus a dedicated same-anchor
+  opposite-orientation test asserting `wallCrosses` and a no-op confirm.
+- `test/presentation/screens/game/game_screen_test.dart`: 15 tests (was 13). A
+  move-mode tap inside the wall-snap range still moves the pawn, and a legal wall
+  beside an existing wall still shows a valid ghost with Confirm enabled.
+- Goldens: `board_invalid_ghost_same_owner.png` and
+  `board_valid_ghost_beside_wall.png` added; `game_screen_mobile_crossing_own_wall.png`
+  added; `game_screen_mobile_invalid_wall.png` deliberately regenerated for the
+  new dashed treatment.
+
+## Quality gates (real output, 2026-09-26)
+
+| Gate | Command | Result |
+|------|---------|--------|
+| Formatting | `dart format --set-exit-if-changed lib test` | `Formatted 60 files (0 changed)` |
+| Analyzer | `flutter analyze` | `No issues found!` |
+| Full tests | `flutter test` | `876: All tests passed!` |
+| Board coverage | `flutter test --coverage test/presentation/board` | `363: All tests passed!` — `board_geometry.dart` 70/70 (100%), `board_view.dart` 43/43 (100%), `board_painter.dart` 244/247 (98.79%; lines 508-510 are the pre-existing `selectedCell` / `showCoordinates` / `activeGlow` clauses of `shouldRepaint`), `wall_inventory_notches.dart` 0/27 (not exercised by this folder) |
+| Build | `flutter build web` | `√ Built build\web` |
+| Spec checker | `python tool/spec_verification/check_spec_consistency.py game_spec.md` | `Checked game_spec.md: 79 catalog rows, 65 rule IDs, 65 in matrix.` / `OK: spec is consistent with the reference engine.` |
+| Oracle vectors | `gen_engine_vectors.py` vs `test/fixtures/engine_vectors.json` | `generated_bytes=1240761 fixture_bytes=1240761`, `FC: no differences encountered` |
+
+`game_spec.md`, the spec checker, the vector generator, `test/fixtures/engine_vectors.json`,
+`lib/domain/`, and `pubspec.yaml` were **not** modified.
+
+## Browser verification (honest status)
+
+- `flutter run -d chrome --web-port 7360` and `flutter run -d web-server --web-port 7370`
+  both launched; the Phase 4.2 build loads and runs in Chrome at 1280×900.
+- The new invalid-ghost treatment was confirmed rendering in the live browser:
+  the owner's scenario state (Blue `H(6,5)` placed, pending `V(6,5)`) showed the
+  dashed crimson ghost, the error ring around the Blue wall, the text
+  "Wall crosses an existing wall." and a disabled CONFIRM
+  (`C:\Users\User\AppData\Local\Temp\opencode\wf42-00-start.png`).
+- **The tap-driven reproduction could not be completed.** Synthesized CDP pointer
+  events reached Material buttons (preview CTA, MOVE/WALL toggle) but never the
+  board's `GestureDetector`; pixel sampling at the exact groove coordinates showed
+  no state change. The instance renders at `devicePixelRatio` 1.5 and neither CSS
+  nor device coordinates resolved onto the board hit box, and a preceding
+  `mouseMoved` did not help. This is a limitation of the automated input harness in
+  this session, not evidence of a product defect: the same taps are simulated with
+  real pointer events by `flutter_test` (`tester.tapAt`) in the 16 board hit tests,
+  including the near-miss → `wallCrosses` case, and the visuals are locked by three
+  goldens. Re-run by hand in a normal browser to close this out.
+
+## Deferred and open
+
+- Q-4.6 (dense-board target) and Q-4.7 (invalid-ghost colour token) are new.
+- Q-4.1 to Q-4.5 remain open and unchanged.
+- No Phase 5 work was started.

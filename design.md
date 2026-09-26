@@ -303,6 +303,22 @@ When wall mode is active:
 - Allow cancellation.
 - Require confirmation if the setting is enabled.
 
+### Invalid ghost (Phase 4.2)
+
+An invalid ghost must never be readable as a solid placed wall of either owner:
+
+- Base fill: the error colour at 50% opacity (Stitch `DESIGN.md` §Components,
+  "Wall Ghost").
+- A dashed centre line along the bar's long axis, white at 90% opacity.
+- A 2 px outline in the error colour at 95% opacity.
+- Any placed wall the ghost overlaps is ringed with a 2 px error outline drawn
+  *behind* the wall, so the wall stays visible and the conflict is obvious.
+
+The dashes replaced an earlier diagonal hatch, which merged into a solid fill at
+the rendered bar thickness. Stitch specifies the 50% crimson ghost but no pattern
+and no conflict treatment; both additions were made in Phase 4.2 and are recorded
+in `memory.md` §13j (P4.2-7, P4.2-8).
+
 ---
 
 # 12. Typography
@@ -693,6 +709,18 @@ The board may change relative size while information panels change layout.
 - Click movement.
 - Click wall placement.
 - Optional drag preview.
+
+### Hit tolerance (Phase 4.2)
+
+Interactive grid points and wall slots keep a minimum 44x44 px hit target, per
+Stitch `tactical_neon_arena/DESIGN.md` "Layout & Spacing". Wall taps therefore
+snap to the nearest logical slot within 22 px of the groove instead of requiring
+an exact hit. The radius is capped just below half a cell so a tap in the middle
+of a cell is never captured as a wall slot; on dense boards this makes the
+reachable target smaller than 44x44 px (open question Q-4.6 in `memory.md`).
+Beyond the tolerance a wall tap is not a wall tap at all, and cell and wall
+targets are resolved for the active interaction mode only, so neither can swallow
+the other.
 
 ### Keyboard
 

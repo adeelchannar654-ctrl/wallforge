@@ -766,3 +766,13 @@ Any change to the core game rules requires tests and documentation updates.
 
 `game_spec.md` is the single source of truth for game legality. Any rule change
 requires updating `game_spec.md`, its rule IDs, and its test catalog.
+
+### Rule 17
+
+Interactive hit targets provide a minimum 44x44 px target (Stitch
+`tactical_neon_arena/DESIGN.md` "Layout & Spacing") and resolve by snapping to
+the nearest logical slot within half that target, never by exact-pixel hit tests.
+Where a geometry constraint makes the full target impossible (for example dense
+boards, where half a cell is smaller than 22 px), the snapping radius must be
+capped so that a neighbouring target class is never captured, and the deviation
+must be recorded as an open question in `memory.md`. Established in Phase 4.2.

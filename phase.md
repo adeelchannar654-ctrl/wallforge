@@ -229,6 +229,37 @@ Phase 4.1 is complete and verified on 2026-09-25. The implementation remains in 
 
 No Phase 5 work was started. Owner acceptance steps are recorded in `memory.md` §13i.
 
+### Result — Phase 4.2 (2026-09-26)
+
+Phase 4.2 fixes two confirmed interaction defects. No game rule changed.
+
+- Bug D fixed: `BoardGeometry.wallAnchorAt` now snaps to the nearest logical slot
+  instead of scanning exact groove rectangles. The perpendicular tolerance is
+  22 px (half of the Stitch 44×44 px minimum target), capped at
+  `cellSize / 2 - 0.5 px` so a cell-centre tap is never captured. Exact H/V ties
+  resolve to horizontal. Beyond the tolerance the tap falls through to the cell,
+  and `GameScreen` passes only the callback for the active interaction mode.
+- Bug E fixed: the invalid ghost keeps its 50% crimson fill and adds a white
+  dashed centre line plus a stronger outline, and a 2 px error ring is painted
+  behind every placed wall the ghost overlaps, so it can never be read as a solid
+  wall of the same owner.
+- Tests: 102 board-geometry tests (was 73), 16 board hit tests (was 12), 321
+  controller tests (was 317), 15 game-screen tests (was 13), 2 new board goldens
+  and 1 new game-screen golden; `game_screen_mobile_invalid_wall.png`
+  deliberately regenerated.
+- Board coverage: `board_geometry.dart` 100%, `board_view.dart` 100%,
+  `board_painter.dart` 98.79% (3 pre-existing `shouldRepaint` clauses).
+- `dart format --set-exit-if-changed lib test` → `Formatted 60 files (0 changed)`.
+- `flutter analyze` → `No issues found!`
+- `flutter test` → `876: All tests passed!`
+- `flutter test --coverage test/presentation/board` → `363: All tests passed!`
+- `flutter build web` → `√ Built build\\web`
+- `check_spec_consistency.py` → `OK: spec is consistent with the reference engine.`
+- Oracle vectors → `IDENTICAL`; generated and fixture sizes both 1,240,761 bytes.
+- Browser: the new invalid-ghost treatment was confirmed in a live Chrome build;
+  the tap-driven reproduction could not be completed in the automated session
+  (see `memory.md` §13j for the exact status).
+
 ---
 
 # Phase 5 — Offline AI
