@@ -297,50 +297,99 @@ void main() {
         );
 
         test(
-          'DIAGNOSTIC 4.3: an H wall footprint resolves to one anchor across '
-          'its full rendered width',
+          'an H bar keeps its own anchor across the whole central half of its '
+          'rendered width',
           () {
             const r = 3;
-            const c = 3;
-            final rect = g.wallRect(r, c, WallOrientation.h);
+            const c = 1;
             final lineY = g.padding + (r + 1) * g.cellSize;
-            final expected = (row: r, col: c, orientation: WallOrientation.h);
+            const expected = (row: r, col: c, orientation: WallOrientation.h);
 
+            // The bar spans t in [c, c+2). Its central half is [c+0.5, c+1.5),
+            // centred on the bar's visual midpoint at t = c+1.
             final mismatches = <String>[];
-            for (var i = 1; i <= 19; i++) {
-              final x = rect.left + rect.width * i / 20;
-              final anchor = g.wallAnchorAt(Offset(x, lineY));
+            for (var i = 0; i < 20; i++) {
+              final t = c + 0.5 + i * 0.05;
+              final anchor = g.wallAnchorAt(
+                Offset(g.padding + t * g.cellSize, lineY),
+              );
               if (anchor != expected) {
-                mismatches.add(
-                  'x=${x.toStringAsFixed(2)} (t=${(x / g.cellSize).toStringAsFixed(2)}) -> $anchor',
-                );
+                mismatches.add('t=${t.toStringAsFixed(2)} -> $anchor');
               }
             }
             expect(mismatches, isEmpty, reason: mismatches.join(' | '));
+
+            expect(
+              g.wallAnchorAt(Offset(g.padding + (c + 1) * g.cellSize, lineY)),
+              expected,
+              reason: 'the exact centre of the bar must resolve to the bar',
+            );
           },
         );
 
-        test(
-          'DIAGNOSTIC 4.3: a V wall footprint resolves to one anchor across '
-          'its full rendered height',
-          () {
-            const r = 3;
-            const c = 3;
-            final rect = g.wallRect(r, c, WallOrientation.v);
-            final lineX = g.padding + (c + 1) * g.cellSize;
-            final expected = (row: r, col: c, orientation: WallOrientation.v);
+        test('a V bar keeps its own anchor across the whole central half of its '
+            'rendered height', () {
+          const r = 1;
+          const c = 3;
+          final lineX = g.padding + (c + 1) * g.cellSize;
+          const expected = (row: r, col: c, orientation: WallOrientation.v);
 
-            final mismatches = <String>[];
-            for (var i = 1; i <= 19; i++) {
-              final y = rect.top + rect.height * i / 20;
-              final anchor = g.wallAnchorAt(Offset(lineX, y));
-              if (anchor != expected) {
-                mismatches.add(
-                  'y=${y.toStringAsFixed(2)} (t=${(y / g.cellSize).toStringAsFixed(2)}) -> $anchor',
-                );
-              }
+          final mismatches = <String>[];
+          for (var i = 0; i < 20; i++) {
+            final t = r + 0.5 + i * 0.05;
+            // A V bar's midpoint sits exactly on a horizontal grid line, where
+            // both orientations are legal; R-ORDER-03 resolves that tie to H.
+            if ((t - (r + 1)).abs() < 1e-9) continue;
+            final anchor = g.wallAnchorAt(
+              Offset(lineX, g.padding + t * g.cellSize),
+            );
+            if (anchor != expected) {
+              mismatches.add('t=${t.toStringAsFixed(2)} -> $anchor');
             }
-            expect(mismatches, isEmpty, reason: mismatches.join(' | '));
+          }
+          expect(mismatches, isEmpty, reason: mismatches.join(' | '));
+
+          final centreY = g.padding + (r + 1) * g.cellSize;
+          expect(g.wallAnchorAt(Offset(lineX, centreY)), (
+            row: r,
+            col: c,
+            orientation: WallOrientation.h,
+          ), reason: 'the exact bar centre is a horizontal groove tie');
+          expect(
+            g.wallAnchorAt(Offset(lineX, centreY + 0.001)),
+            expected,
+            reason: 'immediately off-centre the V bar owns the tap',
+          );
+        });
+
+        test(
+          'ownership changes only at the midpoint between two bar centres',
+          () {
+            final lineY = g.padding + 4 * g.cellSize;
+            for (var c = 0; c < size - 2; c++) {
+              final boundary = c + 1.5;
+              expect(
+                g.wallAnchorAt(
+                  Offset(g.padding + (boundary - 0.001) * g.cellSize, lineY),
+                ),
+                (row: 3, col: c, orientation: WallOrientation.h),
+                reason: 'just below the midpoint, anchor $c owns the tap',
+              );
+              expect(
+                g.wallAnchorAt(
+                  Offset(g.padding + (boundary + 0.001) * g.cellSize, lineY),
+                ),
+                (row: 3, col: c + 1, orientation: WallOrientation.h),
+                reason: 'just above the midpoint, anchor ${c + 1} owns the tap',
+              );
+              expect(
+                g.wallAnchorAt(
+                  Offset(g.padding + boundary * g.cellSize, lineY),
+                ),
+                (row: 3, col: c + 1, orientation: WallOrientation.h),
+                reason: 'an exact boundary resolves to the higher anchor',
+              );
+            }
           },
         );
 

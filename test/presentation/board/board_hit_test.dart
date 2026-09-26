@@ -436,4 +436,126 @@ void main() {
       },
     );
   });
+
+  group('BoardView cross-axis anchor selection (Phase 4.3)', () {
+    const g = BoardGeometry(boardSize: 9, areaSize: 640);
+
+    /// Blue H(6,3) and Red H(6,6) placed through the engine-backed controller.
+    /// H(6,1) is then a genuinely empty legal slot (offset 2 from H(6,3)), but its
+    /// right half used to resolve to H(6,2), which is offset 1 from H(6,3) and is
+    /// therefore rejected as `wallOverlaps` — the owner's report.
+    LocalGameController scenarioWithTwoWalls() {
+      final controller = LocalGameController();
+      controller.setMode(InteractionMode.wall);
+      controller.tapWallSlot(const Cell(row: 6, column: 3), WallOrientation.h);
+      controller.confirm();
+      controller.setMode(InteractionMode.wall);
+      controller.tapWallSlot(const Cell(row: 6, column: 6), WallOrientation.h);
+      controller.confirm();
+      controller.setMode(InteractionMode.wall);
+      expect(controller.currentPlayer, PlayerId.blue);
+      expect(controller.state.walls, hasLength(2));
+      return controller;
+    }
+
+    test('aiming across an empty slot footprint resolves to that slot', () {
+      final controller = scenarioWithTwoWalls();
+      addTearDown(controller.dispose);
+      final lineY = 7 * g.cellSize;
+
+      for (final t in [1.5, 1.7, 1.9, 2.0, 2.1, 2.3, 2.4]) {
+        final anchor = g.wallAnchorAt(Offset(t * g.cellSize, lineY));
+        expect(anchor, (
+          row: 6,
+          col: 1,
+          orientation: WallOrientation.h,
+        ), reason: 'cursor at t=$t must aim at the empty H(6,1) slot');
+
+        controller.setMode(InteractionMode.wall);
+        controller.tapWallSlot(
+          Cell(row: anchor!.row, column: anchor.col),
+          anchor.orientation,
+        );
+        expect(
+          controller.pendingWallFailure,
+          isNull,
+          reason: 'H(6,1) is legal but was rejected at t=$t',
+        );
+        controller.cancel();
+      }
+    });
+
+    test('the transition zone is deterministic and stable', () {
+      final lineY = 7 * g.cellSize;
+      const justBefore = 2.5 - 0.001;
+      const justAfter = 2.5 + 0.001;
+
+      expect(g.wallAnchorAt(Offset(justBefore * g.cellSize, lineY)), (
+        row: 6,
+        col: 1,
+        orientation: WallOrientation.h,
+      ), reason: 'below the midpoint the left anchor owns the tap');
+      expect(g.wallAnchorAt(Offset(justAfter * g.cellSize, lineY)), (
+        row: 6,
+        col: 2,
+        orientation: WallOrientation.h,
+      ), reason: 'above the midpoint the right anchor owns the tap');
+
+      for (var i = 0; i < 5; i++) {
+        expect(g.wallAnchorAt(Offset(justAfter * g.cellSize, lineY)), (
+          row: 6,
+          col: 2,
+          orientation: WallOrientation.h,
+        ), reason: 'repeated identical input must not flap');
+        expect(g.wallAnchorAt(Offset(justBefore * g.cellSize, lineY)), (
+          row: 6,
+          col: 1,
+          orientation: WallOrientation.h,
+        ));
+      }
+    });
+
+    testWidgets('a real tap on the empty slot saves the wall', (tester) async {
+      final controller = scenarioWithTwoWalls();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 640,
+              height: 640,
+              child: BoardView(
+                state: controller.state,
+                onWallSlotTap: controller.tapWallSlot,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final origin = tester.getTopLeft(find.byType(BoardView));
+      final centre = Offset(2 * g.cellSize, 7 * g.cellSize);
+      final turnBefore = controller.state.turnNumber;
+      await tester.tapAt(origin + centre);
+      await tester.pumpAndSettle();
+
+      expect(
+        controller.pendingWall!.anchor,
+        const Cell(row: 6, column: 1),
+        reason: 'the bar centre must resolve to the aimed slot',
+      );
+      expect(controller.pendingWallFailure, isNull);
+
+      controller.confirm();
+      await tester.pumpAndSettle();
+
+      expect(controller.state.walls, hasLength(3));
+      expect(
+        controller.state.turnNumber,
+        turnBefore + 1,
+        reason: 'saving the wall must pass the turn',
+      );
+      expect(controller.currentPlayer, PlayerId.red);
+    });
+  });
 }
