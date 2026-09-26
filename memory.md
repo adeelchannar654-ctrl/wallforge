@@ -1549,3 +1549,194 @@ pre-existing wall-victory branch and the AI's defensive `!SuccessResult` guard.
   budget or a Web Worker, not a change to the evaluation.
 - Q-4.1 … Q-4.10 and Q-2.1 remain open and unaffected.
 - No Phase 6 work was started.
+
+---
+
+# 13n. Phase 6 Record (Local Persistence)
+
+Status: **complete and verified 2026-09-26.** No game rule changed; the spec
+checker and the oracle vectors are untouched and still green. No Phase 7 work
+started.
+
+## Storage approach — spec-derived, not my own default
+
+`shared_preferences`. This was **not** a judgement call: `rules.md` §4 already
+lists the package with exactly this purpose —
+
+> ### shared_preferences — Purpose: Small local settings. Tutorial completion.
+> Simple local preferences. *For larger local game storage, select a maintained
+> local database only when requirements justify it.*
+
+— which is the Phase 6 task list almost verbatim. The same entry's caveat about a
+local database for *larger* storage was checked rather than assumed: settings are
+a few hundred bytes and a single 9×9 mid-game `GameState` is roughly 1–2 KB, both
+comfortably inside the "small local preferences" bucket. A full match *history*
+would cross that line; it is not needed, and the largest thing stored is one
+resumable match.
+
+Package added to `pubspec.yaml` (`shared_preferences: ^2.3.2`). This is the first
+runtime dependency beyond Flutter and `cupertino_icons`, and it is sanctioned by
+`rules.md` §4 rather than being a new choice under §3.3.
+
+## Architecture — the boundary was already specified
+
+`architecture.md` §2.4 says repositories "expose domain-friendly interfaces to
+the application layer", §14 says "Keep persistence behind repository interfaces.
+Do not let UI widgets directly read/write storage", and `lib/data/README.md`
+states the direction as `Data -> Domain interfaces`. So:
+
+```
+lib/domain/repositories/   interfaces + persisted shapes (pure Dart, no dart:io)
+lib/data/local/            shared_preferences implementations + in-memory doubles
+lib/app/application/       LocalGameController — depends on the interfaces only
+```
+
+`LocalGameController` imports `domain/repositories/repositories.dart` and has no
+idea whether the bytes come from `shared_preferences` or, in Phase 7, from
+Cloud Firestore. That is the whole point of the boundary and it is what makes the
+Phase 7 swap a `pubspec`/implementation change rather than an application change.
+
+Persistence is **opt-in** via `attachPersistence(...)`. With nothing attached the
+controller performs no persistence at all, which is why the 328 pre-existing
+controller/application tests needed no changes — a valuable property, and the
+reason it was done this way rather than by giving every controller a store.
+
+## What is persisted — and what is honestly not
+
+Scope was verified against the code first. A grep for real user-facing toggles
+found exactly two, and both are persisted:
+
+| Persisted | Source in the app |
+|---|---|
+| `confirmWallPlacement` | `LocalGameController.toggleConfirmWallPlacement()`, shown in the game HUD |
+| `aiDifficulty` | the difficulty `ChoiceChip` row on the entry screen |
+| match results | derived from `GameStatus.finished` + `winner` |
+| one unfinished match | `GameState` via the engine's own `GameStateSerializer` |
+
+**Not persisted, deliberately:**
+
+- **Tutorial completion** — there is **no tutorial in the app**. `design.md` §22
+  tutorial UX is later UI work, and a grep for "tutorial" across `lib/` returns
+  nothing. The flag exists in `AppSettings` as a documented, always-`false`
+  placeholder so the persistence shape is complete for when a tutorial lands,
+  rather than needing a migration later. Nothing sets it and no UI reads it — it
+  is a reserved field, not a fake feature.
+- **AI progress** — the Phase 5 AI is a **stateless** evaluator: no rating, no
+  per-player model, no level unlocks, nothing learned across matches. There is
+  nothing true to record, and inventing a skill rating would be fabricating a
+  feature. `phase.md` says "AI progress **if introduced**"; it was not. The
+  difficulty the player picks is a *setting*, not progress, and is stored as one.
+- No theme / sound / haptics / accessibility settings — none of those exist yet.
+- No match history, replays or rankings — no data source for them.
+
+## Notable implementation decisions
+
+- **`aiDifficulty` is stored as a validated string, not a parallel enum.**
+  `AiDifficulty` lives in the application layer and the domain must not depend on
+  it. Declaring a second enum in the domain would create two lists that must be
+  kept in sync, and forgetting a fifth difficulty in one of them would silently
+  fall back. `AppSettings.knownAiDifficulties` plus an explicit check cannot
+  drift. `AppSettings.defaults` deliberately does *not* read that list, so the
+  default can never be an unknown value.
+- **Resuming reuses the engine's decoder.** `UnfinishedMatch.fromJson` calls
+  `GameStateSerializer.fromJson`, so a saved state that violates a spec invariant
+  is rejected by exactly the same code that rejects it anywhere else. A test
+  feeds it a state with both pawns on one cell (R-STATE-01) and expects `null`.
+- **Every repository method is total.** None of them throws: a missing key, a
+  wrong type, unparseable JSON or a storage error all resolve to the documented
+  default. A corrupt store must never stop the app starting.
+- **Statistics attribution for pass-and-play.** With no AI the "human" is taken
+  as Blue (the first player), and those matches are keyed under `"local"` rather
+  than a difficulty name. `phase.md` does not define this, so it is recorded as
+  Q-6.2 rather than presented as spec-derived.
+- A finished match clears the resumable save, and the entry screen also clears a
+  stale save whose state is already finished.
+
+## Tests
+
+- `test/data/persistence_test.dart` (29 tests): JSON round-trip for all three
+  shapes; `MatchStatistics` win/loss recording and win rate; per-field fallback
+  for malformed settings and statistics; malformed buckets dropped while good
+  ones survive; `UnfinishedMatch` returning `null` for a bad board size, a
+  non-map state, an unknown schema version and an invariant-violating state;
+  `shared_preferences` implementations for save/reload/simulated-restart/clear;
+  corrupt stored values degrading to defaults; and value semantics (`copyWith`,
+  `==`, `hashCode`, `toString`) so equality bugs cannot cause flaky tests.
+- `test/application/persistence_integration_test.dart` (9 tests): settings and
+  difficulty surviving a restart; a **partial match saved, an app "restart"
+  simulated with a brand new controller over the same stores, resumed, and play
+  continuing legally**; a resumed AI match keeping its opponent and difficulty; a
+  finished match not being resumable; statistics recorded for a human win *and* a
+  human loss (both played as real alternating legal games, not hand-built
+  states); no statistics mid-match; and a controller with no repositories
+  attached performing no persistence without throwing.
+- Three failures during this work were all **test-authoring** bugs, not product
+  bugs, and are worth recording because the second is a genuine trap: an illegal
+  tap does **not** pass the turn, so a single wrong cell in a scripted sequence
+  makes every later tap move the *other* pawn. The helpers now only use verified
+  orthogonal steps, and Blue's start cell differs per board size.
+- Coverage of the new code: `in_memory_repositories.dart` 100%,
+  `shared_preferences_settings_repository.dart` 100%,
+  `shared_preferences_unfinished_match_repository.dart` 100%,
+  `shared_preferences_statistics_repository.dart` 93.75% (one unreachable
+  catch-path line).
+
+## Quality gates (real output, 2026-09-26)
+
+| Gate | Result |
+|------|--------|
+| `dart format --set-exit-if-changed lib test` | `Formatted 67 files (0 changed)` |
+| `flutter analyze` | `No issues found!` |
+| `flutter test` | `968: All tests passed!` (936 after Phase 5, +32) |
+| Persistence coverage | `552: All tests passed!` on `test/data` + `test/application` + `test/domain` |
+| `flutter build web` | `√ Built build\web` |
+| `check_spec_consistency.py` | `Checked game_spec.md: 80 catalog rows, 65 rule IDs, 65 in matrix.` / `OK` — **unchanged, as required: no rule change in this phase** |
+| Oracle vectors | byte-identical, SHA-256 `6F1E3C05…94BA96`, 1,229,568 bytes — **unchanged** |
+
+`game_spec.md`, the spec checker, the vector generator, `test/fixtures/engine_vectors.json`
+and `lib/domain/engine/` were **not** modified. The only new domain files are
+pure data models and repository interfaces under `lib/domain/repositories/`, which
+contain no rules.
+
+## A process failure worth recording
+
+While moving the Phase 5 result block in `phase.md` I used PowerShell
+`Get-Content` + `WriteAllText` to do the edit. `Get-Content` defaults to the
+system ANSI code page, not UTF-8, so the em-dashes and `§` in the file were
+decoded as Latin-1 and written back as UTF-8 — double-encoding the whole file.
+`flutter analyze` and `flutter test` were both still green, because the damage
+was confined to comments and Markdown.
+
+A repo-wide scan found **8 corrupted files**, including two already committed and
+pushed in Phase 5 (`ai_opponent.dart` had been through three round-trips, so its
+em-dashes were triple-encoded). They were repaired by reversing the mis-encoding
+layer by layer, per line, verified by decoding every tracked `.md`/`.dart`/`.py`
+file as UTF-8 and asserting no mojibake markers remain, then re-running format
+and analyze. Repaired in commit `ee39281`.
+
+The lesson for future phases: on this shell, edit Markdown and Dart sources with
+the editor tools or an explicit UTF-8 read, never a bare `Get-Content`/
+`Add-Content` round-trip, and scan for mojibake before declaring a phase done.
+
+## Open Questions
+
+- **Q-6.1 (new)** — should a *finished* match offer a "play again with the same
+  settings" path that also pre-seeds statistics? Not implemented; the current
+  resume affordance deliberately disappears once a match ends.
+- **Q-6.2 (new)** — for pass-and-play, is attributing results to Blue (the first
+  player) the right definition of a "win"? `phase.md` says "local statistics"
+  without defining it, and with two local players there is no single human. The
+  alternative would be per-seat records, which is more honest but more UI. Chose
+  the simpler option and recorded it.
+- **Q-6.3 (new)** — no AI progress is persisted, because the AI has none to
+  persist (stateless evaluator, no rating). If a rating, opening-strength or
+  adaptive difficulty is ever introduced, this schema is where it belongs.
+- **Q-6.4 (new)** — the unfinished match is a single slot, last-write-wins.
+  Multi-slot match history is deliberately not implemented and would be the point
+  at which `rules.md` §4's "larger local storage" caveat starts to apply and a
+  local database becomes justified.
+- **Q-5.1** (resolve `game_spec.md` Q-01 to close the 9×9 Hard-vs-Hard AI
+  stalemate) is unchanged and still open; persistence does not affect it, though
+  the stalemate is now *resumable across a restart* rather than lost.
+- Q-4.1 … Q-4.10, Q-2.1 remain open and unaffected.
+- No Phase 7 work was started.

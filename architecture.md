@@ -426,6 +426,22 @@ Keep persistence behind repository interfaces.
 
 Do not let UI widgets directly read/write storage.
 
+**As built in Phase 6.** The interfaces and the persisted value shapes live in
+`lib/domain/repositories/` (pure Dart, no `dart:io`, no Flutter), the device
+implementations in `lib/data/local/`, and the application layer depends only on
+the interfaces. `LocalGameController` attaches storage through
+`attachPersistence(...)` rather than taking a concrete store, so it stays usable
+as a plain synchronous object in tests and an online implementation can replace
+`lib/data/local/` in Phase 7 without any change above that line.
+
+Two consequences worth keeping:
+
+- The unfinished match reuses the engine's own `GameStateSerializer`, so a saved
+  state that violates a spec invariant is rejected by the same code that rejects
+  it anywhere else, rather than by a parallel persistence schema.
+- Every repository method is total: missing, wrong-typed or corrupt data resolves
+  to a documented default. A corrupt store must never stop the app starting.
+
 ---
 
 ## 15. Folder and File Structure

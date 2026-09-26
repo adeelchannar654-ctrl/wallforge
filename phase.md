@@ -426,6 +426,67 @@ Preserve relevant local data.
 
 Closing/reopening the application does not unexpectedly lose supported local data.
 
+### Result — Phase 6 (2026-09-26)
+
+Local persistence. No game rule changed; the spec checker and oracle vectors are
+untouched and still green.
+
+- Storage: **`shared_preferences`**, which is spec-derived rather than a new
+  choice — `rules.md` §4 already lists it for exactly this purpose ("Small local
+  settings / Tutorial completion / Simple local preferences"). Its caveat about a
+  local database for *larger* storage was checked, not assumed: settings are a few
+  hundred bytes and one 9×9 mid-game state is ~1–2 KB. Match history would cross
+  that line and is not implemented.
+- Layering follows the docs exactly: interfaces and persisted shapes in
+  `lib/domain/repositories/`, implementations in `lib/data/local/`, and
+  `LocalGameController` depending only on the interfaces. This is
+  `architecture.md` §2.4 + §14 and `lib/data/README.md`'s `Data -> Domain
+  interfaces`, so Phase 7 swaps the implementation without touching the
+  application layer. Persistence is opt-in via `attachPersistence`, so the 328
+  pre-existing controller tests needed no changes.
+- Persisted: `confirmWallPlacement` and `aiDifficulty` (the only two real
+  user-facing settings that exist), match results, and one unfinished match.
+  The unfinished match reuses the engine's own `GameStateSerializer`, so a saved
+  state that breaks a spec invariant is rejected by the same code as anywhere
+  else.
+- **Not persisted, honestly:** tutorial completion (no tutorial exists in the app
+  — a documented always-false placeholder, nothing sets it, no UI reads it) and
+  AI progress (the Phase 5 AI is a stateless evaluator with no rating or learning,
+  so there is nothing true to record; `phase.md` says "if introduced"). No
+  fabricated theme/sound/accessibility settings or match history either.
+- Every repository method is total: missing, wrong-typed, unparseable or
+  unreadable data falls back to a documented default and never throws, so a
+  corrupt store cannot stop the app starting.
+- UI: a `RESUME MATCH (9x9 vs expert)` affordance on the entry screen, shown only
+  when a resumable match exists and hidden once the match finishes. The saved
+  difficulty is preselected on open.
+- Tests: 29 persistence tests (round-trips for all three shapes, per-field
+  corruption fallbacks, an invariant-violating saved state, simulated restarts,
+  and value semantics) + 9 integration tests (a partial match saved, an app
+  restart simulated with a new controller, resumed and **continued legally**; a
+  resumed AI match keeping opponent and difficulty; statistics recorded for both
+  a human win and a human loss in real alternating games; no statistics
+  mid-match; and a controller with no repositories attached doing nothing). +32
+  overall.
+- `dart format --set-exit-if-changed lib test` → `Formatted 67 files (0 changed)`.
+- `flutter analyze` → `No issues found!`
+- `flutter test` → `968: All tests passed!`
+- Persistence coverage → `552: All tests passed!`; in-memory repositories 100%,
+  the three `shared_preferences` implementations 100% / 100% / 93.75% (one
+  unreachable catch-path line).
+- `flutter build web` → `√ Built build\web`
+- `check_spec_consistency.py` → `OK` — explicitly unchanged: no rule change here.
+- Oracle vectors → byte-identical, 1,229,568 bytes, SHA-256 unchanged.
+- Process note: an earlier in-phase edit used a PowerShell `Get-Content` /
+  `WriteAllText` round-trip, which mis-decoded UTF-8 and double-encoded 8 files
+  (comments and Markdown only — tests and analyzer stayed green). Detected by an
+  explicit UTF-8 + mojibake scan, repaired layer by layer, and recorded in
+  `memory.md` §13n so it is not repeated.
+- Open: Q-6.1 (replay/continue affordance after a finish), Q-6.2 (is Blue "the
+  human" in pass-and-play?), Q-6.3 (where AI progress would live if ever
+  introduced), Q-6.4 (single match slot; multi-slot history would justify a local
+  database). Full record in `memory.md` §13n.
+
 ---
 
 # Phase 7 — Firebase Foundation

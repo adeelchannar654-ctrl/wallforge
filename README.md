@@ -17,8 +17,8 @@ A wall may never remove the last route to either player's goal.
 
 ## Status
 
-**Phases 0–5 are complete.** Phase 6 (Local Persistence) is the phase now
-starting. See [`phase.md`](phase.md) for the full plan and the per-phase results.
+**Phases 0–6 are complete.** Phase 7 (Firebase Foundation) is next. See
+[`phase.md`](phase.md) for the full plan and the per-phase results.
 
 - **Phase 0 — Project Foundation.** Flutter project, platform targets, folder
   structure, lint/format standards and test structure in place.
@@ -41,6 +41,10 @@ starting. See [`phase.md`](phase.md) for the full plan and the per-phase results
 - **Phase 5 — Offline AI.** An AI opponent at four difficulties (Easy, Medium,
   Hard, Expert), differing only in search depth and breadth — no randomness. It
   plays through the same engine as a human, so it can never make an illegal move.
+- **Phase 6 — Local Persistence.** Settings, match statistics and an unfinished
+  match are stored on the device with `shared_preferences`, behind repository
+  interfaces in the domain layer so the online backend can replace the
+  implementation later. A match in progress can be resumed after closing the app.
 
 **The rules changed after Phase 4.** `game_spec.md` is now at **v2.0.0**: a
 horizontal and a vertical wall may share an anchor, forming a legal "+". This was
@@ -50,7 +54,7 @@ condition are unchanged. The initial legal-move counts (3 moves / 128 walls) are
 unchanged. One failure reason, `wallCrosses`, became unreachable and is
 documented as retired rather than removed.
 
-**Test status:** 936 tests pass, with the spec checker reporting `OK` and the
+**Test status:** 968 tests pass, with the spec checker reporting `OK` and the
 oracle vectors byte-identical to the reference generator.
 
 ---
