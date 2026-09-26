@@ -329,6 +329,53 @@ applied between Phase 4 and Phase 5.
 - Full record, ledger and Open Questions: `memory.md` §13l; process recorded as
   `rules.md` Rule 19.
 
+### Result — Phase 5 (2026-09-26)
+
+Offline AI opponent. No game rule changed; the oracle vectors are byte-identical.
+
+- Architecture: `lib/app/application/ai/` — `ai_difficulty.dart`,
+  `ai_evaluator.dart`, `ai_opponent.dart`, plus `match_setup.dart` for the route.
+  Depends only on the domain's public API; candidates come from
+  `GameEngine.legalActions` and are applied through `GameEngine.apply`, so the AI
+  can never bypass validation and the v2.0.0 crossing rule applies to it as it
+  does to a human.
+- Evaluation uses the four inputs `phase.md` asks for: own shortest path
+  (reusing `Pathfinder.shortestRouteLength`, no second BFS), opponent shortest
+  path, wall impact (the opponent's route already reflects every wall, with a
+  small per-wall cost), and immediate win/loss (±1000). A monotone row-distance
+  term was added after route lengths alone were measured producing games that
+  never ended.
+- Difficulty is **search depth + shortlist width, never randomness**: Easy 0/6,
+  Medium 1/8, Hard 2/10, Expert 3/12, each a strict superset of the one below.
+  Measured cost per move on 9×9: ~25 ms / ~25 ms / ~127 ms / ~1345 ms.
+  Bounded by progressive widening and an interior wall-scan cap.
+- Two defects found by measurement, not by inspection: the negamax leaf score was
+  taken from the wrong player's perspective, which made the AI maximise its
+  opponent's score and pick its worst move; and candidate scores were recomputed
+  inside the sort comparator, making Expert 3× slower.
+- Termination: 47 of 48 size × pairing combinations finish. The one exception,
+  9×9 Hard vs Hard, is a forced stalemate where both players have spent all walls
+  and every legal move recreates a seen position — unfixable by any evaluation,
+  and the real fix is the still-Unresolved `game_spec.md` Q-01 repetition rule,
+  which is the owner's decision. The stalled set is asserted against an explicit
+  allowlist so any new stall fails the suite.
+- UI: `START VS AI` plus a difficulty chip row on the existing board-preview entry
+  screen, reusing current tokens. AI thinks for 300 ms so its turn is visible.
+- Tests: 17 AI tests + 6 controller/route tests, including legality across sizes,
+  difficulties and 60 seeded games; determinism; all AI-vs-AI pairings legal;
+  and the strength check — **Expert beat Easy 4 / 0**.
+- `dart format --set-exit-if-changed lib test` → `Formatted 67 files (0 changed)`.
+- `flutter analyze` → `No issues found!`
+- `flutter test` → `936: All tests passed!`
+- AI + application coverage → `345: All tests passed!`; `ai_opponent.dart` 97.14%,
+  `ai_evaluator.dart` 96%.
+- `flutter build web` → `√ Built build\web`
+- `check_spec_consistency.py` → `OK: spec is consistent with the reference engine.`
+- Oracle vectors → byte-identical, SHA-256 unchanged (no rule change in Phase 5).
+- Open: Q-5.1 (resolve Q-01 to close the stalemate), Q-5.2 (no AI screen is
+  designed in `design.md` §20; a real one is Phase 11 UI work), Q-5.3 (no per-move
+  time budget). Full record in `memory.md` §13m.
+
 ---
 
 # Phase 5 — Offline AI

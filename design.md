@@ -525,6 +525,18 @@ Explain difficulty briefly.
 
 Avoid misleading claims such as "perfect AI".
 
+**Implemented in Phase 5.** The selector and its one-line explanation are built as
+a chip row on the existing board-preview entry screen, reusing the current colour,
+spacing and typography tokens. The wording shown is the honest one carried by
+`AiDifficulty` ("Looks one move ahead", "Looks three moves ahead over the widest
+set of choices") — depth and breadth only, with no claim of optimality. The AI
+pauses briefly before moving so its turn is visible.
+
+This section still specifies no dedicated AI *screen* — no AI-specific player card,
+no "thinking" indicator, no change-difficulty or rematch flow. That is deliberate
+scope: a real AI mode screen belongs with the Phase 11 UI work, and inventing one
+here would have created a second visual language. Tracked as Q-5.2 in `memory.md`.
+
 ---
 
 # 21. Result Screen

@@ -1368,3 +1368,184 @@ harness artefact, not a real difference.
   H and V at same anchor are illegal", Phase 4.1/4.2 browser notes) were
   deliberately **not** rewritten: they are dated records of what was true then.
   This section supersedes them.
+
+---
+
+# 13m. Phase 5 Record (Offline AI Opponent)
+
+Status: **complete and verified 2026-09-26**, with one documented limitation that
+needs an owner decision (Q-5.1). No game rule changed. No Phase 6 work started.
+
+## Architecture
+
+Placed in `lib/app/application/ai/`, matching the `architecture.md` layering
+decision already taken in Phase 4 (§13i) that application code lives in
+`lib/app/application` rather than `lib/application/game`.
+
+| File | Role |
+|------|------|
+| `ai/ai_difficulty.dart` | The four levels: `searchDepth`, `candidateWidth`, `label`, `description`. |
+| `ai/ai_evaluator.dart` | Static scoring of a position. Reuses `Pathfinder.shortestRouteLength`. |
+| `ai/ai_opponent.dart` | Negamax search + candidate shortlist + loop guards. |
+| `match_setup.dart` | Route argument: config + versusAi + difficulty. |
+
+The AI depends only on the domain's public API and never on presentation, and it
+**never bypasses validation**: candidates come from `GameEngine.legalActions` and
+the chosen action is applied through `GameEngine.apply`, so the v2.0.0 crossing
+rule applies to the AI exactly as it does to a human.
+
+## Evaluation (the four `phase.md` "Version 1" inputs)
+
+```
+score = -1.0 x progress        (row distance to own goal; strictly monotone)
+      - 0.5 x ownRouteLength   (detour preference + wall self-cost)
+      + 1.0 x opponentRoute    (wall impact: this IS the blocking term)
+      - 0.4 x wallsOwned       (architecture.md "wall cost")
+      +/- 1000                 (immediate win / loss)
+```
+
+`progress` is the load-bearing term and was **not** in my first design, which used
+route lengths only. That version never finished a single game: once the opponent
+walls a detour in, the shortest route can *grow* while the pawn stands still, so
+sideways shuffles and backward steps score equal to real progress and both sides
+oscillate forever. Row distance cannot be increased by any wall, so anchoring on it
+guarantees the AI keeps closing on its goal.
+
+## Difficulty: depth-limited negamax, no randomness
+
+| Level | Search depth | Candidate width | Measured move cost (9x9, 2 walls) |
+|-------|--------------|-----------------|-----------------------------------|
+| Easy | 0 | 6 | ~25 ms |
+| Medium | 1 | 8 | ~25 ms |
+| Hard | 2 | 10 | ~127 ms |
+| Expert | 3 | 12 | ~1345 ms |
+
+Each level is a strict superset: strictly greater depth *and* strictly wider
+shortlist, ranked by the same evaluation, so a wider level can only add
+candidates. Asserted by a test. No randomness, no clock, no time budget, so a
+position always yields the same move (asserted by a determinism test).
+
+Two bounding techniques keep it usable, both measured rather than guessed:
+- **Progressive widening** — interior nodes halve the width (floor 4).
+- **Interior wall-scan cap** of 16 candidates; the root still scans everything,
+  since that is the decision actually played.
+- Candidate scores are computed **once** and cached. Recomputing inside the
+  comparator cost two BFS per comparison and made Expert 3x slower (13.0 s → 4.1 s
+  after caching, → 1.3 s after the scan cap).
+
+## A real bug found by measurement: the leaf perspective
+
+The first working-looking search was **choosing its worst move**. In negamax the
+leaf score must be from the *side to move's* perspective; mine was from the AI's
+fixed perspective and the root then negated it, so the AI maximised the
+*opponent's* score at every depth. It announced walls with visibly worse scores
+than the best available move. Found by printing the score breakdown of the root
+candidates rather than by reading the code again. This is the kind of defect that
+looks like "the AI is just bad at this game".
+
+## Termination: four mechanisms, and the one that works
+
+`game_spec.md` Q-01 (draw / repetition rule) is Unresolved and explicitly says
+"decide before Phase 5 (AI)", so the engine legitimately allows a position to
+repeat forever and nothing forces a match to end. Four approaches were tried:
+
+1. **Route-greedy only** — both sides oscillated vertically, then sideways.
+2. **Penalise the cell just vacated** (asymmetric) — killed every 2-cell loop;
+   survivors were 3-cell loops that stepped out and back without reversing.
+3. **Penalise a symmetric set of visited cells** — failed outright. In a cluttered
+   endgame the pawn often has 2-3 legal moves and *all* are already visited, so
+   every candidate takes the same penalty, nothing is discriminated, loop
+   continues. A symmetric penalty is structurally incapable of fixing a trap.
+4. **Rank "unseen positions first", falling back to least-recently-seen** — this
+   is what shipped, as a *ranking* rule rather than a penalty.
+
+All four are documented in the code at the point of use so the next person does
+not "simplify" one away.
+
+### The one remaining stalemate (Q-5.1, needs an owner decision)
+
+Enumerating all 48 combinations (sizes 5/7/9 x 16 pairings): **exactly one does
+not terminate — 9x9 Hard vs Hard.** Root cause, measured: both Hard players spend
+all ten walls early, then each is reduced to two or three legal moves every one of
+which recreates a seen position. Passing is illegal, so a deterministic must-move
+agent is trapped, and *no evaluation can escape it* because placing a wall is the
+only thing that can change the position and no walls remain. Least-recently-seen
+does not help: traversing a 3-cycle in reverse is the same cycle.
+
+The correct fix is a repetition/draw rule, which is Q-01 and therefore the owner's
+call — `rules.md` §10 forbids inventing a game rule. The test asserts the stalled
+set equals an explicit allowlist (`{'9:Hard:Hard'}`), so this case cannot rot
+silently and **any new stalling pairing fails the suite**. Raising `wallCost` from
+0.1 to 0.4 (so walls are played only when they clearly pay) is what made every
+other combination terminate.
+
+## Tests
+
+- `test/ai/ai_opponent_test.dart` (17 tests): evaluator units in isolation (own
+  route length, opponent route length, wall impact positive/negative, immediate
+  win/loss detection, score direction); difficulty superset + honest labels;
+  legality on initial states for every size x difficulty x colour; legality across
+  60 seeded games against a random opponent; determinism; null on finished match
+  or wrong turn; all 36 AI-vs-AI matches legal with only the known stalemate
+  persisting; self-play speed; the v2.0.0 crossing rule interacting with the AI;
+  and the strength-ordering check.
+- `test/application/ai_controller_test.dart` (6 tests): the AI replies after
+  exactly the think delay, plays one legal action, passes the turn, keeps
+  R-STATE-02 for Red, pass-and-play is unaffected, restart keeps opponent and
+  difficulty, and the route accepts `MatchSetup` / bare `BoardConfig` / no argument.
+- **Strength ordering: Expert beat Easy 4 / 0** over 4 games (5x5 and 7x7, both
+  colour assignments). "Not worse" = win rate at least equal, asserted directly.
+  This is a sanity check on a small deterministic sample, **not** an ELO-style
+  proof, and is not claimed as one.
+- Termination against a *random* opponent is deliberately **not** asserted: a
+  random player can shuffle until the ply cap and that is not an AI defect.
+
+## UI
+
+Minimal, per `design.md` §20, which specifies only the four options, a brief
+explanation, and no "perfect AI" claims. Added to the existing board-preview entry
+screen (the project's real local-match entry point): a `START VS AI` button and a
+`ChoiceChip` difficulty row with the description beneath. No new visual language —
+same tokens (`AppColors`, `AppSpacing`, `AppTypography`) and the same
+segmented/caption shape as the rest of the screen. The existing HUD already shows
+whose turn it is, so the AI's turn is visible with no new component. See Q-5.2.
+
+The AI thinks for **300 ms** before moving (`kAiThinkDelay`) so its turn is
+visible and the UI does not appear to hang. `design.md` is silent on AI timing;
+this is a recorded own decision.
+
+## Quality gates (real output, 2026-09-26)
+
+| Gate | Result |
+|------|--------|
+| `dart format --set-exit-if-changed lib test` | `Formatted 67 files (0 changed)` |
+| `flutter analyze` | `No issues found!` |
+| `flutter test` | `936: All tests passed!` (913 after Part A, +23) |
+| AI + application coverage | `345: All tests passed!` — `ai_opponent.dart` 68/70 (97.14%), `ai_evaluator.dart` 48/50 (96%), controller 162/173 (93.64%) |
+| `flutter build web` | `√ Built build\web` |
+| `check_spec_consistency.py` | `Checked game_spec.md: 80 catalog rows, 65 rule IDs, 65 in matrix.` / `OK` |
+| Oracle vectors | byte-identical, SHA-256 `6F1E3C05…94BA96` — **unchanged by Part B**, as required (no rule change) |
+
+Controller coverage note: the 11 uncovered lines are pre-existing getters
+(`winner`, `isFinished`, `legalMoveTargets`, covered by the presentation tests
+that were outside this coverage run) plus 3 documented-unreachable branches — the
+pre-existing wall-victory branch and the AI's defensive `!SuccessResult` guard.
+
+## Open Questions
+
+- **Q-5.1 (new, needs an owner decision)** — resolve `game_spec.md` Q-01 (draw /
+  repetition rule) to close the 9x9 Hard-vs-Hard stalemate. Recommended default
+  is unchanged from Q-01: 3-fold repetition. This matters well beyond self-play:
+  in Phase 9 online play a deliberate replayer needs a rule, and a client-trusted
+  one would not be acceptable.
+- **Q-5.2 (new)** — `design.md` §20 specifies the AI options and their wording
+  but no AI *screen*: no layout, no player card treatment, no "AI is thinking"
+  indicator, no rematch/change-difficulty flow. The addition here is deliberately
+  minimal and consistent with the existing HUD. A real AI mode screen is Phase 11
+  UI work and was not invented here.
+- **Q-5.3 (new)** — no time budget per move. Expert takes ~1.3 s of synchronous
+  search on a 9x9 mid-game position (measured), run on a timer so no frame blocks.
+  On a much slower device that could become user-visible; if so the fix is a node
+  budget or a Web Worker, not a change to the evaluation.
+- Q-4.1 … Q-4.10 and Q-2.1 remain open and unaffected.
+- No Phase 6 work was started.
