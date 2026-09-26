@@ -515,6 +515,104 @@ Official Firebase's Flutter setup uses FlutterFire CLI and `flutterfire configur
 
 Each platform initializes Firebase correctly.
 
+### Result — Phase 7 (2026-09-26)
+
+Firebase foundation. No game rule changed; the spec checker and oracle vectors
+are untouched and still green, and the app still launches and plays exactly as in
+Phase 6.
+
+- The one-line summary that matters: **the code side of this phase is done, the
+  project side is not.** See "Not done, and why" below — the Firebase project has
+  to be configured from the Console, and nothing in this repository may be
+  allowed to pretend otherwise.
+- Dependencies added exactly as the task list requires: `firebase_core ^4.15.0`,
+  `firebase_auth ^6.7.0`, `cloud_firestore ^6.10.0`. All three were already
+  sanctioned by `rules.md`, so no rules change was needed. Free tier / Spark only:
+  the code uses nothing but `doc().get()`, `doc().set()` and `doc().delete()`.
+- Layering mirrors Phase 6 exactly, which is the whole point of the Phase 6
+  boundary: `lib/data/remote/` implements the *same* `SettingsRepository`,
+  `StatisticsRepository` and `UnfinishedMatchRepository` interfaces, against a
+  narrow `FirestoreClient` port. The application layer was not modified to
+  accommodate them.
+- Storage layout — three small documents per owner, so a user never reads a
+  growing match-history collection:
+  - `users/{uid}/settings`
+  - `users/{uid}/statistics`
+  - `users/{uid}/unfinishedMatch`
+- **The app still defaults to `shared_preferences`.** The goal is "connect
+  Firebase *without changing local game behavior*", and Phase 8 is where online
+  data is actually used, so switching the default now would change behavior for
+  no benefit. `PersistenceFactory.attachLocal` is what the router calls;
+  `attachRemote` is available and tested but not on the default path. Recorded as
+  Q-7.1.
+- `FirebaseBootstrap` initialises at startup in `main()` and **catches every
+  failure by design**: the repository deliberately ships no Firebase client
+  config, so a fresh clone cannot initialise and must still launch on local
+  storage. When the project id is a documented emulator id the status is
+  `emulator`, otherwise `ready`; anything else is `unavailable` with a
+  credential-free reason string for the log.
+- An owner seam (`userId: () async => ...`) replaces an invented auth system. It
+  is null until Phase 8 supplies a real uid, and a null owner means the
+  repositories do nothing at all rather than writing under a shared placeholder.
+- Two real defects were found by the tests rather than assumed absent:
+  1. **Totality was delegated, not guaranteed.** The first draft relied on the
+     *client* swallowing errors. A throwing client therefore propagated out of the
+     repositories, which would crash the app. The guards now live in each
+     repository, so "a failing store never breaks play" is a property of the
+     repository and not of one implementation.
+  2. **`dispose()` during an in-flight load asserted.** Persistence work is
+     deliberately unawaited, so popping a route while a read was still in flight
+     notified a disposed `ChangeNotifier`. Harmless-looking with
+     `shared_preferences`; routine once the read is network-bound, which Phase 7
+     just made it. `LocalGameController` now treats post-dispose completion as a
+     no-op, and there is a test that hits the window deterministically.
+- Tests: 18 conformance (all three repositories against the port: round-trips,
+  per-field corruption fallbacks, owner scoping, schema versioning and injected
+  transport failures) + 8 controller-boundary (the Phase 6 restart/resume
+  scenarios re-run verbatim against the Firestore repositories, which is the
+  actual proof the interface boundary held) + 9 bootstrap/factory. +35 overall.
+- `dart format --set-exit-if-changed lib test` → `Formatted 88 files (0 changed)`.
+- `flutter analyze` → `No issues found!`
+- `flutter test` → `1009: All tests passed!`
+- Coverage of the new code: the three Firestore repositories 100% / 96.15% /
+  95.45%, `in_memory_firestore_client.dart` 100%.
+  **`cloud_firestore_client.dart` is 0%** — it can only be exercised against a
+  real Firebase platform implementation or the emulator, and neither is
+  available here. Not hidden, not papered over; see Q-7.5.
+- `flutter build web` → `√ Built build\web`
+- `check_spec_consistency.py` → `OK: spec is consistent with the reference engine.`
+- Oracle vectors → byte-identical, 1,229,568 bytes, SHA-256 `6f1e3c05…`, unchanged.
+- `tool/encoding/scan_mojibake.py` → `0 files with mojibake` across 101 tracked
+  text files.
+
+### Not done, and why
+
+These parts of the task list are **not** complete, and the phase should not be
+read as if they were:
+
+- **The Firebase project was not created or verified from here.** The existing
+  project is `wallforge-efdb3`; no other project was created. Its id comes from
+  the owner and could not be independently confirmed without Console access.
+- **No platform was registered and no configuration was generated.** Committing
+  `google-services.json` / `GoogleService-Info.plist` / `firebase_options.dart`
+  is forbidden by `.gitignore` ("never merge exceptions for these paths") and
+  `rules.md` §14, so these must be produced locally from the Console. The exact
+  manual steps are in `memory.md` §13o.
+- **`firebase_auth` is a dependency, not a feature.** No sign-in UI, no user
+  record, no anonymous auth. That is Phase 8.
+- **Security rules were not authored.** They depend on the real uid model and on
+  what the Console already enforces, and Phase 10 is explicitly the phase for
+  Firestore rules. Writing speculative rules now would be guesswork.
+- **No live Firestore test ran.** The Firestore emulator is not installed and the
+  CLI is not logged in, so the conformance suite runs against an in-process
+  `InMemoryFirestoreClient` behind the same port. That proves the repositories'
+  behaviour, not Firestore's.
+
+Open: Q-7.1 (local stays the default until Phase 8 auth), Q-7.2 (device id vs
+real uid), Q-7.3 (no emulator, so no live verification), Q-7.4 (project id
+unverified from here), Q-7.5 (`CloudFirestoreClient` untested without a platform
+implementation). Full record in `memory.md` §13o.
+
 ---
 
 # Phase 8 — Online Rooms

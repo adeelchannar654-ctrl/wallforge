@@ -17,7 +17,7 @@ A wall may never remove the last route to either player's goal.
 
 ## Status
 
-**Phases 0–6 are complete.** Phase 7 (Firebase Foundation) is next. See
+**Phases 0–7 are complete, with one owner-side caveat.** See
 [`phase.md`](phase.md) for the full plan and the per-phase results.
 
 - **Phase 0 — Project Foundation.** Flutter project, platform targets, folder
@@ -45,6 +45,23 @@ A wall may never remove the last route to either player's goal.
   match are stored on the device with `shared_preferences`, behind repository
   interfaces in the domain layer so the online backend can replace the
   implementation later. A match in progress can be resumed after closing the app.
+- **Phase 7 — Firebase Foundation.** `cloud_firestore`, `firebase_core` and
+  `firebase_auth` are wired in, with Firestore-backed implementations of the
+  same three repository interfaces behind a narrow storage port, and a
+  defensive startup that survives a build with no Firebase configuration.
+  The app still defaults to local storage, so nothing about how it plays has
+  changed yet — see the note below.
+
+**Phase 7 still needs owner-side setup in the Firebase Console.** The app
+code is complete and tested, but this repository ships no Firebase client
+configuration on purpose: `.gitignore` excludes `google-services.json`,
+`GoogleService-Info.plist` and `firebase_options.dart` and says never to merge
+exceptions for them. Until those files are added locally, the app logs
+`Firebase unavailable` at startup and runs on local storage. The exact manual
+steps — registering the Android/iOS/Web apps, running `flutterfire configure`
+for project `wallforge-efdb3`, and creating the Firestore database — are in
+[`memory.md`](memory.md) §13o. Cloud persistence is not used by the app until
+Phase 8 supplies a real user id.
 
 **The rules changed after Phase 4.** `game_spec.md` is now at **v2.0.0**: a
 horizontal and a vertical wall may share an anchor, forming a legal "+". This was

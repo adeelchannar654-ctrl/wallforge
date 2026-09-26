@@ -1766,4 +1766,151 @@ that flags its own documentation can never report zero.
   stalemate) is unchanged and still open; persistence does not affect it, though
   the stalemate is now *resumable across a restart* rather than lost.
 - Q-4.1 … Q-4.10, Q-2.1 remain open and unaffected.
-- No Phase 7 work was started.
+
+---
+
+# 13o. Phase 7 Record (Firebase Foundation)
+
+## The honest headline
+
+The code side of Phase 7 is done and tested; the project side is not, and cannot
+be from here. The repository is required to ship **no** Firebase client config, so
+every "register the Android/iOS/Web app" item on the task list is a manual Console
+action. Writing a result that implied otherwise would be the actual failure here.
+
+## Layering — the Phase 6 boundary paid for itself
+
+`lib/data/remote/` implements the *same three interfaces* Phase 6 defined, so
+nothing in `lib/app` needed to change shape. The evidence is
+`test/application/firestore_controller_integration_test.dart`: it re-runs the
+Phase 6 restart-and-resume scenarios verbatim against the Firestore repositories
+and not one line of application code differs. That is the concrete payoff of
+putting the interfaces in `lib/domain/repositories/` a phase earlier.
+
+A narrow `FirestoreClient` port sits between the repositories and both the real
+`CloudFirestoreClient` and the test `InMemoryFirestoreClient`. The port exists
+because the repositories' *contract* is worth testing independently of Firestore,
+not to avoid testing the adapter — see the coverage gap below.
+
+## Storage layout
+
+`users/{uid}/settings`, `users/{uid}/statistics`, `users/{uid}/unfinishedMatch` —
+three small documents per owner. Deliberately **not** a growing match-history
+collection: reading a user's whole history to draw a stats screen costs more the
+longer they play, and Firestore bills per document read. Free tier / Spark safe:
+only `doc().get()`, `doc().set()`, `doc().delete()`.
+
+## Why local storage is still the default
+
+The goal is "connect Firebase **without changing local game behavior**", and the
+exit criterion is "each platform initializes Firebase correctly" — not "serves
+settings from the cloud". Phase 8 is where online data is used. Defaulting to
+Firestore now would change behavior for no user-visible benefit while introducing
+a network dependency into the app's startup path. `PersistenceFactory.attachLocal`
+is the default; `attachRemote` exists, is tested, and is not wired to the default
+path. This is the single most likely thing for the owner to disagree with, hence
+Q-7.1.
+
+## The owner seam instead of invented auth
+
+Repositories take `userId: () async => String?` rather than a uid string. It
+returns null until Phase 8 supplies a real authenticated uid, and **null means the
+repository does nothing at all** — not "write under a shared placeholder id",
+which would silently merge every install's data into one document. The temporary
+per-install device id belongs in the *caller*, not baked into the repositories.
+
+## Two defects the tests actually caught
+
+1. **Totality was delegated instead of guaranteed.** The first draft of the three
+   repositories assumed the *client* would swallow every error, so totality held
+   only for `CloudFirestoreClient`. The conformance test injected a *throwing*
+   client and all three "a transport failure does not throw" cases failed. The
+   guards now live in each repository, which is where the Phase 6 local
+   implementations put them, so the guarantee belongs to the repository rather
+   than to one implementation of the port.
+2. **`dispose()` during an in-flight load asserted.** Persistence calls are
+   deliberately unawaited, so popping a route while a read was in flight called
+   `notifyListeners()` on a disposed `ChangeNotifier`. This existed in Phase 6 but
+   was near-unreachable with `shared_preferences`; Phase 7 makes the read
+   network-bound, which turns it into a routine path. `LocalGameController` now
+   treats post-dispose completion as a no-op, with a test that drives the window
+   deterministically via a `Completer`-controlled repository. Worth remembering
+   that this was a Phase 6 latent bug that only Phase 7's timing made visible.
+
+Also fixed: `CloudFirestoreClient` resolved `FirebaseFirestore.instance` in its
+constructor, so merely *constructing* it threw on an unconfigured build. Resolution
+is lazy now, and `PersistenceFactory.attachRemote` falls back to local storage when
+the bootstrap result is not usable rather than handing out repositories that can
+never reach a project.
+
+## Quality gates (real output, 2026-09-26)
+
+- `dart format --set-exit-if-changed lib test` → `Formatted 88 files (0 changed)`
+- `flutter analyze` → `No issues found!`
+- `flutter test` → `1009: All tests passed!` (was 974; +35)
+- New-code coverage: settings 100%, statistics 96.15%, unfinished match 95.45%,
+  in-memory client 100%, `persistence_factory.dart` 63.16%,
+  `firebase_bootstrap.dart` 55.56%, **`cloud_firestore_client.dart` 0.00%**
+- `flutter build web` → `√ Built build\web`
+- `check_spec_consistency.py` → `OK: spec is consistent with the reference engine.`
+- Oracle vectors byte-identical: 1,229,568 bytes, SHA-256 `6f1e3c05…`, no diff
+  against HEAD
+- `tool/encoding/scan_mojibake.py` → `0 files with mojibake` (101 tracked files)
+
+The 0% on `cloud_firestore_client.dart` is the one number here that needs
+explaining rather than excusing: it is ~50 lines of `doc().get()/set()/delete()`
+inside `try/catch`, and it can only be exercised against a real Firebase platform
+implementation or the Firestore emulator. Neither exists in this environment, and
+mocking `FirebaseFirestorePlatform` for a thin adapter is not worth the test-only
+plumbing. The contract every caller depends on *is* covered, via the port. Q-7.5.
+
+## What the owner has to do manually (Q-7.4 blocks this)
+
+Nothing below can be automated from here, and none of it may be committed:
+
+1. Open `https://console.firebase.google.com/project/wallforge-efdb3/overview`
+   and confirm the project id is exactly `wallforge-efdb3` on the **Spark** plan.
+2. Add a Web app; add the Android app with the release/debug package name used
+   in `android/app/build.gradle`; add the iOS app with the bundle id in
+   `ios/Runner.xcodeproj`. The Android package name and the SHA-1/SHA-256 signing
+   keys must be registered before auth can work later.
+3. Install the FlutterFire CLI with `dart pub global activate flutterfire_cli`, then
+   run `flutterfire configure --project=wallforge-efdb3` and select android, ios and
+   web. This writes `lib/firebase_options.dart` locally.
+4. Android: download `google-services.json` into `android/app/`.
+   iOS: download `GoogleService-Info.plist` into `ios/Runner/`.
+   Both are git-ignored on purpose — do **not** add exceptions.
+5. Create the Firestore database, then re-run `flutter run` on each platform.
+   `FirebaseBootstrap` will log `ready` instead of `unavailable`; that log line is
+   the verification. Note that Phase 7 ships no `firebase_options.dart`, so on web
+   `FirebaseBootstrap.initialize()` must be given those options explicitly until
+   that file exists.
+6. For a dev environment, add a second Firestore database and point
+   `CloudFirestoreClient` at it with `useFirestoreEmulator` on a debug-only path.
+   The `FirebaseStatus.emulator` value already exists for this.
+
+## Open Questions
+
+- **Q-7.1 (new)** — local `shared_preferences` remains the default even though
+  Firestore is available. Defensible as "no behavior change", but it means Phase 7
+  ships capability the app does not use. If the intent was for cloud persistence to
+  be live at the end of Phase 7, this is the decision to revisit, and it needs a
+  real uid from Phase 8 first.
+- **Q-7.2 (new)** — the temporary per-install device id is not implemented, only
+  the seam for it. Until Phase 8 there is no way to identify an install, so remote
+  persistence is inert. Deliberate: inventing an id scheme here would be thrown
+  away the moment auth lands.
+- **Q-7.3 (new)** — no live Firestore verification. The emulator is not installed,
+  the CLI is not logged in, and no config exists. Conformance is proven against an
+  in-process double behind the same port. A schema or rules mistake would not be
+  caught by these tests.
+- **Q-7.4 (new)** — the project id `wallforge-efdb3` is owner-supplied and could
+  not be independently verified without Console access. The manual steps above are
+  the first thing that would surface a mismatch.
+- **Q-7.5 (new)** — `cloud_firestore_client.dart` has 0% coverage. Revisit when an
+  emulator is available; an emulator-based integration test is the right fix, not a
+  mock of the Firestore platform.
+- **Q-7.6 (new)** — security rules were not authored. They depend on the real uid
+  model, and `phase.md` assigns Firestore rules to Phase 10. Worth confirming that
+  is the intent rather than an omission.
+- Q-6.1 … Q-6.4, Q-5.1, Q-4.1 … Q-4.10, Q-2.1 remain open and unaffected.
