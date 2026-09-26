@@ -1,13 +1,18 @@
 # Domain layer (game engine)
 
-**Phase 2.1 in progress.** Pure-Dart game engine implementing
+**Complete.** Pure-Dart game engine implementing
 [`game_spec.md`](../../game_spec.md) v2.0.0 (9x9 board, 10 walls per player).
 
-> Status note: the engine core is implemented and the spec checker and oracle
-> vectors pass, but Phase 2 exit criteria are **not** yet met. Docs, structured
-> serialization, complete per-rule tests and quality gates are being finished in
-> Phase 2.1. Nothing in this file is claimed as "clean" unless a command was run
-> and its output quoted.
+> Status note: Phase 2's exit criteria are met and were re-verified since — the
+> spec checker reports `OK`, the 114 oracle games are byte-identical to the
+> reference generator, and the engine is exercised by the full suite. Nothing in
+> this file is claimed as "clean" unless a command was run and its output quoted.
+>
+> `game_spec.md` is now **v2.0.0** after the owner-approved crossing-wall rule
+> change: a horizontal and a vertical wall may share an anchor. The domain
+> enforces it (`MoveGenerator` and `ActionValidator` no longer reject that shape),
+> same-orientation overlap is still rejected, and `ActionFailure.wallCrosses` is
+> retained but unreachable — see `memory.md` §13l.
 
 ## Structure
 
@@ -24,7 +29,7 @@ lib/domain/
 │   ├── game_action.dart             — sealed GameAction: move | wall
 │   ├── game_status.dart             — inProgress | finished
 │   ├── game_state.dart              — game snapshot (turn-parity current player)
-│   └── action_failure.dart          — 12-reason failure taxonomy (spec §5.1)
+│   └── action_failure.dart          — failure taxonomy: 12 declared, 11 reachable (spec §5.1)
 ├── engine/
 │   ├── engine.dart                  — engine barrel
 │   ├── pathfinder.dart              — BFS route-preservation check
@@ -50,7 +55,7 @@ lib/domain/
 | Current player from turn parity | §3 R-TURN-01 | [`GameState.currentPlayer`](models/game_state.dart) |
 | Match status | §3 R-WIN-01 | [`GameStatus`](models/game_status.dart) |
 | State JSON shape | §7.1 / §16 | [`GameStateSerializer`](serialization/game_state_serializer.dart) |
-| Failure reasons (12) | §5.1 | [`ActionFailure`](models/action_failure.dart) |
+| Failure reasons (12 declared, 11 reachable — `wallCrosses` is retired) | §5.1 | [`ActionFailure`](models/action_failure.dart) |
 | Failure precedence | §5.2 | [`ActionValidator`](engine/action_validator.dart) |
 | Canonical action order | §3 R-ORDER-01 | [`MoveGenerator`](engine/move_generator.dart) |
 
@@ -78,12 +83,17 @@ lib/domain/
 ```text
 test/domain/
 ├── spec_catalog_test.dart    — spec catalog (T-* IDs) coverage
+├── worked_examples_test.dart — §8 worked examples, one per example
+├── scripted_game_test.dart   — §15 scripted game replay
+├── traceability_test.dart    — rule ID → test ID traceability
+├── cross_checks_test.dart    — independent naive re-implementation vs the engine
 └── oracle_vectors_test.dart  — cross-check against the independent oracle
 ```
 
-Phase 2.1 is expanding this to one test per catalog row, worked examples (§8), the
-scripted game (§15), a traceability test, independent cross-checks and a
-structure test.
+All of the above are implemented, not planned. Phase 2.1's scope ("one test per
+catalog row, worked examples, scripted game, traceability, independent
+cross-checks, structure test") was completed; the later phases added
+`crossing_walls_test.dart` for the v2.0.0 rule change.
 
 ## Quality gates
 
@@ -94,12 +104,13 @@ dart format --output=none --set-exit-if-changed lib test
 flutter analyze
 flutter test
 python tool/spec_verification/check_spec_consistency.py game_spec.md
+python tool/spec_verification/gen_engine_vectors.py   # must be byte-identical to
+                                                      # test/fixtures/engine_vectors.json
 ```
 
-Baseline measured at the start of Phase 2.1 (2026-09-20): `dart format` reported
-11 files changed; `flutter analyze` reported 165 issues (mostly
-`prefer_const_constructors` infos plus one `unused_element_parameter` warning);
-`flutter test` reported `+69: All tests passed!`; the spec checker printed
-`OK: spec is consistent with the reference engine.`; the oracle generator output
-was byte-identical to the committed fixture. Phase 2.1 must drive format and
-analyze to zero and add the missing tests before Phase 2 can be called complete.
+History, kept for traceability: at the start of Phase 2.1 (2026-09-20) `dart format`
+reported 11 files changed, `flutter analyze` reported 165 issues, `flutter test`
+reported `+69: All tests passed!`, and the spec checker printed `OK`. Those
+baselines were superseded. The most recent full run (2026-09-26, end of Phase 5)
+is `Formatted 67 files (0 changed)`, `No issues found!`, `936: All tests passed!`,
+checker `OK`, oracle vectors byte-identical.

@@ -17,21 +17,41 @@ A wall may never remove the last route to either player's goal.
 
 ## Status
 
-**Phase 1 — Core Game Specification** is complete: the game rules are frozen
-in [`game_spec.md`](game_spec.md) (v2.0.0) with deterministic answers for every rule,
-a test catalog, an error taxonomy, and a decision log. The independent checker
-`tool/spec_verification/check_spec_consistency.py` prints
-`OK: spec is consistent with the reference engine.`
+**Phases 0–5 are complete.** Phase 6 (Local Persistence) is the phase now
+starting. See [`phase.md`](phase.md) for the full plan and the per-phase results.
 
-**Phase 0 — Project Foundation** is also complete: the Flutter project, platform
-targets, folder structure, lint/format standards, test structure and a minimal
-application shell are in place.
+- **Phase 0 — Project Foundation.** Flutter project, platform targets, folder
+  structure, lint/format standards and test structure in place.
+- **Phase 1 — Core Game Specification.** The rules are frozen in
+  [`game_spec.md`](game_spec.md) with deterministic answers for every rule, a
+  test catalog, an error taxonomy and a decision log. The independent checker
+  `tool/spec_verification/check_spec_consistency.py` prints
+  `OK: spec is consistent with the reference engine.`
+- **Phase 2 — Game Engine.** The pure-Dart engine core in
+  [`lib/domain/`](lib/domain/README.md) implements the spec and is verified
+  against 114 independently generated oracle games.
+- **Phase 3 — Board Rendering.** The native Stitch-aligned board renderer, with
+  geometry/engine cross-checks, board widget tests, board goldens, goal-strip
+  labels and the visual-conformance checklist.
+- **Phase 4 — Interactive Local Game.** A full local pass-and-play match: tap
+  movement, wall selection, placement, preview, turn indicator, wall counter,
+  invalid-action feedback, victory screen, restart and rematch — including the
+  4.1/4.2/4.3 corrections for wall hit-testing, invalid-ghost clarity and
+  cross-axis anchor snapping.
+- **Phase 5 — Offline AI.** An AI opponent at four difficulties (Easy, Medium,
+  Hard, Expert), differing only in search depth and breadth — no randomness. It
+  plays through the same engine as a human, so it can never make an illegal move.
 
-**Phase 2 — Game Engine** is **in progress (Phase 2.1)**. The pure-Dart engine
-core in [`lib/domain/`](lib/domain/README.md) matches `game_spec.md` (commit
-`d6c7af2`), but docs, structured serialization, complete per-rule tests and
-quality gates are still being finished. Board rendering (Phase 3) and online
-multiplayer are **not** implemented yet. See [`phase.md`](phase.md) for the plan.
+**The rules changed after Phase 4.** `game_spec.md` is now at **v2.0.0**: a
+horizontal and a vertical wall may share an anchor, forming a legal "+". This was
+a deliberate owner-approved rule change, not a bug fix. Same-orientation overlap
+remains illegal, and path preservation, bounds, inventory, jump rules and the win
+condition are unchanged. The initial legal-move counts (3 moves / 128 walls) are
+unchanged. One failure reason, `wallCrosses`, became unreachable and is
+documented as retired rather than removed.
+
+**Test status:** 936 tests pass, with the spec checker reporting `OK` and the
+oracle vectors byte-identical to the reference generator.
 
 ---
 
