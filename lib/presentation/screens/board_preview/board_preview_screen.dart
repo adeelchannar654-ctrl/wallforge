@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/application/ai/ai_difficulty.dart';
+import '../../../app/application/match_setup.dart';
 import '../../../app/router/app_router.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
@@ -33,6 +35,9 @@ class _BoardPreviewScreenState extends State<BoardPreviewScreen> {
   int _ghostAnchorRow = 0;
   int _ghostAnchorCol = 0;
   int _scriptedStep = 0;
+
+  /// Phase 5: difficulty chosen for a match against the offline AI.
+  AiDifficulty _aiDifficulty = AiDifficulty.easy;
 
   // --- Presets ---------------------------------------------------------------
 
@@ -279,6 +284,41 @@ class _BoardPreviewScreenState extends State<BoardPreviewScreen> {
               ),
               const SizedBox(height: AppSpacing.lg),
 
+              // --- Start versus AI (Phase 5) ---
+              Center(
+                child: TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pushNamed(
+                      AppRoutes.game,
+                      arguments: MatchSetup.versusAi(
+                        _state.boardConfig,
+                        _aiDifficulty,
+                      ),
+                    );
+                  },
+                  style: TextButton.styleFrom(
+                    backgroundColor: AppColors.primaryContainer,
+                    foregroundColor: AppColors.onPrimaryContainer,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.xl,
+                      vertical: AppSpacing.md,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(
+                    'START VS AI',
+                    style: AppTypography.labelCaps.copyWith(
+                      color: AppColors.onPrimaryContainer,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              _buildAiDifficultySelector(),
+              const SizedBox(height: AppSpacing.lg),
+
               // --- Status ---
               _buildStatus(),
               const SizedBox(height: AppSpacing.md),
@@ -304,6 +344,40 @@ class _BoardPreviewScreenState extends State<BoardPreviewScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  /// Phase 5 AI difficulty picker.
+  ///
+  /// `design.md` §20 requires the four difficulty options and a brief honest
+  /// explanation, and explicitly forbids "perfect AI" style claims, so the
+  /// description shown is the one carried by [AiDifficulty] itself. No new
+  /// visual language: this reuses the same segmented-button shape, tokens and
+  /// caption style as the rest of the screen.
+  Widget _buildAiDifficultySelector() {
+    final text = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Wrap(
+          spacing: AppSpacing.sm,
+          alignment: WrapAlignment.center,
+          children: <Widget>[
+            for (final difficulty in AiDifficulty.values)
+              ChoiceChip(
+                label: Text(difficulty.label),
+                selected: _aiDifficulty == difficulty,
+                onSelected: (_) => setState(() => _aiDifficulty = difficulty),
+              ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Text(
+          _aiDifficulty.description,
+          textAlign: TextAlign.center,
+          style: text.bodySmall?.copyWith(color: AppColors.textSecondary),
+        ),
+      ],
     );
   }
 
