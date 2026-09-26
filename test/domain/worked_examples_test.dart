@@ -1,12 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallforge/domain/wallforge_domain.dart';
 
-/// §8 worked examples from game_spec.md v1.0.4.
+/// Â§8 worked examples from game_spec.md v2.0.0.
 ///
 /// Each test corresponds to one example in the spec.
 void main() {
-  group('§8 worked examples', () {
-    test('Example 1: Blue opening move (8,4)→(7,4)', () {
+  group('Â§8 worked examples', () {
+    test('Example 1: Blue opening move (8,4)â†’(7,4)', () {
       final s = GameState.initial();
       expect(s.pawnPosition(PlayerId.blue), const Cell(row: 8, column: 4));
       expect(s.pawnPosition(PlayerId.red), const Cell(row: 0, column: 4));
@@ -338,7 +338,7 @@ void main() {
       expect(r, isA<SuccessResult>());
     });
 
-    test('Example 10: Crossing at same anchor', () {
+    test('Example 10: Crossing at same anchor - legal (v2.0.0)', () {
       final s = GameState(
         boardConfig: const BoardConfig(),
         pawnPositions: {
@@ -365,8 +365,14 @@ void main() {
           anchor: Cell(row: 3, column: 3),
         ),
       );
-      expect(r, isA<FailureResult>());
-      expect((r as FailureResult).failure, ActionFailure.wallCrosses);
+      // v2.0.0: the "+" is legal, so both walls coexist. The "Before" state
+      // already had one wall and 9 walls left, so the placement leaves 8.
+      expect(r, isA<SuccessResult>());
+      final after = (r as SuccessResult).state;
+      expect(after.walls, hasLength(2));
+      expect(after.remainingWalls[PlayerId.blue], 8);
+      expect(after.turnNumber, 1);
+      expect(after.currentPlayer, PlayerId.red);
     });
 
     test('Example 11: Legal T-junction V(4,3) after H(3,3)', () {

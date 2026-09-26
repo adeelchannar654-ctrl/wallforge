@@ -49,7 +49,7 @@ void main() {
     );
   });
 
-  testWidgets('mobile invalid crossing ghost over own wall', (tester) async {
+  testWidgets('mobile invalid overlap ghost over own wall', (tester) async {
     await _setViewport(tester, const Size(390, 844));
     final controller = LocalGameController();
     addTearDown(controller.dispose);
@@ -61,13 +61,17 @@ void main() {
     controller.tapWallSlot(const Cell(row: 0, column: 0), WallOrientation.h);
     controller.confirm();
     controller.setMode(InteractionMode.wall);
-    controller.tapWallSlot(const Cell(row: 6, column: 5), WallOrientation.v);
+    // v2.0.0 re-base: this golden used to show an invalid *crossing* ghost.
+    // Crossing is legal now, so the same-orientation duplicate of Blue's own
+    // H(6,5) provides the conflict and keeps the identical visual scenario
+    // (invalid ghost over the owner's own wall, conflict ring behind it).
+    controller.tapWallSlot(const Cell(row: 6, column: 5), WallOrientation.h);
     await tester.pumpAndSettle();
 
-    expect(controller.pendingWallFailure, ActionFailure.wallCrosses);
+    expect(controller.pendingWallFailure, ActionFailure.wallOverlaps);
     await expectLater(
       find.byType(GameScreen),
-      matchesGoldenFile('goldens/game_screen_mobile_crossing_own_wall.png'),
+      matchesGoldenFile('goldens/game_screen_mobile_overlap_own_wall.png'),
     );
   });
 

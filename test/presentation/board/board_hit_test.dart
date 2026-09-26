@@ -368,14 +368,17 @@ void main() {
     });
 
     testWidgets(
-      'a near-miss on a conflicting groove still reports wallCrosses',
+      'a near-miss on a conflicting groove still reports wallOverlaps',
       (tester) async {
         final controller = LocalGameController();
         addTearDown(controller.dispose);
         controller.setMode(InteractionMode.wall);
+        // v2.0.0 re-base: the conflict fixture used to be a crossing wall.
+        // Crossing is legal now, so the same-orientation neighbour V(4,3)
+        // provides the conflict while keeping the identical tap geometry.
         controller.tapWallSlot(
-          const Cell(row: 3, column: 3),
-          WallOrientation.h,
+          const Cell(row: 4, column: 3),
+          WallOrientation.v,
         );
         controller.confirm();
         controller.setMode(InteractionMode.wall);
@@ -427,11 +430,82 @@ void main() {
         expect(tappedWall, (const Cell(row: 3, column: 3), WallOrientation.v));
         expect(controller.pendingWall!.anchor, const Cell(row: 3, column: 3));
         expect(controller.pendingWall!.orientation, WallOrientation.v);
-        expect(controller.pendingWallFailure, ActionFailure.wallCrosses);
+        expect(controller.pendingWallFailure, ActionFailure.wallOverlaps);
         expect(
           find.byType(BoardView),
           findsOneWidget,
           reason: 'the invalid ghost must still render',
+        );
+      },
+    );
+
+    testWidgets(
+      'v2.0.0: tapping across an existing wall now shows a valid ghost and saves',
+      (tester) async {
+        final controller = LocalGameController();
+        addTearDown(controller.dispose);
+        controller.setMode(InteractionMode.wall);
+        controller.tapWallSlot(
+          const Cell(row: 3, column: 3),
+          WallOrientation.h,
+        );
+        controller.confirm();
+        controller.setMode(InteractionMode.wall);
+        controller.tapWallSlot(
+          const Cell(row: 0, column: 0),
+          WallOrientation.h,
+        );
+        controller.confirm();
+        controller.setMode(InteractionMode.wall);
+
+        (Cell, WallOrientation)? tappedWall;
+        await tester.pumpWidget(
+          ListenableBuilder(
+            listenable: controller,
+            builder: (context, _) => board(
+              state: controller.state,
+              wallPreview: controller.pendingWall == null
+                  ? null
+                  : WallPreview(
+                      anchor: controller.pendingWall!.anchor,
+                      orientation: controller.pendingWall!.orientation,
+                      isValid: controller.pendingWallFailure == null,
+                    ),
+              onCellTap: controller.tapCell,
+              onWallSlotTap: (anchor, orientation) {
+                tappedWall = (anchor, orientation);
+                controller.tapWallSlot(anchor, orientation);
+              },
+            ),
+          ),
+        );
+
+        final origin = tester.getTopLeft(find.byType(BoardView));
+        // Straight on the V groove through the H(3,3) anchor: the crossing "+".
+        final pos = Offset((3 + 1) * g.cellSize, g.cellCenter(3, 0).dy);
+
+        await tester.tapAt(origin + pos);
+        await tester.pumpAndSettle();
+
+        expect(tappedWall, (const Cell(row: 3, column: 3), WallOrientation.v));
+        expect(
+          controller.pendingWallFailure,
+          isNull,
+          reason: 'R-WALL-08 (v2.0.0): same-anchor crossing is legal',
+        );
+
+        controller.confirm();
+        await tester.pumpAndSettle();
+
+        expect(controller.state.walls, hasLength(3));
+        expect(
+          controller.state.walls.any(
+            (w) =>
+                w.orientation == WallOrientation.v &&
+                w.anchorRow == 3 &&
+                w.anchorColumn == 3,
+          ),
+          isTrue,
         );
       },
     );

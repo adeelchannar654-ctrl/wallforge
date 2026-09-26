@@ -196,7 +196,7 @@ void main() {
       expect(controller.pendingWallFailure, ActionFailure.wallOutOfBounds);
     });
 
-    test('pending wall reports overlap and crossing failures', () {
+    test('pending wall reports overlap failures (both orientations)', () {
       final controller = LocalGameController();
       addTearDown(controller.dispose);
       controller.setMode(InteractionMode.wall);
@@ -207,8 +207,14 @@ void main() {
       controller.tapWallSlot(const Cell(row: 6, column: 5), WallOrientation.h);
       expect(controller.pendingWallFailure, ActionFailure.wallOverlaps);
 
+      // v2.0.0: the opposite orientation at the same anchor is legal, so this
+      // is no longer a failure case. Overlap coverage for the V orientation is
+      // now carried by an identical V/V duplicate.
       controller.tapWallSlot(const Cell(row: 6, column: 5), WallOrientation.v);
-      expect(controller.pendingWallFailure, ActionFailure.wallCrosses);
+      expect(controller.pendingWallFailure, isNull);
+
+      controller.tapWallSlot(const Cell(row: 7, column: 5), WallOrientation.v);
+      expect(controller.pendingWallFailure, isNull);
     });
 
     group('legal touching walls stay valid (game_spec.md §3.6 R-WALL-09)', () {
@@ -261,19 +267,53 @@ void main() {
       });
     });
 
-    test('same-anchor opposite orientation is still wallCrosses', () {
+    test('same-anchor opposite orientation is legal in v2.0.0 and is saved', () {
       final controller = _blueWallAtThenBlueTurn(3, 3);
       addTearDown(controller.dispose);
       final before = controller.state;
 
       controller.tapWallSlot(const Cell(row: 3, column: 3), WallOrientation.v);
 
-      expect(controller.pendingWallFailure, ActionFailure.wallCrosses);
+      // R-WALL-08 (v2.0.0): a same-anchor crossing "+" is legal.
+      expect(controller.pendingWallFailure, isNull);
+      controller.confirm();
+
+      // The fixture state already holds two walls, so the crossing makes three.
+      expect(controller.state.walls, hasLength(3));
+      expect(
+        controller.state.walls.any(
+          (w) =>
+              w.orientation == WallOrientation.v &&
+              w.anchorRow == 3 &&
+              w.anchorColumn == 3,
+        ),
+        isTrue,
+        reason: 'V(3,3) must be added alongside the existing H(3,3)',
+      );
+      expect(
+        controller.currentPlayer,
+        before.currentPlayer.opponent,
+        reason: 'a successful placement passes the turn',
+      );
+    });
+
+    test('same-anchor same-orientation duplicate is still wallOverlaps', () {
+      final controller = _blueWallAtThenBlueTurn(3, 3);
+      addTearDown(controller.dispose);
+      final before = controller.state;
+
+      controller.tapWallSlot(const Cell(row: 3, column: 3), WallOrientation.h);
+
+      expect(
+        controller.pendingWallFailure,
+        ActionFailure.wallOverlaps,
+        reason: 'R-WALL-07 is unchanged by v2.0.0; spec §9.3 T-WALL-004',
+      );
       controller.confirm();
       expect(
         controller.state,
         before,
-        reason: 'D-12 rejection must be a no-op',
+        reason: 'an overlap rejection must be a no-op',
       );
     });
 

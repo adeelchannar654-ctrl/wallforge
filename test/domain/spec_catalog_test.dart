@@ -435,14 +435,32 @@ void main() {
     s = (r as SuccessResult).state;
   });
   test('T-WALL-007: Wall H(3,3) exists, Blue turn -> W V 3,3', () {
-    final s = _state(walls: [_wall('H', 3, 3, PlayerId.blue)]);
+    // v2.0.0: same-anchor opposite-orientation coexistence is legal (R-WALL-08).
+    var s = _state(walls: [_wall('H', 3, 3, PlayerId.blue)]);
+    const a = GameAction.wall(
+      orientation: WallOrientation.v,
+      anchor: Cell(row: 3, column: 3),
+    );
+    final r = GameEngine.apply(s, PlayerId.blue, a);
+    expect(r, isA<SuccessResult>());
+    s = (r as SuccessResult).state;
+    expect(
+      s.walls.any((w) => w.orientation == WallOrientation.v),
+      isTrue,
+      reason: 'both walls must coexist on the board',
+    );
+    expect(s.walls, hasLength(2));
+  });
+  test('T-WALL-014: Wall V(3,3) exists, Blue turn -> W V 3,3', () {
+    // Same-anchor same-orientation duplicate remains illegal (R-WALL-07).
+    final s = _state(walls: [_wall('V', 3, 3, PlayerId.blue)]);
     const a = GameAction.wall(
       orientation: WallOrientation.v,
       anchor: Cell(row: 3, column: 3),
     );
     final r = GameEngine.apply(s, PlayerId.blue, a);
     expect(r, isA<FailureResult>());
-    expect((r as FailureResult).failure, ActionFailure.wallCrosses);
+    expect((r as FailureResult).failure, ActionFailure.wallOverlaps);
   });
   test('T-WALL-008: Wall H(3,3) exists, Blue turn -> W V 4,3', () {
     var s = _state(walls: [_wall('H', 3, 3, PlayerId.blue)]);

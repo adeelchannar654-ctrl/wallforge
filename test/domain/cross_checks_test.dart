@@ -414,23 +414,20 @@ bool _naiveIsLegalWall(
   Cell anchor,
 ) {
   final size = state.boardConfig.size;
-  // Check overlap
+  // Check overlap (same orientation only). v2.0.0: a same-anchor wall of the
+  // opposite orientation is legal, so it must not disqualify the candidate.
   for (final existing in state.walls) {
-    if (existing.orientation == orient) {
-      if (orient == WallOrientation.h) {
-        if (existing.anchorRow == anchor.row &&
-            (existing.anchorColumn - anchor.column).abs() <= 1) {
-          return false;
-        }
-      } else {
-        if (existing.anchorColumn == anchor.column &&
-            (existing.anchorRow - anchor.row).abs() <= 1) {
-          return false;
-        }
+    if (existing.orientation != orient) continue;
+    if (orient == WallOrientation.h) {
+      if (existing.anchorRow == anchor.row &&
+          (existing.anchorColumn - anchor.column).abs() <= 1) {
+        return false;
       }
-    } else if (existing.anchorRow == anchor.row &&
-        existing.anchorColumn == anchor.column) {
-      return false;
+    } else {
+      if (existing.anchorColumn == anchor.column &&
+          (existing.anchorRow - anchor.row).abs() <= 1) {
+        return false;
+      }
     }
   }
 
