@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/application/ai/ai_difficulty.dart';
+import '../../../app/application/local_game_controller.dart';
 import '../../../app/application/match_setup.dart';
 import '../../../app/router/app_router.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
+import '../../../data/local/shared_preferences_settings_repository.dart';
+import '../../../data/local/shared_preferences_statistics_repository.dart';
+import '../../../data/local/shared_preferences_unfinished_match_repository.dart';
 import '../../../domain/wallforge_domain.dart';
 import '../../board/board.dart';
 import '../../widgets/wallforge_logo.dart';
@@ -39,6 +43,38 @@ class _BoardPreviewScreenState extends State<BoardPreviewScreen> {
   /// Phase 5: difficulty chosen for a match against the offline AI.
   AiDifficulty _aiDifficulty = AiDifficulty.easy;
 
+  /// Phase 6: the saved match offered for resume, if any.
+  UnfinishedMatch? _resumableMatch;
+
+  /// Reads the stored settings and any resumable match, then preselects the
+  /// saved difficulty so the entry screen opens where the player left off.
+  ///
+  /// Failures are swallowed: the repositories already fall back to defaults, and
+  /// a storage problem must never stop the app from starting.
+  Future<void> _loadPersistedEntryState() async {
+    final settings = await const SharedPreferencesSettingsRepository().load();
+    var resumable = await const SharedPreferencesUnfinishedMatchRepository()
+        .load();
+    // A finished match is not worth resuming even if a stale save survives.
+    if (resumable != null &&
+        resumable.gameState.status == GameStatus.finished) {
+      await const SharedPreferencesUnfinishedMatchRepository().clear();
+      resumable = null;
+    }
+    if (!mounted) return;
+    setState(() {
+      _aiDifficulty = _difficultyFromName(settings.aiDifficulty);
+      _resumableMatch = resumable;
+    });
+  }
+
+  static AiDifficulty _difficultyFromName(String name) {
+    for (final difficulty in AiDifficulty.values) {
+      if (difficulty.name == name) return difficulty;
+    }
+    return AiDifficulty.easy;
+  }
+
   // --- Presets ---------------------------------------------------------------
 
   late final List<({String label, GameState state})> _presets;
@@ -46,6 +82,7 @@ class _BoardPreviewScreenState extends State<BoardPreviewScreen> {
   @override
   void initState() {
     super.initState();
+    _loadPersistedEntryState();
     _presets = [
       (label: 'Initial 9×9', state: GameState.initial()),
       (
@@ -284,6 +321,32 @@ class _BoardPreviewScreenState extends State<BoardPreviewScreen> {
               ),
               const SizedBox(height: AppSpacing.lg),
 
+              // --- Resume an unfinished match (Phase 6) ---
+              if (_resumableMatch != null) ...[
+                Center(
+                  child: OutlinedButton(
+                    onPressed: () => _resumeLastMatch(context),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.xl,
+                        vertical: AppSpacing.md,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Text(
+                      'RESUME MATCH '
+                      '(${_resumableMatch!.boardSize}x${_resumableMatch!.boardSize}'
+                      '${_resumableMatch!.versusAi ? ' vs ${_resumableMatch!.aiDifficulty}' : ''})',
+                      style: AppTypography.labelCaps,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+              ],
+
               // --- Start versus AI (Phase 5) ---
               Center(
                 child: TextButton(
@@ -345,6 +408,45 @@ class _BoardPreviewScreenState extends State<BoardPreviewScreen> {
         ),
       ),
     );
+  }
+
+  /// Builds the controller that a pushed game route will use, so persistence
+  /// and the resume affordance work on the real device.
+  ///
+  /// [AppRouter] does the same thing for the route it builds; this mirrors it
+  /// for the resume path, which needs to inspect the saved match before deciding
+  /// to push.
+  LocalGameController _controllerForResume() {
+    final controller = LocalGameController(
+      config: BoardConfig(size: _resumableMatch!.boardSize),
+    );
+    controller.attachPersistence(
+      settings: const SharedPreferencesSettingsRepository(),
+      statistics: const SharedPreferencesStatisticsRepository(),
+      unfinishedMatch: const SharedPreferencesUnfinishedMatchRepository(),
+    );
+    return controller;
+  }
+
+  Future<void> _resumeLastMatch(BuildContext context) async {
+    final controller = _controllerForResume();
+    // Adopt the saved match, then hand this controller to the game route.
+    await controller.refreshResumableMatch();
+    final saved = controller.resumableMatch;
+    if (saved == null) {
+      controller.dispose();
+      if (mounted) setState(() => _resumableMatch = null);
+      return;
+    }
+    if (!controller.resumeMatch(saved)) {
+      controller.dispose();
+      if (mounted) setState(() => _resumableMatch = null);
+      return;
+    }
+    if (context.mounted) {
+      await Navigator.of(context)
+          .pushNamed(AppRoutes.game, arguments: controller);
+    }
   }
 
   /// Phase 5 AI difficulty picker.

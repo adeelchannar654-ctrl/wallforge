@@ -11,6 +11,7 @@ import '../../domain/models/game_state.dart';
 import '../../domain/models/game_status.dart';
 import '../../domain/models/player_id.dart';
 import '../../domain/models/wall_orientation.dart';
+import '../../domain/repositories/repositories.dart';
 import 'ai/ai_difficulty.dart';
 import 'ai/ai_opponent.dart';
 
@@ -41,6 +42,12 @@ class LocalGameController extends ChangeNotifier {
   /// Creates a controller with an optional initial board config.
   ///
   /// Pass `versusAi: true` to play the offline AI opponent at [aiDifficulty].
+  ///
+  /// Persistence is **opt-in** via [attachPersistence]. With no repositories
+  /// attached the controller performs no persistence at all, which keeps its
+  /// behaviour identical to Phase 4/5 and keeps the existing synchronous tests
+  /// honest. The router attaches the `shared_preferences` implementations at
+  /// startup; tests attach the in-memory ones.
   LocalGameController({
     BoardConfig config = const BoardConfig(),
     bool versusAi = false,
@@ -53,6 +60,35 @@ class LocalGameController extends ChangeNotifier {
     // Blue always moves first (R-PLAYER-07), so the AI's first turn is
     // scheduled from the human's first action rather than here.
   }
+
+  SettingsRepository? _settingsRepository;
+  StatisticsRepository? _statisticsRepository;
+  UnfinishedMatchRepository? _unfinishedMatchRepository;
+
+  /// Attaches local storage.
+  ///
+  /// Called by the router with the `shared_preferences` implementations, and by
+  /// tests with the in-memory ones. The controller only ever talks to the
+  /// domain repository interfaces, so Phase 7 can supply a Firebase
+  /// implementation here without any change above this layer.
+  void attachPersistence({
+    required SettingsRepository settings,
+    required StatisticsRepository statistics,
+    required UnfinishedMatchRepository unfinishedMatch,
+  }) {
+    _settingsRepository = settings;
+    _statisticsRepository = statistics;
+    _unfinishedMatchRepository = unfinishedMatch;
+  }
+
+  /// The settings this controller is running with.
+  AppSettings _settings = AppSettings.defaults;
+
+  /// The live settings, after [loadPersisted] has run.
+  AppSettings get settings => _settings;
+
+  /// Whether any persistence is wired up at all.
+  bool get hasPersistence => _settingsRepository != null;
 
   GameState _state = GameState.initial();
   InteractionMode _mode = InteractionMode.move;
@@ -141,6 +177,11 @@ class LocalGameController extends ChangeNotifier {
     _aiVisitOrder.clear();
     _cancelAiTurn();
     _recordAiPosition();
+    // Starting a new match abandons any previously resumable one, and the
+    // difficulty just chosen is a setting worth keeping across restarts.
+    _resumableMatch = null;
+    unawaited(_clearUnfinished());
+    unawaited(persistSettings());
     notifyListeners();
     _scheduleAiTurn();
   }
@@ -184,6 +225,7 @@ class LocalGameController extends ChangeNotifier {
     if (_state.status == GameStatus.finished) return;
     _confirmWallPlacement = !_confirmWallPlacement;
     notifyListeners();
+    unawaited(persistSettings());
   }
 
   /// Tap a cell on the board.
@@ -203,6 +245,9 @@ class LocalGameController extends ChangeNotifier {
         _selectedCell = null;
         if (_state.status == GameStatus.finished) {
           _showingResult = true;
+          unawaited(recordFinishedMatch());
+        } else {
+          _saveUnfinished();
         }
         _mode = InteractionMode.move;
       } else if (result is FailureResult) {
@@ -251,6 +296,140 @@ class LocalGameController extends ChangeNotifier {
     _showingResult = false;
     notifyListeners();
   }
+
+  // --- Phase 6 local persistence --------------------------------------------
+
+  /// Loads persisted settings and the resumable match.
+  ///
+  /// Call once at startup. Safe to call with no repositories wired up, and safe
+  /// to call when the stored data is corrupt — the repositories fall back to
+  /// defaults and [resumableMatch] simply stays null.
+  Future<void> loadPersisted() async {
+    final settingsRepo = _settingsRepository;
+    if (settingsRepo != null) {
+      final loaded = await settingsRepo.load();
+      _settings = loaded;
+      _confirmWallPlacement = loaded.confirmWallPlacement;
+      _aiDifficulty = _difficultyFromName(loaded.aiDifficulty);
+    }
+    notifyListeners();
+  }
+
+  /// The resumable match, or null when there is none.
+  ///
+  /// Read by the entry screen to decide whether to offer "resume".
+  UnfinishedMatch? get resumableMatch => _resumableMatch;
+  UnfinishedMatch? _resumableMatch;
+
+  /// Loads the stored unfinished match without applying it.
+  ///
+  /// Separate from [loadPersisted] so the entry screen can ask "is there
+  /// something to resume?" without the controller adopting the state behind the
+  /// player's back.
+  Future<void> refreshResumableMatch() async {
+    final repo = _unfinishedMatchRepository;
+    if (repo == null) return;
+    _resumableMatch = await repo.load();
+    notifyListeners();
+  }
+
+  /// Restores a previously saved match and continues playing it.
+  ///
+  /// The state comes from the engine's own serializer, so the resumed match is
+  /// validated exactly like any other state. Returns false when [match] cannot
+  /// be adopted.
+  bool resumeMatch(UnfinishedMatch match) {
+    if (match.gameState.status == GameStatus.finished) return false;
+    _cancelAiTurn();
+    _state = match.gameState;
+    _versusAi = match.versusAi;
+    _aiDifficulty = _difficultyFromName(match.aiDifficulty);
+    _pendingWall = null;
+    _lastFailure = null;
+    _selectedCell = null;
+    _showingResult = false;
+    _mode = InteractionMode.move;
+    _aiPreviousCell = null;
+    _aiVisitOrder.clear();
+    _recordAiPosition();
+    _resumableMatch = null;
+    notifyListeners();
+    _scheduleAiTurn();
+    return true;
+  }
+
+  /// Records a finished match into the local statistics and drops the resumable
+  /// match, since a finished match is no longer resumable.
+  Future<void> recordFinishedMatch() async {
+    final winner = _state.winner;
+    if (winner == null) return;
+    unawaited(_clearUnfinished());
+    final stats = _statisticsRepository;
+    if (stats == null) return;
+    await stats.recordResult(
+      boardSize: _state.boardConfig.size,
+      difficulty: _difficultyNameFor(_versusAi, _aiDifficulty),
+      humanWon: winner == _humanPlayer,
+    );
+  }
+
+  /// The stored settings, so the entry screen can preselect a difficulty.
+  Future<AppSettings> loadSettings() async =>
+      _settingsRepository?.load() ?? AppSettings.defaults;
+
+  /// Persists the current settings (used when the player changes a setting).
+  Future<void> persistSettings() async {
+    final repo = _settingsRepository;
+    if (repo == null) return;
+    _settings = _settings.copyWith(
+      confirmWallPlacement: _confirmWallPlacement,
+      aiDifficulty: _difficultyNameFor(_versusAi, _aiDifficulty),
+    );
+    await repo.save(_settings);
+  }
+
+  /// The player a human controls; the AI always takes the other side.
+  static PlayerId get _humanPlayer =>
+      kAiPlayer == PlayerId.red ? PlayerId.blue : PlayerId.red;
+
+  /// Saves the in-progress match so it can be resumed after a restart.
+  void _saveUnfinished() {
+    final repo = _unfinishedMatchRepository;
+    if (repo == null) return;
+    if (_state.status != GameStatus.inProgress) return;
+    unawaited(
+      repo.save(
+        UnfinishedMatch(
+          gameState: _state,
+          boardSize: _state.boardConfig.size,
+          versusAi: _versusAi,
+          aiDifficulty: _difficultyNameFor(_versusAi, _aiDifficulty),
+          savedAtTurn: _state.turnNumber,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _clearUnfinished() async {
+    final repo = _unfinishedMatchRepository;
+    if (repo == null) return;
+    _resumableMatch = null;
+    await repo.clear();
+  }
+
+  /// Maps a persisted difficulty name onto the application enum, falling back to
+  /// [AiDifficulty.easy] for an unknown or missing value.
+  static AiDifficulty _difficultyFromName(String name) {
+    for (final difficulty in AiDifficulty.values) {
+      if (difficulty.name == name) return difficulty;
+    }
+    return AiDifficulty.values.first;
+  }
+
+  /// The persisted name for the current opponent. Pass-and-play matches are
+  /// recorded under `"local"`, which is not an [AiDifficulty] name.
+  static String _difficultyNameFor(bool versusAi, AiDifficulty difficulty) =>
+      versusAi ? difficulty.name : 'local';
 
   // --- Internal helpers -----------------------------------------------------
 
@@ -305,6 +484,9 @@ class LocalGameController extends ChangeNotifier {
     _lastFailure = null;
     if (_state.status == GameStatus.finished) {
       _showingResult = true;
+      unawaited(recordFinishedMatch());
+    } else {
+      _saveUnfinished();
     }
     _mode = InteractionMode.move;
     _recordAiPosition();
@@ -321,6 +503,9 @@ class LocalGameController extends ChangeNotifier {
       _lastFailure = null;
       if (_state.status == GameStatus.finished) {
         _showingResult = true;
+        unawaited(recordFinishedMatch());
+      } else {
+        _saveUnfinished();
       }
       _mode = InteractionMode.move;
     } else if (result is FailureResult) {
