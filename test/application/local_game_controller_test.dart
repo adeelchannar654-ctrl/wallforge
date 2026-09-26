@@ -211,6 +211,72 @@ void main() {
       expect(controller.pendingWallFailure, ActionFailure.wallCrosses);
     });
 
+    group('legal touching walls stay valid (game_spec.md §3.6 R-WALL-09)', () {
+      test('T-junction: V(4,3) after H(3,3) is pending-valid', () {
+        final controller = _blueWallAtThenBlueTurn(3, 3);
+        addTearDown(controller.dispose);
+
+        controller.tapWallSlot(
+          const Cell(row: 4, column: 3),
+          WallOrientation.v,
+        );
+
+        expect(
+          controller.pendingWallFailure,
+          isNull,
+          reason: 'spec §8 Example 11',
+        );
+        expect(controller.pendingWall!.orientation, WallOrientation.v);
+        expect(controller.pendingWall!.anchor, const Cell(row: 4, column: 3));
+      });
+
+      test('L-junction: V(3,4) after H(3,3) is pending-valid', () {
+        final controller = _blueWallAtThenBlueTurn(3, 3);
+        addTearDown(controller.dispose);
+
+        controller.tapWallSlot(
+          const Cell(row: 3, column: 4),
+          WallOrientation.v,
+        );
+
+        expect(controller.pendingWallFailure, isNull);
+        expect(controller.pendingWall!.anchor, const Cell(row: 3, column: 4));
+      });
+
+      test('end-to-end: H(3,5) after H(3,3) is pending-valid', () {
+        final controller = _blueWallAtThenBlueTurn(3, 3);
+        addTearDown(controller.dispose);
+
+        controller.tapWallSlot(
+          const Cell(row: 3, column: 5),
+          WallOrientation.h,
+        );
+
+        expect(
+          controller.pendingWallFailure,
+          isNull,
+          reason: 'spec §8 Example 9',
+        );
+        expect(controller.pendingWall!.anchor, const Cell(row: 3, column: 5));
+      });
+    });
+
+    test('same-anchor opposite orientation is still wallCrosses', () {
+      final controller = _blueWallAtThenBlueTurn(3, 3);
+      addTearDown(controller.dispose);
+      final before = controller.state;
+
+      controller.tapWallSlot(const Cell(row: 3, column: 3), WallOrientation.v);
+
+      expect(controller.pendingWallFailure, ActionFailure.wallCrosses);
+      controller.confirm();
+      expect(
+        controller.state,
+        before,
+        reason: 'D-12 rejection must be a no-op',
+      );
+    });
+
     test('pending wall reports a path-blocking failure', () {
       final controller = LocalGameController();
       addTearDown(controller.dispose);
@@ -395,6 +461,25 @@ void main() {
       }
     });
   });
+}
+
+/// Blue places H(row,col) through the engine, Red answers with a harmless
+/// wall, and it is Blue's turn again in wall mode with that anchor occupied.
+LocalGameController _blueWallAtThenBlueTurn(int row, int column) {
+  final controller = LocalGameController();
+  controller.setMode(InteractionMode.wall);
+  controller.tapWallSlot(Cell(row: row, column: column), WallOrientation.h);
+  controller.confirm();
+  expect(controller.state.walls, hasLength(1));
+
+  controller.setMode(InteractionMode.wall);
+  controller.tapWallSlot(const Cell(row: 0, column: 0), WallOrientation.h);
+  controller.confirm();
+  expect(controller.state.walls, hasLength(2));
+  expect(controller.currentPlayer, PlayerId.blue);
+
+  controller.setMode(InteractionMode.wall);
+  return controller;
 }
 
 GameAction _illegalAction(GameState state, Random random) {

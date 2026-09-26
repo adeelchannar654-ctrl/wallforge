@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallforge/domain/models/cell.dart';
 import 'package:wallforge/domain/models/player_id.dart';
@@ -125,13 +127,27 @@ void main() {
           expect(outside2, isNull);
         });
 
-        test('wallAnchorAt returns null at cell centres', () {
-          final center = g.cellCenter(
-            3.clamp(0, size - 1),
-            3.clamp(0, size - 1),
-          );
-          final anchor = g.wallAnchorAt(center);
-          expect(anchor, isNull);
+        test(
+          'wallHitTolerance is half the 44px target, capped below a half cell',
+          () {
+            final expected = math.min(22.0, g.cellSize / 2 - 0.5);
+            expect(g.wallHitTolerance, closeTo(expected, 0.0001));
+            expect(g.wallHitTolerance, lessThanOrEqualTo(22.0));
+            expect(g.wallHitTolerance, greaterThan(0));
+            expect(g.cellSize / 2, greaterThan(g.wallHitTolerance));
+          },
+        );
+
+        test('wallAnchorAt returns null at every cell centre', () {
+          for (var row = 0; row < size; row++) {
+            for (var column = 0; column < size; column++) {
+              expect(
+                g.wallAnchorAt(g.cellCenter(row, column)),
+                isNull,
+                reason: 'cell ($row,$column) centre must not resolve to a wall',
+              );
+            }
+          }
         });
 
         test('wallAnchorAt returns H wall anchor in horizontal groove', () {
@@ -149,6 +165,136 @@ void main() {
           expect(anchor, isNotNull);
           expect(anchor!.orientation, WallOrientation.v);
         });
+
+        test('wallAnchorAt returns null outside the board rect', () {
+          expect(g.wallAnchorAt(const Offset(-4, 40)), isNull);
+          expect(g.wallAnchorAt(Offset(g.areaSize + 4, 40)), isNull);
+          expect(g.wallAnchorAt(const Offset(40, -4)), isNull);
+          expect(g.wallAnchorAt(Offset(40, g.areaSize + 4)), isNull);
+        });
+
+        test('every valid anchor resolves at its exact grid line', () {
+          for (var r = 0; r < size - 1; r++) {
+            for (var c = 0; c < size - 1; c++) {
+              final horizontal = g.wallAnchorAt(
+                Offset(g.cellCenter(0, c).dx, g.padding + (r + 1) * g.cellSize),
+              );
+              expect(horizontal, (
+                row: r,
+                col: c,
+                orientation: WallOrientation.h,
+              ));
+
+              final vertical = g.wallAnchorAt(
+                Offset(g.padding + (c + 1) * g.cellSize, g.cellCenter(r, 0).dy),
+              );
+              expect(vertical, (
+                row: r,
+                col: c,
+                orientation: WallOrientation.v,
+              ));
+            }
+          }
+        });
+
+        test(
+          'a tap off the groove but inside tolerance keeps the same anchor',
+          () {
+            final r = size ~/ 2;
+            final c = size ~/ 2;
+            final lineY = g.padding + (r + 1) * g.cellSize;
+            final x = g.cellCenter(0, c).dx;
+
+            for (final factor in [0.25, 0.5, 0.9]) {
+              for (final sign in [-1.0, 1.0]) {
+                final pos = Offset(
+                  x,
+                  lineY + sign * g.wallHitTolerance * factor,
+                );
+                expect(
+                  g.wallAnchorAt(pos),
+                  (row: r, col: c, orientation: WallOrientation.h),
+                  reason: 'offset ${sign * factor} of tolerance must not drift',
+                );
+              }
+            }
+          },
+        );
+
+        test(
+          'tolerance boundary is inclusive and the cell-centre band is null',
+          () {
+            final r = size ~/ 2;
+            final c = size ~/ 2;
+            final lineY = g.padding + (r + 1) * g.cellSize;
+            final x = g.cellCenter(0, c).dx;
+            final expected = (row: r, col: c, orientation: WallOrientation.h);
+
+            expect(
+              g.wallAnchorAt(Offset(x, lineY + g.wallHitTolerance)),
+              expected,
+            );
+            expect(
+              g.wallAnchorAt(Offset(x, lineY - g.wallHitTolerance)),
+              expected,
+            );
+
+            final deadBand = g.cellSize - 2 * g.wallHitTolerance;
+            expect(deadBand, greaterThan(0));
+            expect(
+              g.wallAnchorAt(
+                Offset(x, lineY + g.wallHitTolerance + deadBand / 4),
+              ),
+              isNull,
+            );
+          },
+        );
+
+        test(
+          'a near-miss near the tolerance edge does not drift to the neighbour',
+          () {
+            const r = 2;
+            const c = 2;
+            final lineY = g.padding + (r + 1) * g.cellSize;
+            final x = g.cellCenter(0, c).dx;
+            final nearMiss = Offset(x, lineY + g.wallHitTolerance * 0.95);
+
+            expect(g.wallAnchorAt(nearMiss), (
+              row: r,
+              col: c,
+              orientation: WallOrientation.h,
+            ));
+            expect(
+              g.wallAnchorAt(nearMiss)?.row,
+              isNot(r + 1),
+              reason: 'the neighbouring groove must not steal the tap',
+            );
+          },
+        );
+
+        test(
+          'the nearer of two equidistant grooves wins deterministically',
+          () {
+            final line = g.padding + 2 * g.cellSize;
+            const offset = 3.0;
+
+            expect(g.wallAnchorAt(Offset(line - offset, line - offset)), (
+              row: 1,
+              col: 1,
+              orientation: WallOrientation.h,
+            ), reason: 'an exact tie resolves to horizontal');
+            expect(g.wallAnchorAt(Offset(line - 1, line - 5)), (
+              row: 1,
+              col: 1,
+              orientation: WallOrientation.v,
+            ), reason: 'the closer vertical line wins');
+            expect(g.wallAnchorAt(Offset(line - 5, line - 1)), (
+              row: 1,
+              col: 1,
+              orientation: WallOrientation.h,
+            ), reason: 'the closer horizontal line wins');
+          },
+        );
 
         test('topGoalStrip is above board', () {
           expect(g.topGoalStrip.bottom, closeTo(g.padding, 0.001));

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wallforge/app/application/local_game_controller.dart';
+import 'package:wallforge/domain/models/action_failure.dart';
 import 'package:wallforge/domain/models/board_config.dart';
 import 'package:wallforge/domain/models/cell.dart';
 import 'package:wallforge/domain/models/game_state.dart';
@@ -258,5 +260,180 @@ void main() {
         expect(find.byType(BoardView), findsOneWidget);
       }
     });
+  });
+
+  group('BoardView wall snap tolerance', () {
+    const boardExtent = 400.0;
+    const g = BoardGeometry(boardSize: 9, areaSize: boardExtent);
+
+    Widget board({
+      required GameState state,
+      WallPreview? wallPreview,
+      ValueChanged<Cell>? onCellTap,
+      void Function(Cell anchor, WallOrientation orientation)? onWallSlotTap,
+    }) {
+      return MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: boardExtent,
+            height: boardExtent,
+            child: BoardView(
+              state: state,
+              wallPreview: wallPreview,
+              onCellTap: onCellTap,
+              onWallSlotTap: onWallSlotTap,
+            ),
+          ),
+        ),
+      );
+    }
+
+    testWidgets('a tap inside the tolerance resolves to the intended anchor', (
+      tester,
+    ) async {
+      Cell? tappedCell;
+      (Cell, WallOrientation)? tappedWall;
+      await tester.pumpWidget(
+        board(
+          state: GameState.initial(),
+          onCellTap: (cell) => tappedCell = cell,
+          onWallSlotTap: (anchor, orientation) =>
+              tappedWall = (anchor, orientation),
+        ),
+      );
+
+      final origin = tester.getTopLeft(find.byType(BoardView));
+      final lineY = (3 + 1) * g.cellSize;
+      final pos = Offset(
+        g.cellCenter(0, 3).dx,
+        lineY + g.wallHitTolerance * 0.6,
+      );
+
+      await tester.tapAt(origin + pos);
+      await tester.pumpAndSettle();
+
+      expect(tappedWall, (const Cell(row: 3, column: 3), WallOrientation.h));
+      expect(tappedCell, isNull);
+    });
+
+    testWidgets('a tap beyond the tolerance falls through to the cell', (
+      tester,
+    ) async {
+      Cell? tappedCell;
+      (Cell, WallOrientation)? tappedWall;
+      await tester.pumpWidget(
+        board(
+          state: GameState.initial(),
+          onCellTap: (cell) => tappedCell = cell,
+          onWallSlotTap: (anchor, orientation) =>
+              tappedWall = (anchor, orientation),
+        ),
+      );
+
+      final origin = tester.getTopLeft(find.byType(BoardView));
+      final lineY = (3 + 1) * g.cellSize;
+      final deadBand = g.cellSize - 2 * g.wallHitTolerance;
+      final pos = Offset(
+        g.cellCenter(0, 3).dx,
+        lineY + g.wallHitTolerance + deadBand / 4,
+      );
+
+      await tester.tapAt(origin + pos);
+      await tester.pumpAndSettle();
+
+      expect(tappedWall, isNull);
+      expect(tappedCell, const Cell(row: 4, column: 3));
+    });
+
+    testWidgets('a tap at a cell centre is never captured as a wall anchor', (
+      tester,
+    ) async {
+      Cell? tappedCell;
+      (Cell, WallOrientation)? tappedWall;
+      await tester.pumpWidget(
+        board(
+          state: GameState.initial(),
+          onCellTap: (cell) => tappedCell = cell,
+          onWallSlotTap: (anchor, orientation) =>
+              tappedWall = (anchor, orientation),
+        ),
+      );
+
+      final origin = tester.getTopLeft(find.byType(BoardView));
+      await tester.tapAt(origin + g.cellCenter(4, 3));
+      await tester.pumpAndSettle();
+
+      expect(tappedWall, isNull);
+      expect(tappedCell, const Cell(row: 4, column: 3));
+    });
+
+    testWidgets(
+      'a near-miss on a conflicting groove still reports wallCrosses',
+      (tester) async {
+        final controller = LocalGameController();
+        addTearDown(controller.dispose);
+        controller.setMode(InteractionMode.wall);
+        controller.tapWallSlot(
+          const Cell(row: 3, column: 3),
+          WallOrientation.h,
+        );
+        controller.confirm();
+        controller.setMode(InteractionMode.wall);
+        controller.tapWallSlot(
+          const Cell(row: 0, column: 0),
+          WallOrientation.h,
+        );
+        controller.confirm();
+        controller.setMode(InteractionMode.wall);
+
+        (Cell, WallOrientation)? tappedWall;
+        await tester.pumpWidget(
+          ListenableBuilder(
+            listenable: controller,
+            builder: (context, _) => board(
+              state: controller.state,
+              wallPreview: controller.pendingWall == null
+                  ? null
+                  : WallPreview(
+                      anchor: controller.pendingWall!.anchor,
+                      orientation: controller.pendingWall!.orientation,
+                      isValid: controller.pendingWallFailure == null,
+                    ),
+              onCellTap: controller.tapCell,
+              onWallSlotTap: (anchor, orientation) {
+                tappedWall = (anchor, orientation);
+                controller.tapWallSlot(anchor, orientation);
+              },
+            ),
+          ),
+        );
+
+        final origin = tester.getTopLeft(find.byType(BoardView));
+        final lineX = (3 + 1) * g.cellSize;
+        final pos = Offset(
+          lineX + g.wallHitTolerance * 0.9,
+          g.cellCenter(3, 0).dy,
+        );
+
+        expect(g.wallAnchorAt(pos), (
+          row: 3,
+          col: 3,
+          orientation: WallOrientation.v,
+        ), reason: 'the near-miss must not drift to a neighbouring anchor');
+
+        await tester.tapAt(origin + pos);
+        await tester.pumpAndSettle();
+
+        expect(tappedWall, (const Cell(row: 3, column: 3), WallOrientation.v));
+        expect(controller.pendingWall!.anchor, const Cell(row: 3, column: 3));
+        expect(controller.pendingWall!.orientation, WallOrientation.v);
+        expect(controller.pendingWallFailure, ActionFailure.wallCrosses);
+        expect(
+          find.byType(BoardView),
+          findsOneWidget,
+          reason: 'the invalid ghost must still render',
+        );
+      },
+    );
   });
 }

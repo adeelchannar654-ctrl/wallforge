@@ -165,5 +165,80 @@ void main() {
         matchesGoldenFile('goldens/board_view_11x11.png'),
       );
     });
+    testWidgets('invalid ghost crossing a same-owner wall', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            backgroundColor: const Color(0xFF0E131E),
+            body: Center(
+              child: SizedBox(
+                width: 640,
+                height: 640,
+                child: BoardView(
+                  state: _stateWithBlueWall(),
+                  showCoordinates: false,
+                  wallPreview: const WallPreview(
+                    anchor: Cell(row: 3, column: 3),
+                    orientation: WallOrientation.v,
+                    isValid: false,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await expectLater(
+        find.byType(BoardView),
+        matchesGoldenFile('goldens/board_invalid_ghost_same_owner.png'),
+      );
+    });
+
+    testWidgets('valid ghost beside an existing wall', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            backgroundColor: const Color(0xFF0E131E),
+            body: Center(
+              child: SizedBox(
+                width: 640,
+                height: 640,
+                child: BoardView(
+                  state: _stateWithBlueWall(),
+                  showCoordinates: false,
+                  wallPreview: const WallPreview(
+                    anchor: Cell(row: 3, column: 5),
+                    orientation: WallOrientation.h,
+                    isValid: true,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await expectLater(
+        find.byType(BoardView),
+        matchesGoldenFile('goldens/board_valid_ghost_beside_wall.png'),
+      );
+    });
   });
+}
+
+/// Blue owns H(3,3), so an invalid ghost at the same anchor has to stay
+/// distinguishable from a solid wall of the owner's own colour.
+GameState _stateWithBlueWall() {
+  var state = GameState.initial();
+  final result = GameEngine.apply(
+    state,
+    PlayerId.blue,
+    const GameAction.wall(
+      orientation: WallOrientation.h,
+      anchor: Cell(row: 3, column: 3),
+    ),
+  );
+  if (result is SuccessResult) state = result.state;
+  return state;
 }

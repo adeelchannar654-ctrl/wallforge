@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallforge/app/application/local_game_controller.dart';
+import 'package:wallforge/domain/models/action_failure.dart';
 import 'package:wallforge/domain/models/cell.dart';
 import 'package:wallforge/domain/models/wall_orientation.dart';
 import 'package:wallforge/presentation/screens/game/game_screen.dart';
@@ -45,6 +46,28 @@ void main() {
     await expectLater(
       find.byType(GameScreen),
       matchesGoldenFile('goldens/game_screen_mobile_invalid_wall.png'),
+    );
+  });
+
+  testWidgets('mobile invalid crossing ghost over own wall', (tester) async {
+    await _setViewport(tester, const Size(390, 844));
+    final controller = LocalGameController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(_app(controller));
+    controller.setMode(InteractionMode.wall);
+    controller.tapWallSlot(const Cell(row: 6, column: 5), WallOrientation.h);
+    controller.confirm();
+    controller.setMode(InteractionMode.wall);
+    controller.tapWallSlot(const Cell(row: 0, column: 0), WallOrientation.h);
+    controller.confirm();
+    controller.setMode(InteractionMode.wall);
+    controller.tapWallSlot(const Cell(row: 6, column: 5), WallOrientation.v);
+    await tester.pumpAndSettle();
+
+    expect(controller.pendingWallFailure, ActionFailure.wallCrosses);
+    await expectLater(
+      find.byType(GameScreen),
+      matchesGoldenFile('goldens/game_screen_mobile_crossing_own_wall.png'),
     );
   });
 

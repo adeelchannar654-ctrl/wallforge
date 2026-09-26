@@ -132,6 +132,69 @@ void main() {
       );
     });
 
+    testWidgets('move mode: a tap near a groove still moves the pawn', (
+      tester,
+    ) async {
+      await _setViewport(tester, const Size(1024, 768));
+      final controller = LocalGameController();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(_gameApp(controller));
+
+      final board = find.byType(BoardView);
+      final origin = tester.getTopLeft(board);
+      final extent = tester.getSize(board).width;
+      final geometry = BoardGeometry(
+        boardSize: controller.state.boardConfig.size,
+        areaSize: extent,
+      );
+
+      final pos = Offset(
+        geometry.cellCenter(7, 4).dx,
+        7 * geometry.cellSize + geometry.wallHitTolerance * 0.5,
+      );
+      expect(
+        geometry.wallAnchorAt(pos),
+        isNotNull,
+        reason: 'the point is inside wall-snap range',
+      );
+
+      await tester.tapAt(origin + pos);
+      await tester.pump();
+
+      expect(
+        controller.state.pawnPosition(PlayerId.blue),
+        const Cell(row: 7, column: 4),
+      );
+      expect(controller.state.turnNumber, 1);
+    });
+
+    testWidgets('a legal wall beside an existing wall shows a valid ghost', (
+      tester,
+    ) async {
+      await _setViewport(tester, const Size(1024, 768));
+      final controller = LocalGameController();
+      addTearDown(controller.dispose);
+      controller.setMode(InteractionMode.wall);
+      controller.tapWallSlot(const Cell(row: 3, column: 3), WallOrientation.h);
+      controller.confirm();
+      controller.setMode(InteractionMode.wall);
+      controller.tapWallSlot(const Cell(row: 0, column: 0), WallOrientation.h);
+      controller.confirm();
+      controller.setMode(InteractionMode.wall);
+      controller.tapWallSlot(const Cell(row: 3, column: 5), WallOrientation.h);
+      await tester.pumpWidget(_gameApp(controller));
+      await tester.pump();
+
+      final board = tester.widget<BoardView>(find.byType(BoardView));
+      expect(controller.pendingWallFailure, isNull);
+      expect(board.wallPreview!.isValid, isTrue);
+      expect(find.byKey(const ValueKey('pending-wall-failure')), findsNothing);
+      final confirm = tester.widget<TextButton>(
+        find.widgetWithText(TextButton, 'CONFIRM'),
+      );
+      expect(confirm.onPressed, isNotNull);
+    });
+
     testWidgets('desktop breakpoint renders without overflow', (tester) async {
       await _setViewport(tester, const Size(768, 900));
       final controller = LocalGameController();
