@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallforge/domain/wallforge_domain.dart';
 
-/// Â§15 scripted game from game_spec.md v2.0.0.
+/// §15 scripted game from game_spec.md v2.0.0.
 ///
 /// A complete 17-action game demonstrating moves, wall placements, and a Blue win.
 void main() {
-  group('Â§15 scripted game', () {
+  group('§15 scripted game', () {
     test('complete 17-action game matches spec exactly', () {
       var state = GameState.initial();
       expect(state.pawnPosition(PlayerId.blue), const Cell(row: 8, column: 4));
@@ -227,7 +227,7 @@ void main() {
       expect(wallOrientations, contains('H(6,5)'));
       expect(wallOrientations, contains('H(1,3)'));
 
-      // Verify JSON matches Â§16 finished-state JSON
+      // Verify JSON matches §16 finished-state JSON
       final j = GameStateSerializer.toJson(state);
       expect(j['status'], 'finished');
       expect(j['winner'], 'blue');
@@ -240,7 +240,7 @@ void main() {
       expect(j['pawnPositions']['red']['column'], 4);
     });
 
-    test('Â§16 finished-state JSON round-trip', () {
+    test('§16 finished-state JSON round-trip', () {
       // Build the state from the scripted game
       var state = GameState.initial();
 
@@ -293,7 +293,7 @@ void main() {
         state = (r as SuccessResult).state;
       }
 
-      // Serialize and verify against Â§16 expected JSON
+      // Serialize and verify against §16 expected JSON
       final j = GameStateSerializer.toJson(state);
       expect(j['schemaVersion'], 1);
       expect(j['boardConfig'], {'size': 9, 'wallsPerPlayer': 10});

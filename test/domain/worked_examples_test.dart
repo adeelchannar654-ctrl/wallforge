@@ -1,12 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallforge/domain/wallforge_domain.dart';
 
-/// Â§8 worked examples from game_spec.md v2.0.0.
+/// §8 worked examples from game_spec.md v2.0.0.
 ///
 /// Each test corresponds to one example in the spec.
 void main() {
-  group('Â§8 worked examples', () {
-    test('Example 1: Blue opening move (8,4)â†’(7,4)', () {
+  group('§8 worked examples', () {
+    test('Example 1: Blue opening move (8,4)→(7,4)', () {
       final s = GameState.initial();
       expect(s.pawnPosition(PlayerId.blue), const Cell(row: 8, column: 4));
       expect(s.pawnPosition(PlayerId.red), const Cell(row: 0, column: 4));

@@ -25,7 +25,7 @@ enum InteractionMode {
 
 /// How long the AI "thinks" before moving.
 ///
-/// `design.md` Â§20 does not specify AI timing, so this is a recorded own
+/// `design.md` §20 does not specify AI timing, so this is a recorded own
 /// decision: an instant reply reads as a glitch, and a long pause reads as a
 /// hang. A short, fixed delay is predictable and costs nothing.
 const Duration kAiThinkDelay = Duration(milliseconds: 300);
@@ -36,7 +36,7 @@ const PlayerId kAiPlayer = PlayerId.red;
 /// Phase 4 application layer: local pass-and-play game controller.
 ///
 /// Manages a single match between two human players sharing a screen.
-/// Strictly ChangeNotifier-based per Â§2.3; no Flutter widget imports.
+/// Strictly ChangeNotifier-based per §2.3; no Flutter widget imports.
 class LocalGameController extends ChangeNotifier {
   /// Creates a controller with an optional initial board config.
   ///

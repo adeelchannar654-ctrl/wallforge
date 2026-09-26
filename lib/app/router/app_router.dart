@@ -6,7 +6,7 @@ import '../../app/application/match_setup.dart';
 import '../../presentation/screens/board_preview/board_preview_screen.dart';
 import '../../presentation/screens/game/game_screen.dart';
 
-/// Canonical route paths for the application (see `architecture.md` Â§18).
+/// Canonical route paths for the application (see `architecture.md` §18).
 class AppRoutes {
   const AppRoutes._();
 

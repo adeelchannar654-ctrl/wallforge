@@ -6,7 +6,7 @@ import '../../../domain/models/wall.dart';
 
 /// Static evaluation of a position from one player's point of view.
 ///
-/// Implements the four inputs `phase.md` Â§Phase 5 "Version 1" asks for, using
+/// Implements the four inputs `phase.md` §Phase 5 "Version 1" asks for, using
 /// the domain pathfinder rather than a private BFS:
 ///
 /// * **Shortest path** â€” [ownRouteLength] for the evaluated player.
@@ -20,7 +20,7 @@ import '../../../domain/models/wall.dart';
 ///   side, which the search turns into a decisive score.
 ///
 /// No game rules live here: this class only *scores* states produced by
-/// `GameEngine`. Rule evaluation is never duplicated (`architecture.md` Â§9).
+/// `GameEngine`. Rule evaluation is never duplicated (`architecture.md` §9).
 class AiEvaluator {
   const AiEvaluator._();
 

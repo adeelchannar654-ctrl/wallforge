@@ -13,46 +13,46 @@
 
 ```text
 lib/domain/
-â”œâ”€â”€ wallforge_domain.dart            â€” barrel export
-â”œâ”€â”€ models/
-â”‚   â”œâ”€â”€ models.dart                  â€” model barrel
-â”‚   â”œâ”€â”€ board_config.dart            â€” board geometry (default 9x9, 10 walls/player)
-â”‚   â”œâ”€â”€ cell.dart                    â€” immutable (row, column) coordinate
-â”‚   â”œâ”€â”€ player_id.dart               â€” blue/red enum with opponent
-â”‚   â”œâ”€â”€ wall_orientation.dart        â€” h/v enum
-â”‚   â”œâ”€â”€ wall.dart                    â€” wall model (anchor + orientation + owner)
-â”‚   â”œâ”€â”€ game_action.dart             â€” sealed GameAction: move | wall
-â”‚   â”œâ”€â”€ game_status.dart             â€” inProgress | finished
-â”‚   â”œâ”€â”€ game_state.dart              â€” game snapshot (turn-parity current player)
-â”‚   â””â”€â”€ action_failure.dart          â€” 12-reason failure taxonomy (spec Â§5.1)
-â”œâ”€â”€ engine/
-â”‚   â”œâ”€â”€ engine.dart                  â€” engine barrel
-â”‚   â”œâ”€â”€ pathfinder.dart              â€” BFS route-preservation check
-â”‚   â”œâ”€â”€ move_generator.dart          â€” enumerates legal actions for current player
-â”‚   â”œâ”€â”€ action_validator.dart        â€” validates one action against a state
-â”‚   â””â”€â”€ game_engine.dart             â€” validate + apply, turn transitions
-â””â”€â”€ serialization/
-    â”œâ”€â”€ serialization.dart           â€” serialization barrel
-    â””â”€â”€ game_state_serializer.dart   â€” GameState JSON (spec Â§7.1 / Â§16)
+├── wallforge_domain.dart            — barrel export
+├── models/
+│   ├── models.dart                  — model barrel
+│   ├── board_config.dart            — board geometry (default 9x9, 10 walls/player)
+│   ├── cell.dart                    — immutable (row, column) coordinate
+│   ├── player_id.dart               — blue/red enum with opponent
+│   ├── wall_orientation.dart        — h/v enum
+│   ├── wall.dart                    — wall model (anchor + orientation + owner)
+│   ├── game_action.dart             — sealed GameAction: move | wall
+│   ├── game_status.dart             — inProgress | finished
+│   ├── game_state.dart              — game snapshot (turn-parity current player)
+│   └── action_failure.dart          — 12-reason failure taxonomy (spec §5.1)
+├── engine/
+│   ├── engine.dart                  — engine barrel
+│   ├── pathfinder.dart              — BFS route-preservation check
+│   ├── move_generator.dart          — enumerates legal actions for current player
+│   ├── action_validator.dart        — validates one action against a state
+│   └── game_engine.dart             — validate + apply, turn transitions
+└── serialization/
+    ├── serialization.dart           — serialization barrel
+    └── game_state_serializer.dart   — GameState JSON (spec §7.1 / §16)
 ```
 
 ## Spec conformance (source of truth: `game_spec.md` v2.0.0)
 
 | Concern | Spec | Dart symbol |
 | --- | --- | --- |
-| Board size / config | Â§2 (odd, â‰¥5; default 9) | [`BoardConfig`](models/board_config.dart) |
-| Walls per player | Â§2 (default 10) | [`BoardConfig.wallsPerPlayer`](models/board_config.dart) |
-| Start cells (Blue bottom, Red top) | Â§3 R-BOARD-03 | [`BoardConfig.blueStart`](models/board_config.dart), [`BoardConfig.redStart`](models/board_config.dart) |
-| Goal rows | Â§3 R-BOARD-04 | [`BoardConfig.blueGoalRow`](models/board_config.dart), [`BoardConfig.redGoalRow`](models/board_config.dart) |
-| Coordinate order `(row, column)` | Â§3 R-BOARD-01 | [`Cell`](models/cell.dart) |
-| Wall identity (anchor + orientation + owner) | Â§3 R-WALL-01 | [`Wall`](models/wall.dart) |
-| Single action type (move \| wall) | Â§4 / Â§5 | [`GameAction`](models/game_action.dart) |
-| Current player from turn parity | Â§3 R-TURN-01 | [`GameState.currentPlayer`](models/game_state.dart) |
-| Match status | Â§3 R-WIN-01 | [`GameStatus`](models/game_status.dart) |
-| State JSON shape | Â§7.1 / Â§16 | [`GameStateSerializer`](serialization/game_state_serializer.dart) |
-| Failure reasons (12) | Â§5.1 | [`ActionFailure`](models/action_failure.dart) |
-| Failure precedence | Â§5.2 | [`ActionValidator`](engine/action_validator.dart) |
-| Canonical action order | Â§3 R-ORDER-01 | [`MoveGenerator`](engine/move_generator.dart) |
+| Board size / config | §2 (odd, ≥5; default 9) | [`BoardConfig`](models/board_config.dart) |
+| Walls per player | §2 (default 10) | [`BoardConfig.wallsPerPlayer`](models/board_config.dart) |
+| Start cells (Blue bottom, Red top) | §3 R-BOARD-03 | [`BoardConfig.blueStart`](models/board_config.dart), [`BoardConfig.redStart`](models/board_config.dart) |
+| Goal rows | §3 R-BOARD-04 | [`BoardConfig.blueGoalRow`](models/board_config.dart), [`BoardConfig.redGoalRow`](models/board_config.dart) |
+| Coordinate order `(row, column)` | §3 R-BOARD-01 | [`Cell`](models/cell.dart) |
+| Wall identity (anchor + orientation + owner) | §3 R-WALL-01 | [`Wall`](models/wall.dart) |
+| Single action type (move \| wall) | §4 / §5 | [`GameAction`](models/game_action.dart) |
+| Current player from turn parity | §3 R-TURN-01 | [`GameState.currentPlayer`](models/game_state.dart) |
+| Match status | §3 R-WIN-01 | [`GameStatus`](models/game_status.dart) |
+| State JSON shape | §7.1 / §16 | [`GameStateSerializer`](serialization/game_state_serializer.dart) |
+| Failure reasons (12) | §5.1 | [`ActionFailure`](models/action_failure.dart) |
+| Failure precedence | §5.2 | [`ActionValidator`](engine/action_validator.dart) |
+| Canonical action order | §3 R-ORDER-01 | [`MoveGenerator`](engine/move_generator.dart) |
 
 ## Responsibility
 
@@ -77,12 +77,12 @@ lib/domain/
 
 ```text
 test/domain/
-â”œâ”€â”€ spec_catalog_test.dart    â€” spec catalog (T-* IDs) coverage
-â””â”€â”€ oracle_vectors_test.dart  â€” cross-check against the independent oracle
+├── spec_catalog_test.dart    — spec catalog (T-* IDs) coverage
+└── oracle_vectors_test.dart  — cross-check against the independent oracle
 ```
 
-Phase 2.1 is expanding this to one test per catalog row, worked examples (Â§8), the
-scripted game (Â§15), a traceability test, independent cross-checks and a
+Phase 2.1 is expanding this to one test per catalog row, worked examples (§8), the
+scripted game (§15), a traceability test, independent cross-checks and a
 structure test.
 
 ## Quality gates
