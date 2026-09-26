@@ -35,6 +35,13 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
 
+  # Phase 6 local persistence. Already approved in `rules.md` §4 with exactly
+  # this purpose ("Small local settings / Tutorial completion / Simple local
+  # preferences"), so it is the project's own pre-decided mechanism rather than a
+  # new dependency. Phase 7 swaps in a Firebase implementation behind the same
+  # repository interfaces; this package is not used for online state.
+  shared_preferences: ^2.3.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
