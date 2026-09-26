@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../domain/models/cell.dart';
@@ -24,6 +26,17 @@ class BoardGeometry {
   /// Outer padding inside the board container.
   final double padding;
 
+  /// Minimum interactive target clearance required by the Stitch design system.
+  ///
+  /// Source: `stitch_wallforge_ui_design_system/stitch_wallforge_ui_design_system/
+  /// tactical_neon_arena/DESIGN.md` §Layout & Spacing — "Interactive grid points,
+  /// wall slots, and control pills require an absolute minimum hit-target
+  /// clearance of 44x44px."
+  static const double minimumInteractiveTarget = 44;
+
+  /// Guard band that keeps a cell-centre tap outside wall-snap range.
+  static const double _cellCentreGuard = 0.5;
+
   // --- Derived metrics -------------------------------------------------------
 
   /// Effective board area after padding.
@@ -35,6 +48,20 @@ class BoardGeometry {
   /// Gap between cells (the groove). Matches the visual 1.5/9 ratio ≈ 1.67%.
   /// In code.html L89: `gap-1.5` on a 9-col grid inside `p-1.5`.
   double get grooveWidth => cellSize * 0.04;
+
+  /// Perpendicular snap radius used by [wallAnchorAt].
+  ///
+  /// Half of [minimumInteractiveTarget] (22 px), capped just under half a cell so
+  /// that a tap at a cell centre can never be captured as a wall anchor. On
+  /// boards dense enough that half a cell is smaller than 22 px the cap wins, so
+  /// the reachable target is `2 * wallHitTolerance` px on that board.
+  double get wallHitTolerance => math.min(
+    minimumInteractiveTarget / 2,
+    math.max(0, cellSize / 2 - _cellCentreGuard),
+  );
+
+  /// The movement-grid rect that wall and cell anchors are derived from.
+  Rect get boardRect => Rect.fromLTWH(padding, padding, boardArea, boardArea);
 
   /// Cell rect (without groove offset).
   Rect cellRect(int row, int column) {
@@ -94,47 +121,64 @@ class BoardGeometry {
     return Cell(row: row, column: col);
   }
 
-  /// Wall anchor at pixel position [position], or null.
+  /// Wall anchor nearest to pixel [position], or null.
   ///
-  /// For a horizontal wall, the anchor row is the row whose bottom groove
-  /// contains the position. For a vertical wall, the anchor column is the
-  /// column whose right groove contains the position.
+  /// The nearest horizontal and the nearest vertical grid line are measured and
+  /// the closer one decides the orientation; exact ties resolve to horizontal,
+  /// matching `game_spec.md` §3.10 R-ORDER-03 (H before V) and the previous
+  /// scan order. The snapped index on that axis is the nearest line, the other
+  /// index is the cell that contains the tap, so each anchor stays centred on
+  /// its own two-cell bar. When the winning line is farther away than
+  /// [wallHitTolerance] the result is null, so a tap in the middle of a cell is
+  /// never reported as a wall slot.
   ({int row, int col, WallOrientation orientation})? wallAnchorAt(
     Offset position,
   ) {
-    // Check horizontal (groove between rows).
-    for (var r = 0; r < boardSize - 1; r++) {
-      final grooveY = padding + (r + 1) * cellSize - grooveWidth;
-      final grooveRect = Rect.fromLTWH(
-        padding,
-        grooveY,
-        boardArea,
-        grooveWidth * 1.5,
+    if (!boardRect.contains(position)) return null;
+
+    final horizontal = _nearestAnchorLine(position.dy);
+    final vertical = _nearestAnchorLine(position.dx);
+    final tolerance = wallHitTolerance;
+
+    if (horizontal.distance <= vertical.distance &&
+        horizontal.distance <= tolerance) {
+      return (
+        row: horizontal.index,
+        col: _anchorCellIndex(position.dx),
+        orientation: WallOrientation.h,
       );
-      if (grooveRect.contains(position)) {
-        final col = ((position.dx - padding) / cellSize).floor();
-        if (col >= 0 && col < boardSize - 1) {
-          return (row: r, col: col, orientation: WallOrientation.h);
-        }
-      }
     }
-    // Check vertical (groove between columns).
-    for (var c = 0; c < boardSize - 1; c++) {
-      final grooveX = padding + (c + 1) * cellSize - grooveWidth;
-      final grooveRect = Rect.fromLTWH(
-        grooveX,
-        padding,
-        grooveWidth * 1.5,
-        boardArea,
+    if (vertical.distance <= tolerance) {
+      return (
+        row: _anchorCellIndex(position.dy),
+        col: vertical.index,
+        orientation: WallOrientation.v,
       );
-      if (grooveRect.contains(position)) {
-        final row = ((position.dy - padding) / cellSize).floor();
-        if (row >= 0 && row < boardSize - 1) {
-          return (row: row, col: c, orientation: WallOrientation.v);
-        }
-      }
     }
     return null;
+  }
+
+  /// Index of the cell that contains [coordinate], clipped to the valid anchor
+  /// range `0..boardSize - 2`.
+  int _anchorCellIndex(double coordinate) {
+    final cell = ((coordinate - padding) / cellSize).floor();
+    if (cell < 0) return 0;
+    if (cell > boardSize - 2) return boardSize - 2;
+    return cell;
+  }
+
+  /// Nearest interior grid line to [coordinate] on one axis.
+  ///
+  /// Returns the anchor index (`line index - 1`) and the absolute distance.
+  /// A coordinate exactly between two lines resolves to the higher line index.
+  ({int index, double distance}) _nearestAnchorLine(double coordinate) {
+    final cell = (coordinate - padding) / cellSize;
+    final clamped = cell.clamp(1.0, (boardSize - 1).toDouble());
+    final line = clamped.round();
+    return (
+      index: line - 1,
+      distance: (coordinate - (padding + line * cellSize)).abs(),
+    );
   }
 
   // --- Coordinate labels -----------------------------------------------------

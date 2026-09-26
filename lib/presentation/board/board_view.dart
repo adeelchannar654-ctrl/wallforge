@@ -102,7 +102,8 @@ class BoardView extends StatelessWidget {
   }
 
   void _handleTap(Offset position, BoardGeometry geometry) {
-    // Check wall slot first (narrower targets take priority).
+    // Wall slots win inside the snap tolerance; taps beyond it fall through to
+    // the cell underneath, so the two targets never both fire for one tap.
     final wallAnchor = geometry.wallAnchorAt(position);
     if (wallAnchor != null && onWallSlotTap != null) {
       onWallSlotTap!(

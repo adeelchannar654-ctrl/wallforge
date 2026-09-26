@@ -123,8 +123,12 @@ class GameScreen extends StatelessWidget {
                   activeGlow: controller.state.status == GameStatus.inProgress
                       ? controller.currentPlayer
                       : null,
-                  onCellTap: controller.tapCell,
-                  onWallSlotTap: controller.tapWallSlot,
+                  onCellTap: controller.mode == InteractionMode.move
+                      ? controller.tapCell
+                      : null,
+                  onWallSlotTap: controller.mode == InteractionMode.wall
+                      ? controller.tapWallSlot
+                      : null,
                 ),
               ),
               if (pendingFailure != null)
