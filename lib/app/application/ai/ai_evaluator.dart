@@ -9,13 +9,13 @@ import '../../../domain/models/wall.dart';
 /// Implements the four inputs `phase.md` §Phase 5 "Version 1" asks for, using
 /// the domain pathfinder rather than a private BFS:
 ///
-/// * **Shortest path** â€” [ownRouteLength] for the evaluated player.
-/// * **Opponent shortest path** â€” [opponentRouteLength].
-/// * **Wall impact** â€” the opponent's route length already reflects every wall
+/// * **Shortest path** — [ownRouteLength] for the evaluated player.
+/// * **Opponent shortest path** — [opponentRouteLength].
+/// * **Wall impact** — the opponent's route length already reflects every wall
 ///   on the board, including the one just placed, so a wall is scored by the
 ///   route length it forces on the opponent. [wallCost] additionally charges a
 ///   small fee per wall spent so a useless wall is never preferred over a move.
-/// * **Immediate tactical opportunities** â€” [hasImmediateWin] and
+/// * **Immediate tactical opportunities** — [hasImmediateWin] and
 ///   [hasImmediateLoss] see whether the position is already decided on either
 ///   side, which the search turns into a decisive score.
 ///

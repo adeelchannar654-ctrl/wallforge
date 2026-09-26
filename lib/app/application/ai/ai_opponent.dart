@@ -22,7 +22,7 @@ typedef _Candidate = ({GameAction action, GameState next});
 /// Legality is never re-implemented. Candidates come from
 /// [GameEngine.legalActions], which is the validated set, and the chosen action
 /// is re-applied through [GameEngine.apply], so an AI action can never bypass
-/// the rules â€” the v2.0.0 crossing rule included.
+/// the rules — the v2.0.0 crossing rule included.
 ///
 /// Determinism: no randomness, no clock, no time budget. The candidate
 /// shortlist is ordered by (score descending, canonical index ascending), so the
@@ -32,7 +32,7 @@ class AiOpponent {
 
   /// Score penalty for moving straight back into the cell just vacated.
   ///
-  /// Not a game rule â€” purely an AI tie-break, and the reason matches terminate
+  /// Not a game rule — purely an AI tie-break, and the reason matches terminate
   /// at all. `game_spec.md` Q-01 (a draw/repetition rule) is still Unresolved,
   /// so the engine legitimately allows a position to repeat forever.
   ///
@@ -49,7 +49,7 @@ class AiOpponent {
   ///    same game: when the pawn is down to two legal moves and **both** are
   ///    already visited, every candidate carries the same penalty, the ranking is
   ///    unchanged, and the shuffle continues. The penalty therefore has to be
-  ///    asymmetric â€” exactly one square, the one just left â€” and a *set* of
+  ///    asymmetric — exactly one square, the one just left — and a *set* of
   ///    previously visited cells cannot work, especially on a cluttered board
   ///    where the pawn has legitimately passed through most of them.
   ///
@@ -57,7 +57,7 @@ class AiOpponent {
   /// remains the best available legal move and play continues.
   /// Score penalty for recreating a position that has already occurred.
   ///
-  /// Not a game rule â€” purely an AI guard, and the reason matches reliably
+  /// Not a game rule — purely an AI guard, and the reason matches reliably
   /// terminate. `game_spec.md` Q-01 (a draw/repetition rule) is still
   /// Unresolved, so the engine legitimately allows a position to repeat forever,
   /// and nothing forces a game to end. A heuristic evaluator alone does not
@@ -139,7 +139,7 @@ class AiOpponent {
   ///
   /// [visitOrder] maps [positionKey] to the ply at which that position was last
   /// occupied, and is how the AI avoids replaying a position it has already been
-  /// in. It is optional â€” the AI plays legal moves without it â€” but matches may
+  /// in. It is optional — the AI plays legal moves without it — but matches may
   /// then fail to terminate, because `game_spec.md` Q-01 leaves the draw /
   /// repetition rule Unresolved and the engine therefore allows a position to
   /// repeat forever.
@@ -233,7 +233,7 @@ class AiOpponent {
   /// The top [width] legal actions for the side to move, best first.
   ///
   /// Every candidate is produced by [GameEngine.apply], so each [GameState] here
-  /// is a genuine engine state â€” no rule logic is duplicated. Ranking uses only
+  /// is a genuine engine state — no rule logic is duplicated. Ranking uses only
   /// the depth-0 evaluation, which is what makes a wider shortlist a strict
   /// superset of a narrower one at the same depth.
   static List<_Candidate> _shortlist(

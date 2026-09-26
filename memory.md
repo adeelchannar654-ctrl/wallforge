@@ -1718,6 +1718,33 @@ The lesson for future phases: on this shell, edit Markdown and Dart sources with
 the editor tools or an explicit UTF-8 read, never a bare `Get-Content`/
 `Add-Content` round-trip, and scan for mojibake before declaring a phase done.
 
+**Correction, found in Phase 7.** The Phase 6 repair did **not** actually finish
+the job. Its per-line loop only *counted* a line as fixed when the reversed line
+had zero markers left, but it wrote the file unconditionally — so lines that
+reversed only partially were written back still containing mojibake. An
+independent re-scan after `ee39281` found 10 residual instances of the
+three-character sequence `U+00E2 U+20AC U+201D` (an em dash, UTF-8 `E2 80 94`,
+decoded as CP1252) in doc comments in
+`lib/app/application/ai/ai_evaluator.dart` (4) and
+`lib/app/application/ai/ai_opponent.dart` (6). The original scan also missed them
+because its marker set did not include the `U+00E2 U+20AC` lead pair that a
+*truncated* sequence produces.
+The replacement scan is committed at
+`tool/encoding/scan_mojibake.py`. It differs from the first one by decoding
+strictly, matching a much wider character class — the `U+00E2 U+20AC` pair and
+its continuations, `U+00E2 U+201A`, the mis-encoded `U+00A7` / `U+00B0` /
+`U+00B1` / `U+00A0` characters, `U+00C3`, the mis-encoded dashes and quotation
+marks, and U+FFFD — excluding the read-only Stitch reference folder, and printing
+each hit with `ascii()` so the console's own encoding cannot hide the evidence.
+It reported `FILES_WITH_MOJIBAKE=2` before the fix and `RESULT: 0 files with
+mojibake` after it; that output — not an assertion — is the confirmation.
+`dart format` and `flutter analyze` remained green throughout, since the damage
+was doc comments only.
+
+Note for whoever runs the scan next: this paragraph deliberately names the
+offending code points instead of reproducing the byte sequences, because a scan
+that flags its own documentation can never report zero.
+
 ## Open Questions
 
 - **Q-6.1 (new)** — should a *finished* match offer a "play again with the same
