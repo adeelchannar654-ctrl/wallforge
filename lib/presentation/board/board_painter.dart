@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -66,6 +67,7 @@ class BoardPainter extends CustomPainter {
     _drawGoalStrips(canvas, size);
     if (showCoordinates) _drawCoordinates(canvas, size);
     _drawLegalMoveRings(canvas, size);
+    _drawConflictHalos(canvas);
     _drawWalls(canvas, size);
     _drawGhostWall(canvas, size);
     _drawPawns(canvas, size);
@@ -309,23 +311,111 @@ class BoardPainter extends CustomPainter {
     final g = geometry;
     final wp = wallPreview!;
     final rect = g.wallRect(wp.anchor.row, wp.anchor.column, wp.orientation);
-
-    final color = wp.isValid ? AppColors.primaryContainer : AppColors.error;
-    final alpha = wp.isValid ? 0.35 : 0.50;
-
-    final ghostPaint = Paint()
-      ..color = color.withValues(alpha: alpha)
-      ..style = PaintingStyle.fill;
-
     final ghostRrect = RRect.fromRectAndRadius(rect, const Radius.circular(4));
-    canvas.drawRRect(ghostRrect, ghostPaint);
 
-    // Glow outline
-    final glowPaint = Paint()
-      ..color = color.withValues(alpha: 0.4)
+    if (wp.isValid) {
+      _drawGhostFill(canvas, ghostRrect, AppColors.primaryContainer, 0.35);
+      _drawGhostOutline(canvas, ghostRrect, AppColors.primaryContainer, 0.4);
+      return;
+    }
+
+    // Stitch DESIGN.md §Components specifies only a 50% crimson invalid ghost
+    // and no pattern. Phase 4.2 keeps that fill and adds a dashed centre line
+    // plus a stronger outline, because a diagonal hatch merges into a solid
+    // fill at the rendered bar thickness (grooveWidth * 1.5).
+    _drawGhostFill(canvas, ghostRrect, AppColors.error, 0.50);
+    _drawInvalidGhostDashes(canvas, ghostRrect);
+    _drawGhostOutline(canvas, ghostRrect, AppColors.error, 0.95);
+  }
+
+  void _drawGhostFill(Canvas canvas, RRect bounds, Color color, double alpha) {
+    canvas.drawRRect(
+      bounds,
+      Paint()
+        ..color = color.withValues(alpha: alpha)
+        ..style = PaintingStyle.fill,
+    );
+  }
+
+  void _drawGhostOutline(
+    Canvas canvas,
+    RRect bounds,
+    Color color,
+    double alpha,
+  ) {
+    canvas.drawRRect(
+      bounds,
+      Paint()
+        ..color = color.withValues(alpha: alpha)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+  }
+
+  void _drawInvalidGhostDashes(Canvas canvas, RRect bounds) {
+    final rect = bounds.outerRect;
+    final thickness = math.min(rect.width, rect.height);
+    final dashPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.9)
+      ..strokeWidth = math.min(1.5, thickness * 0.6)
+      ..strokeCap = StrokeCap.butt;
+    const dash = 4.0;
+    const gap = 3.0;
+    const inset = 1.0;
+
+    if (rect.width >= rect.height) {
+      final y = rect.center.dy;
+      for (var x = rect.left + inset; x < rect.right - inset; x += dash + gap) {
+        canvas.drawLine(
+          Offset(x, y),
+          Offset(math.min(x + dash, rect.right - inset), y),
+          dashPaint,
+        );
+      }
+    } else {
+      final x = rect.center.dx;
+      for (var y = rect.top + inset; y < rect.bottom - inset; y += dash + gap) {
+        canvas.drawLine(
+          Offset(x, y),
+          Offset(x, math.min(y + dash, rect.bottom - inset)),
+          dashPaint,
+        );
+      }
+    }
+  }
+
+  /// Paints an error-coloured aura behind every placed wall that the invalid
+  /// ghost physically touches.
+  ///
+  /// This is a purely geometric highlight: it never decides legality, it only
+  /// ties the visible failure to the existing wall segment involved. Walls that
+  /// merely touch end-to-end do not overlap and are not marked, and because the
+  /// aura is painted before the walls the placed wall stays fully visible.
+  void _drawConflictHalos(Canvas canvas) {
+    final wp = wallPreview;
+    if (wp == null || wp.isValid) return;
+
+    final g = geometry;
+    final ghostRect = g.wallRect(
+      wp.anchor.row,
+      wp.anchor.column,
+      wp.orientation,
+    );
+    final haloPaint = Paint()
+      ..color = AppColors.error.withValues(alpha: 0.95)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
-    canvas.drawRRect(ghostRrect, glowPaint);
+
+    for (final wall in state.walls) {
+      if (!g.wallRectFromModel(wall).overlaps(ghostRect)) continue;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          g.wallRectFromModel(wall).inflate(2),
+          const Radius.circular(6),
+        ),
+        haloPaint,
+      );
+    }
   }
 
   void _drawPawns(Canvas canvas, Size size) {
