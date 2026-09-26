@@ -776,3 +776,16 @@ Where a geometry constraint makes the full target impossible (for example dense
 boards, where half a cell is smaller than 22 px), the snapping radius must be
 capped so that a neighbouring target class is never captured, and the deviation
 must be recorded as an open question in `memory.md`. Established in Phase 4.2.
+
+### Rule 18
+
+A hit target that is rendered wider or taller than one grid cell must resolve to
+the logical slot **whose centre is nearest the tap**, never to the grid cell that
+merely contains it. A wall bar spans two cells, so a cell-floor lets a tap in the
+far half of the bar resolve to the neighbouring anchor, which produces a correct
+rejection for a slot the player never aimed at. The resulting ownership boundary
+falls on the midpoint between adjacent slot centres, so every target keeps a
+symmetric region around its own centre. When a value is computed by division and
+compared against a half-cell boundary, an exact tie must resolve identically on
+every board size, including sizes whose cell size is not exactly representable in
+binary. Established in Phase 4.3; recorded in `memory.md` §13k.

@@ -260,6 +260,46 @@ Phase 4.2 fixes two confirmed interaction defects. No game rule changed.
   the tap-driven reproduction could not be completed in the automated session
   (see `memory.md` §13j for the exact status).
 
+### Result — Phase 4.3 (2026-09-26)
+
+Phase 4.3 fixes the remaining wall-anchor defect: the axis that runs *along* a wall's
+own bar still used a plain cell-floor, so a tap in the second half of a bar resolved
+to the next anchor along and could be rejected as overlapping a wall the player never
+aimed at. No game rule changed.
+
+- Root cause confirmed by a diagnostic sweep run **before** any code change: 7 of 8
+  sweeps failed, with the entire second half of a bar (`t = 4.00`–`4.90` of a bar
+  spanning `t ∈ [3, 5)`) resolving one anchor to the right. The 5×5 sweep passed only
+  because the board-edge clamp masked the bug there. `LocalGameController` was
+  re-read and is not at fault.
+- Fix: `_anchorCellIndex` snaps to the nearest **bar span centre** (`round(t - 1)`)
+  instead of the cell containing the tap, clamped to `0..boardSize - 2`. Ownership
+  boundaries move to the midpoints *between* adjacent bar centres. `_nearestAnchorLine`
+  and `wallHitTolerance` are untouched.
+- Two corrections to the phase brief, recorded because the files win: the suggested
+  `- 0.5` formula is algebraically identical to the old `floor()` and would have
+  changed nothing, and the "whole rendered width" invariant is impossible for
+  overlapping two-cell bars — the tested invariant is the bar's central half.
+- A real binary-float bug surfaced: an exact midpoint rounded down on board sizes 7
+  and 11 (where `450 / 7` and `450 / 11` are not representable) and up on 5 and 9.
+  Fixed with a `1e-9`-of-a-cell tie nudge and locked by a test on all four sizes.
+- Tests: 114 board-geometry tests (was 102), 19 board hit tests (was 16) — empty-slot
+  seven-position sweep, transition-zone determinism with non-flap, and a real
+  `tester.tapAt` that saves the wall. Goldens unchanged; nothing visual moved.
+- `dart format --set-exit-if-changed lib test` → `Formatted 60 files (0 changed)`.
+- `flutter analyze` → `No issues found!`
+- `flutter test` → `891: All tests passed!`
+- `flutter test --coverage test/presentation/board` → `378: All tests passed!`
+  (`board_geometry.dart` 100%, `board_view.dart` 100%, `board_painter.dart` 98.79%)
+- `flutter build web` → `√ Built build\web`
+- `check_spec_consistency.py` → `OK: spec is consistent with the reference engine.`
+- Oracle vectors → unchanged; fixture still 1,240,761 bytes.
+- Browser: the owner's complaint was **reproduced on a pre-fix build** ("Wall overlaps
+  an existing wall.", CONFIRM disabled, not saved) and the identical tap sequence
+  **saves** on the fixed build. Off-centre taps now place walls correctly. Phase 4.2's
+  CDP blocker was solved by enabling Flutter's semantics tree and dispatching real
+  `PointerEvent`s; see `memory.md` §13k.
+
 ---
 
 # Phase 5 — Offline AI

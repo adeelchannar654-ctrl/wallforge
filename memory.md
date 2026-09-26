@@ -979,7 +979,7 @@ source of validity.
 | P4.2-3 | The reachable target is `2 × wallHitTolerance` | Consequence of P4.2-2. 9×9 at 640 px → 22 px radius (44 px target); 9×9 at 450 px → 21.72 px; 11×11 at 450 px → 19.95 px (39.9 px target). Below the DESIGN minimum on dense boards — logged as **Q-4.6**. |
 | P4.2-4 | An exact H/V distance tie resolves to horizontal | `game_spec.md` §3.10 R-ORDER-03 orders walls H before V; the pre-fix scan also tested H first. |
 | P4.2-5 | A coordinate exactly between two parallel lines resolves to the higher line index | Deterministic rounding. No source defines it. |
-| P4.2-6 | Along-wall anchor index = the cell containing the tap | Preserves the pre-4.2 mapping; keeps each anchor centred on its own two-cell bar. |
+| P4.2-6 | Along-wall anchor index = the cell containing the tap | Preserves the pre-4.2 mapping; keeps each anchor centred on its own two-cell bar. **Superseded by P4.3-1** — the claim that this "keeps each anchor centred" was wrong; see §13k. |
 | P4.2-7 | Invalid ghost = 50% `AppColors.error` fill + white dashed centre line + 95% outline | Stitch DESIGN.md §Components "Wall Ghost" specifies only "Flashes intense translucent crimson (#EF4444) at 50%" and **no pattern**. A diagonal hatch was implemented first and rejected: at the rendered bar thickness (`grooveWidth * 1.5` ≈ 2.8-4.3 px) 1.5 px diagonal strokes merge into a solid fill. A dashed centre line stays legible at every board size and is independent of owner colour. |
 | P4.2-8 | Conflict emphasis = 2 px `AppColors.error` ring behind each overlapping placed wall | `design.md` §11 and §29 specify no treatment. Smallest change that ties the failure to the existing segment without hiding it. |
 | P4.2-9 | Mode-exclusive board callbacks | `design.md` §11 (wall feedback) and §28 (input); `architecture.md` §2.1 keeps input handling in presentation. |
@@ -1051,4 +1051,185 @@ source of validity.
 
 - Q-4.6 (dense-board target) and Q-4.7 (invalid-ghost colour token) are new.
 - Q-4.1 to Q-4.5 remain open and unchanged.
+- No Phase 5 work was started.
+
+---
+
+# 13k. Phase 4.3 Record (Cross-Axis Wall-Anchor Snapping)
+
+Status: **complete — verified 2026-09-26.** No Phase 5 work was started. No game rule
+changed. The owner's original complaint is reproduced on the pre-fix build and gone
+after the fix, in a real browser.
+
+## §1 diagnostic result: the hypothesis is CONFIRMED
+
+The diagnostic sweep was written and run **before** any implementation change
+(commit `ff9e15e`, test named `DIAGNOSTIC 4.3`). It swept the cursor across the full
+rendered `wallRect` of one anchor, on the groove line, for both orientations, on all
+four board sizes.
+
+Result: **7 of the 8 sweeps failed.** For anchor `H(3,3)` on a 7×9-cell board
+(`areaSize` 450) the real failure output was:
+
+```
+x=257.14 (t=4.00) -> (col: 4, orientation: WallOrientation.h, row: 3)
+x=263.57 (t=4.10) -> (col: 4, orientation: WallOrientation.h, row: 3)
+...
+x=315.00 (t=4.90) -> (col: 4, orientation: WallOrientation.h, row: 3)
+```
+
+`t` is the fractional cell coordinate. The bar spans `t ∈ [3, 5)`; samples with
+`t < 4` resolved to the intended anchor 3 and **every sample from `t = 4.00` to
+`t = 4.90` — the entire second half of the bar — resolved to anchor 4, one column
+to the right.** The V sweep showed the same drift on rows, plus the documented
+orientation tie at exactly `t = 4.00`.
+
+The 5×5 H sweep passed **only by accident**: `c = 3` is the last valid anchor on
+that board, so the old clamp to `0..boardSize - 2` absorbed the drift. The bug was
+present on every board size for any non-final anchor.
+
+So `BoardGeometry._anchorCellIndex` was indeed doing a plain `floor()` on whichever
+whole cell contained the tap, with no tolerance and no centring. `LocalGameController`
+was re-read in full and is **not** at fault: `tapWallSlot` clears `_pendingWall`
+correctly and `pendingWallFailure` calls `GameEngine.validate` with the right player
+and orientation. The cause is purely the cross-axis coordinate mapping.
+
+## Two corrections to the prompt's own suggestions (the files win)
+
+- The prompt proposed `((coordinate - padding) / cellSize - 0.5).round()`. That is
+  **algebraically identical to `floor(t)`** for the relevant range, so it would have
+  changed nothing. The value that actually centres a two-cell bar is `round(t - 1)`,
+  because a bar anchored at `c` has its centre at `c + 1`. Implemented that instead.
+- The prompt asked the diagnostic to assert that *every* sample across the bar's
+  **full rendered width** returns the same anchor. That invariant is geometrically
+  impossible: adjacent bars overlap by one cell (`H(c)` spans `c..c+2`, `H(c+1)`
+  starts at `c+1`), so no single anchor can own its whole 2-cell width. The permanent
+  test asserts the achievable invariant — the bar's **central half**, `t ∈ [c+0.5,
+  c+1.5)`, which is centred on the bar's visual midpoint — and that the midpoint
+  itself resolves to the bar. This was reported rather than quietly dropped.
+
+## The fix (`board_geometry.dart`, one function)
+
+`_anchorCellIndex` now snaps to the nearest **bar span centre** instead of the cell
+containing the tap:
+
+```dart
+final anchor = ((coordinate - padding) / cellSize - 1 + _anchorMidpointNudge).round();
+```
+
+- Ownership boundaries move to the midpoints *between* adjacent bar centres
+  (`t = c + 1.5`) instead of arbitrary interior cell boundaries (`t = c + 1`).
+- A bar now owns the right half of its first cell plus the left half of its second
+  cell, so the whole central half — including the visual midpoint — is stable.
+- Clamping to `0..boardSize - 2` is retained; no cross-axis `null` cutoff was added
+  (see P4.3-4).
+- `_nearestAnchorLine` and `wallHitTolerance` are **untouched** — no evidence showed
+  the primary axis was defective, and the prompt scoped them out.
+
+### A real float bug the new tests exposed
+
+The first implementation used a bare `.round()` and broke
+`every valid anchor resolves at its exact grid line` on board sizes **7 and 11 only**.
+Cause: the fractional cell coordinate comes from a division, and `450 / 7` and
+`450 / 11` are not representable in binary, so a value that is mathematically exactly
+`k + 0.5` arrived as `k + 0.5 - 1e-15` and rounded **down**. Sizes 5 and 9 divide
+exactly and were unaffected. Fixed with `_anchorMidpointNudge = 1e-9` of a cell
+(~1e-7 px on a 640 px board, far below pointer precision), which only decides exact
+ties. Locked by `ownership changes only at the midpoint between two bar centres`,
+which asserts the exact boundary resolves to the higher anchor on all four sizes.
+
+## Phase 4.3 source ledger
+
+| ID | Value / behaviour implemented | Source |
+|----|--------------------------------|--------|
+| P4.3-1 | Cross-axis anchor = nearest bar span centre, `round(t - 1)`, clamped to `0..boardSize - 2` | `game_spec.md` §3.6 defines a wall anchor as covering **two** edges/cells, and `test/presentation/board/wall_geometry_cross_check_test.dart` asserts the bar's rect spans `c .. c + 2` against `BlockedEdges`. The span centre is therefore `c + 1`. **Supersedes P4.2-6.** |
+| P4.3-2 | Ownership boundary = midpoint between adjacent bar centres; exact boundary → higher anchor | No source defines it. Smaller predictable behaviour: it is the perpendicular bisector of the two competing spans, so neither bar can steal the other's centre, and it is symmetric with the existing primary-axis rule (P4.2-5). |
+| P4.3-3 | Midpoint ties are nudged by `1e-9` of a cell before rounding | Own decision, forced by measurement: without it the same tap resolved differently on board sizes 7 and 11 than on 5 and 9 (see above). Recorded so the constant is not "simplified" away later. |
+| P4.3-4 | No cross-axis `null` cutoff; clamping to the valid anchor range is sufficient | Own decision, as the prompt required a justification. The cross-axis coordinate is only consulted *after* a primary-axis line has already won within `wallHitTolerance`, and a tap past the last valid anchor is outside the board or already resolved to another line. Adding a second radius would create a new dead zone for no gain. |
+| P4.3-5 | A V bar's exact midpoint still resolves to horizontal | Unchanged from P4.2-4. A V bar's cross-axis midpoint lies exactly on a horizontal grid line, where both orientations are legal, so `R-ORDER-03` (H before V) still decides. Now explicitly tested. |
+| P4.3-6 | Ghost rendering is unchanged | `BoardPainter._drawGhostWall` draws from the logical `WallPreview.anchor` via `wallRect` and does no coordinate math of its own, so the fix changes *which* anchor a tap resolves to, never where a ghost is drawn. Confirmed: all 891 tests, including 7 board and 4 game-screen goldens, pass with no golden update. |
+
+## Before / after evidence for the owner's complaint
+
+End-to-end regression in `test/presentation/board/board_hit_test.dart`, built through
+`LocalGameController` (engine-backed, not hand-built state): Blue `H(6,3)` and Red
+`H(6,6)` are placed, then Blue aims at the genuinely empty, legal `H(6,1)` (offset 2
+from `H(6,3)`) from seven cursor positions across that slot.
+
+- **Before the fix — 3 of 3 new tests failed.** `aiming across an empty slot
+  footprint resolves to that slot`:
+  `Expected (col: 1) / Actual (col: 2)`. `a real tap on the empty slot saves the
+  wall` failed with a null-check on `pendingWall`, and `the transition zone is
+  deterministic and stable` failed the same way.
+- **After the fix — all pass**, `pendingWallFailure == null` at every one of the
+  seven positions, and a real `tester.tapAt` on the bar's centre saves the wall and
+  passes the turn.
+
+### Real browser, before and after (headless Chrome, CDP)
+
+The Phase 4.2 blocker was that synthesized CDP input never reached the board's
+`GestureDetector`. That was solved this session by enabling Flutter's semantics tree
+(`flt-semantics-placeholder`) so app state can be read as text, and dispatching real
+`PointerEvent` pairs at the `flt-glass-pane` coordinates. The same pointer tap
+sequence was run against a pre-fix build and the fixed build:
+
+| Step (identical taps) | Pre-fix build | Fixed build |
+|---|---|---|
+| tap 1, row 4, `t = 3.5` | wall saved, turn passes | wall saved, turn passes |
+| tap 2, row 4, `t = 2.3`, aiming at the empty bar centred at `t = 2.0` | **"Wall overlaps an existing wall."**, CONFIRM **disabled**, **not saved** | no failure, CONFIRM enabled, **saved** (Red 10 → 9), turn passes to Blue |
+
+Further fixed-build checks: a bar-centre tap saved (Blue 10 → 9), and two more walls
+placed at deliberately off-centre positions (`t = 2.3`, `t = 6.8`) both saved, ending
+Blue 8 / Red 8. Screenshots: `wf43-prefix-repro.png` (pre-fix rejection) and
+`wf43-fixed-after.png` (fixed, four walls on the board).
+
+## Tests added or updated
+
+- `test/presentation/board/board_geometry_test.dart`: 114 tests (was 102). Per size
+  5/7/9/11: the H bar holds its anchor across the whole central half of its rendered
+  width; the same for V (excluding the exact midpoint, which is the documented H tie,
+  asserted separately in both directions); and ownership changes only at the midpoint
+  between two bar centres, including the exact boundary.
+- `test/presentation/board/board_hit_test.dart`: 19 tests (was 16). New
+  `BoardView cross-axis anchor selection (Phase 4.3)` group: the empty-slot
+  seven-position sweep asserting `pendingWallFailure == null`; transition-zone
+  determinism and non-flap across five repeats; and a real `tester.tapAt` on the bar
+  centre that saves the wall and passes the turn.
+- `test/presentation/board/wall_geometry_cross_check_test.dart` and every other board
+  test were read in full and need **no** change — none of them call `wallAnchorAt`.
+- Goldens: **no update.** Nothing visual moved (P4.3-6).
+
+## Quality gates (real output, 2026-09-26)
+
+| Gate | Command | Result |
+|------|---------|--------|
+| Formatting | `dart format --set-exit-if-changed lib test` | `Formatted 60 files (0 changed)` |
+| Analyzer | `flutter analyze` | `No issues found!` |
+| Full tests | `flutter test` | `891: All tests passed!` (876 after Phase 4.2, +15) |
+| Board coverage | `flutter test --coverage test/presentation/board` | `378: All tests passed!` — `board_geometry.dart` 70/70 (100%), `board_view.dart` 43/43 (100%), `board_painter.dart` 244/247 (98.79%, the same 3 pre-existing `shouldRepaint` clauses), `wall_inventory_notches.dart` 0/27 (not exercised by this folder) |
+| Build | `flutter build web` | `√ Built build\web` |
+| Spec checker | `python tool/spec_verification/check_spec_consistency.py` | `Checked game_spec.md: 79 catalog rows, 65 rule IDs, 65 in matrix.` / `OK: spec is consistent with the reference engine.` |
+| Oracle vectors | `gen_engine_vectors.py` vs `test/fixtures/engine_vectors.json` | no diff, `git status --porcelain` clean; fixture still 1,240,761 bytes |
+
+`game_spec.md`, the spec checker, the vector generator, `test/fixtures/engine_vectors.json`,
+`lib/domain/`, and `pubspec.yaml` were **not** modified.
+
+## Deferred and open
+
+- Q-4.6 (dense-board target) and Q-4.7 (invalid-ghost colour token) remain open and
+  unchanged. Q-4.1 to Q-4.5 remain open and unchanged.
+- **Q-4.8 (new)** — the primary axis still snaps with a bare `.round()` in
+  `_nearestAnchorLine` (P4.2-5) and therefore has the same exact-midpoint float
+  fragility that P4.3-3 fixed on the cross axis. No test currently exercises a primary
+  axis tie, so no failing test proves it is a defect, and the prompt scoped the primary
+  axis out. Left unchanged on purpose; if a primary-axis tie ever needs to be
+  guaranteed, reuse `_anchorMidpointNudge`.
+- **Q-4.9 (new, prompt-vs-file)** — the prompt stated that every sample across a
+  bar's *full* rendered width must resolve to that bar. That is impossible for
+  overlapping two-cell spans; the implemented and tested invariant is the central
+  half. Needs owner confirmation that the weaker invariant is acceptable.
+- **Q-4.10 (new)** — the manual browser harness works only because Flutter's
+  semantics tree is force-enabled, so state can be read as DOM text. Without it,
+  board taps are still unverifiable through CDP. Worth capturing as a repeatable
+  script if more manual browser verification is needed.
 - No Phase 5 work was started.

@@ -722,6 +722,25 @@ Beyond the tolerance a wall tap is not a wall tap at all, and cell and wall
 targets are resolved for the active interaction mode only, so neither can swallow
 the other.
 
+### Wall anchor along the bar (Phase 4.3)
+
+A wall is drawn as a bar spanning two cell widths, so the tap that selects it has to
+resolve along that bar as well as across it. The along-bar axis snaps to the
+**nearest bar centre**, not to the cell that happens to contain the tap. Each bar
+therefore owns the central half of its rendered width — the right half of its first
+cell plus the left half of its second cell — which is centred on the bar's visual
+midpoint, and ownership changes only at the midpoint between two bar centres.
+
+Snapping to the containing cell instead made a tap in the far half of a bar resolve
+to the neighbouring anchor, so a player aiming at a clearly empty slot could be told
+the wall overlaps a wall they never touched. Stitch and `design.md` specify the
+44x44 px target but say nothing about the along-bar axis; the nearest-centre rule was
+chosen because it is the smaller behaviour that cannot hand a tap to a bar the player
+did not aim at. A vertical bar's midpoint lies exactly on a horizontal groove, where
+both orientations are legal, so that single point still resolves to horizontal
+(§11 and `game_spec.md` §3.10 R-ORDER-03). Recorded in `memory.md` §13k and as
+`rules.md` Rule 18.
+
 ### Keyboard
 
 Web accessibility shortcuts can be introduced later.
