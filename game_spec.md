@@ -2,13 +2,24 @@
 
 ## Status
 
-**Version:** 1.0.4
-**Status:** Frozen — Phase 1 (corrected)
-**Date:** 2026-09-20
+**Version:** 2.0.0
+**Status:** Frozen — Phase 1 (corrected), rule change v2.0.0 applied 2026-09-26
+**Date:** 2026-09-26
 
 This document is the canonical, frozen rulebook for Wallforge. Phase 2 implements this specification. Any change requires the process defined in `rules.md` and Rule 15: update `game_spec.md`, its rule IDs, and its test catalog.
 
 ### Changelog
+
+**v2.0.0 (2026-09-26)** — **Deliberate owner-approved rule change** (not a bug fix): walls may now cross.
+- A horizontal wall `H(r,c)` and a vertical wall `V(r,c)` **may both exist at the same anchor**, forming a "+" shape. Same-anchor, opposite-orientation coexistence is now **legal**. Rationale: denser, more tactical wall play at intersections.
+- `R-WALL-08` rewritten from "a wall is illegal if it crosses an existing wall of the other orientation at the same midpoint" to state the permissive rule. The rule ID is retained so existing D-xx and §14 references stay valid.
+- `D-12` repurposed (not deleted) to record the new decision; D-01…D-18 numbering is unchanged.
+- `T-WALL-007` rewritten: placing `V(3,3)` when `H(3,3)` exists now **succeeds**. New row `T-WALL-014` added so the overlap coverage that T-WALL-007 used to carry is not lost.
+- `Example 10` rewritten from "Crossing at same anchor — ILLEGAL" to a legal worked example with an ASCII "+" diagram and the four blocked edges.
+- **`wallCrosses` is retired, not deleted.** It can no longer be produced by any input. It is kept in the taxonomy as a documented, unreachable value for forward-compatibility, and the Dart `ActionFailure.wallCrosses` enum member is retained to stay aligned with the independently generated oracle fixture, which still reserves the reason and its code `k` in its `reasons`/`codes` tables. Nothing in the engine returns it. "12 named failure reasons" therefore remains accurate as a count of *declared* reasons, of which 11 are reachable.
+- Version bumped to 2.0.0 (major) because the set of legal actions changed — a breaking change, not a patch.
+- Unchanged and re-verified: same-orientation overlap (`R-WALL-07`), bounds (`R-WALL-04`), inventory (`R-WALL-10`), path preservation (`R-PATH-01`), win condition, turn order, jump rules, and the initial legal-action counts (3 moves / 128 walls), which cannot be affected because no wall exists on the first move.
+- §15 scripted game and §16 finished-state JSON contain no crossing scenario and are unaffected.
 
 **v1.0.4 (2026-09-20)** — Close Phase 1 gaps:
 - Fixed T-JUMP-009: wrong test (H(2,4) does not block jump) and removed duplicate row.
@@ -254,7 +265,7 @@ For a pawn at (r,c), each adjacent cell can be blocked by **two** possible wall 
 - H(r,c) overlaps H(r,c') when |c - c'| <= 1.
 - V(r,c) overlaps V(r',c) when |r - r'| <= 1.
 
-**R-WALL-08:** A wall is illegal if it crosses an existing wall of the other orientation at the same midpoint (crossing rule, D-12): H(r,c) and V(r,c) with the same anchor cross.
+**R-WALL-08:** A horizontal wall and a vertical wall **MAY** share the same anchor. Same-anchor, opposite-orientation coexistence is **legal** and forms a "+" shape (permissive crossing rule, D-12). Each wall still blocks exactly the two edges defined by R-WALL-05 / R-WALL-06, so the pair together blocks four distinct edges around that corner. This rule changed in v2.0.0; see the changelog.
 
 **R-WALL-09:** Walls that meet end-to-end (e.g., H(r,c) and H(r,c+2)) or form a T/L shape without sharing a midpoint or segment are legal.
 
@@ -268,10 +279,12 @@ For a pawn at (r,c), each adjacent cell can be blocked by **two** possible wall 
 
 ```
 H(r,c) and H(r,c+2):  Legal — end-to-end, no overlap
-H(r,c) and V(r,c):    ILLEGAL — crossing at same anchor
+H(r,c) and V(r,c):    Legal — same-anchor crossing forms a "+" (R-WALL-08, v2.0.0)
 H(r,c) and H(r,c+1):  ILLEGAL — overlap (offset by 1)
 H(r,c) and H(r,c-1):  ILLEGAL — overlap (offset by 1)
-H(r,c) and H(r,c+3):  Legal — no overlap, no crossing
+H(r,c) and H(r,c+3):  Legal — no overlap
+H(r,c) and H(r,c):    ILLEGAL — overlap (identical position, same orientation)
+V(r,c) and V(r,c):    ILLEGAL — overlap (identical position, same orientation)
 ```
 
 ---
@@ -378,14 +391,16 @@ Examples:
 | noWallsRemaining | The player has no walls left in inventory. |
 | wallOutOfBounds | The wall anchor is outside the valid anchor range. |
 | wallOverlaps | The wall overlaps an existing wall of the same orientation. |
-| wallCrosses | The wall crosses an existing wall of the other orientation. |
+| wallCrosses | **Retired in v2.0.0 — unreachable.** No input can produce this reason; same-anchor opposite-orientation walls are legal (R-WALL-08). Retained as a declared value for forward-compatibility. |
 | wallBlocksPath | The wall would leave either player with no route to their goal. |
+
+v2.0.0 declares **12 named failure reasons**, of which **11 are reachable**. `wallCrosses` is retired rather than deleted: it is kept so the taxonomy, the Dart `ActionFailure` enum, and the independently generated oracle fixture (which still reserves the reason and its code `k`) stay aligned, and so a future rule change can reintroduce crossing detection without churning the public enum. No engine code path returns it.
 
 ### 5.2 Deterministic validation precedence
 
 1. `matchFinished` → `wrongTurn` → then per action type.
 2. Move destination classification: off-board → `moveOutOfBoard`; one of the 4 neighbours (a *step*): wall between → `moveBlockedByWall`, opponent there → `moveOntoPawn`, else legal; **jump-shaped** (opponent orthogonally adjacent with an open edge, and the destination is the cell directly beyond the opponent or a cell beside the opponent): legal only if R-JUMP-02/03 allow it, otherwise `moveIllegalJump`; anything else (including jump-shaped attempts when the opponent is not adjacent or the edge to the opponent is walled) → `moveNotAdjacent`.
-3. Wall action order: `noWallsRemaining` → `wallOutOfBounds` → `wallOverlaps` → `wallCrosses` → `wallBlocksPath`.
+3. Wall action order: `noWallsRemaining` → `wallOutOfBounds` → `wallOverlaps` → `wallBlocksPath`. (`wallCrosses` was removed from this chain in v2.0.0 because it is unreachable; see §5.1.)
 
 
 
@@ -667,7 +682,7 @@ After:
   |5 - 3| = 2 > 1, so no overlap. Legal.
 ```
 
-### Example 10: Crossing at same anchor
+### Example 10: Crossing at same anchor - legal (v2.0.0)
 
 ```
 Before:
@@ -676,8 +691,29 @@ Before:
 
 Action: W V 3,3
 
-Result: ILLEGAL - wallCrosses
-  H(3,3) and V(3,3) share the same anchor and cross at the midpoint.
+Result: LEGAL
+  H(3,3) and V(3,3) share the same anchor. Since v2.0.0 (R-WALL-08, D-12)
+  same-anchor opposite-orientation coexistence is legal, so the two walls
+  coexist and form a "+" at the intersection of the row 3/4 line and the
+  column 3/4 line:
+
+              col 3   col 4
+    row 3:      |       |
+                |       |
+    ------------+-------      <- H(3,3): horizontal, below row 3, cols 3-4
+                |       |
+    row 4:      |       |
+                |       |
+                ^ V(3,3): vertical, right of col 3, rows 3-4
+
+  Four edges are now blocked in total around that corner:
+    H(3,3) blocks (3,3)-(4,3) and (3,4)-(4,4)
+    V(3,3) blocks (3,3)-(3,4) and (4,3)-(4,4)
+  i.e. every edge between cells (3,3), (3,4), (4,3) and (4,4) is blocked.
+  Neither wall shares a segment with the other, so R-WALL-07 is not
+  triggered. Both players keep a route to their goal, so R-PATH-01 passes.
+  Blue remainingWalls: 9
+  currentPlayer: Red, turnNumber: 1
 ```
 
 ### Example 11: Legal T-junction
@@ -873,13 +909,14 @@ Result: ILLEGAL - wallBlocksPath
 | T-WALL-004 | R-WALL-07 | Wall H(3,3) exists, Blue turn | W H 3,3 | ILLEGAL wallOverlaps |
 | T-WALL-005 | R-WALL-07 | Wall H(3,3) exists, Blue turn | W H 3,4 | ILLEGAL wallOverlaps |
 | T-WALL-006 | R-WALL-07 | Wall H(3,3) exists, Blue turn | W H 3,5 | Success offset by 2 |
-| T-WALL-007 | R-WALL-08 | Wall H(3,3) exists, Blue turn | W V 3,3 | ILLEGAL wallCrosses |
+| T-WALL-007 | R-WALL-08 | Wall H(3,3) exists, Blue turn | W V 3,3 | Success. V(3,3) placed; H(3,3) and V(3,3) coexist at the same anchor. 9 walls left. |
 | T-WALL-008 | R-WALL-09 | Wall H(3,3) exists, Blue turn | W V 4,3 | Success T-junction |
 | T-WALL-009 | R-WALL-09 | Wall H(3,3) exists, Blue turn | W H 3,5 | Success end-to-end |
 | T-WALL-010 | R-WALL-10 | Blue 0 walls, Blue turn | W H 3,3 | ILLEGAL noWallsRemaining |
 | T-WALL-011 | R-PATH-01..02 | Blue(8,0), Red(0,4), Wall H(7,0), Blue turn | W V 7,1 | ILLEGAL wallBlocksPath — Blue sealed in pocket. |
 | T-WALL-012 | R-PATH-01 | Blue(8,4), Red(0,4), Wall V(4,4), Blue turn | W V 4,3 | Success — both players still have routes. |
 | T-WALL-013 | R-PATH-04 | Blue(8,0), Wall H(7,0), Blue turn | Blue W V 7,1 | ILLEGAL wallBlocksPath. Blue remainingWalls=9, turnNumber unchanged, walls unchanged |
+| T-WALL-014 | R-WALL-07 | Wall V(3,3) exists, Blue turn | W V 3,3 | ILLEGAL wallOverlaps |
 
 ### 9.4 Pathfinding tests
 
@@ -980,8 +1017,8 @@ Result: ILLEGAL - wallBlocksPath
 | R-JUMP-04 | T-JUMP-008 |
 | R-JUMP-05 | T-JUMP-007 (destination occupied = moveOntoPawn) |
 | R-WALL-01..06 | T-WALL-001..003 |
-| R-WALL-07 | T-WALL-004..006 |
-| R-WALL-08 | T-WALL-007 |
+| R-WALL-07 | T-WALL-004..006, T-WALL-014 |
+| R-WALL-08 | T-WALL-007 (legal same-anchor crossing, v2.0.0) |
 | R-WALL-09 | T-WALL-008..009 |
 | R-WALL-10 | T-WALL-010 |
 | R-WALL-11 | T-WALL-013 (state unchanged after rejection) |
@@ -1029,7 +1066,7 @@ All rule-level decisions that shaped this specification. Each decision is frozen
 | D-09 | Every wall is exactly 2 cells long, horizontal (H) or vertical (V), placed between cells on grid lines (R-WALL-01, R-WALL-02) | Frozen |
 | D-10 | Wall identity `(anchorRow, anchorColumn, orientation, owner)`; valid anchors `0 … size-2` on both axes (R-WALL-03, R-WALL-04) | Frozen |
 | D-11 | Overlap: same orientation with anchor offset ≤ 1 along the wall's axis is illegal (R-WALL-07) | Frozen |
-| D-12 | Crossing: H and V walls with the same anchor are illegal (R-WALL-08) | Frozen |
+| D-12 | Crossing: H and V walls with the same anchor are **legal** and form a "+" (permissive rule, changed in v2.0.0) (R-WALL-08) | Frozen |
 | D-13 | Path preservation: a wall is illegal if either player would have no route to their goal edge; walls only, pawns ignored (R-PATH-01) | Frozen |
 | D-14 | Pawn jumping is included (straight jump; diagonal side-step only when the straight jump is unavailable) (R-JUMP-01, R-JUMP-02, R-JUMP-03) | Frozen |
 | D-15 | Win is immediate on reaching the goal row; status becomes finished; no further actions accepted (R-WIN-03, R-WIN-04) | Frozen |
@@ -1080,7 +1117,7 @@ This section maps each Phase 1 task (from phase.md) to the corresponding section
 | Define wall orientation | §3.6 R-WALL-01 |
 | Define wall inventory | §3.6 R-WALL-10, §2.1 wallsPerPlayer |
 | Define wall overlap rules | §3.6 R-WALL-07 |
-| Define wall crossing rules | §3.6 R-WALL-08 |
+| Define wall crossing rules | §3.6 R-WALL-08 (rewritten in v2.0.0: same-anchor crossing is legal) |
 | Define path-preservation rule | §3.7 R-PATH-01 through R-PATH-05 |
 | Define win condition | §3.8 R-WIN-01 through R-WIN-05 |
 | Define turn transition | §3.3 R-TURN-01 through R-TURN-05 |
