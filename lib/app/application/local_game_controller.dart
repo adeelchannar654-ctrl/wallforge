@@ -205,6 +205,8 @@ class LocalGameController extends ChangeNotifier {
     ActionFailure.noWallsRemaining => 'You have no walls left.',
     ActionFailure.wallOutOfBounds => 'Wall placement is out of bounds.',
     ActionFailure.wallOverlaps => 'Wall overlaps an existing wall.',
+    // Retired in spec v2.0.0 (unreachable: crossing walls are legal). Kept so
+    // this switch stays exhaustive over the declared taxonomy.
     ActionFailure.wallCrosses => 'Wall crosses an existing wall.',
     ActionFailure.wallBlocksPath =>
       'Wall would block a player\'s path to goal.',

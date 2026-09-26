@@ -14,7 +14,7 @@ import 'action_validator.dart';
 ///
 /// [ActionValidator] remains the single source of truth for legality; this
 /// class only prunes candidates that are provably illegal (off-board moves and
-/// out-of-bounds / overlapping / crossing walls) before asking the validator.
+/// out-of-bounds / overlapping walls) before asking the validator.
 /// Pruning is behaviour-preserving: every pruned candidate would have been
 /// rejected by the validator for the same reason.
 class MoveGenerator {
@@ -58,7 +58,7 @@ class MoveGenerator {
             orientation: orientation,
             anchor: Cell(row: row, column: column),
           );
-          if (_overlapsOrCrosses(state, action as WallAction)) continue;
+          if (_overlaps(state, action as WallAction)) continue;
           if (ActionValidator.validate(state, player, action) == null) {
             actions.add(action);
           }
@@ -68,29 +68,28 @@ class MoveGenerator {
     return actions;
   }
 
-  /// True when [action] overlaps or crosses an existing wall.
+  /// True when [action] overlaps an existing wall of the **same** orientation.
   ///
-  /// Mirrors the `wallOverlaps` / `wallCrosses` checks in [ActionValidator] so
-  /// the two stay consistent.
-  static bool _overlapsOrCrosses(GameState state, WallAction action) {
+  /// Mirrors the `wallOverlaps` check in [ActionValidator] so the two stay
+  /// consistent. Same-anchor walls of the opposite orientation are **not**
+  /// pruned: spec v2.0.0 (R-WALL-08) makes that shape legal, so those
+  /// candidates must reach the validator and be offered to the player.
+  static bool _overlaps(GameState state, WallAction action) {
     final row = action.anchor.row;
     final column = action.anchor.column;
     final orientation = action.orientation;
     for (final existing in state.walls) {
-      if (existing.orientation == orientation) {
-        if (orientation == WallOrientation.h) {
-          if (existing.anchorRow == row &&
-              (existing.anchorColumn - column).abs() <= 1) {
-            return true;
-          }
-        } else {
-          if (existing.anchorColumn == column &&
-              (existing.anchorRow - row).abs() <= 1) {
-            return true;
-          }
+      if (existing.orientation != orientation) continue;
+      if (orientation == WallOrientation.h) {
+        if (existing.anchorRow == row &&
+            (existing.anchorColumn - column).abs() <= 1) {
+          return true;
         }
-      } else if (existing.anchorRow == row && existing.anchorColumn == column) {
-        return true;
+      } else {
+        if (existing.anchorColumn == column &&
+            (existing.anchorRow - row).abs() <= 1) {
+          return true;
+        }
       }
     }
     return false;

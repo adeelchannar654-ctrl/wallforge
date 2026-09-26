@@ -113,8 +113,9 @@ class ActionValidator {
     final size = state.boardConfig.size;
     final maxAnchor = size - 2;
 
-    // §5.2.3: noWallsRemaining → wallOutOfBounds → wallOverlaps → wallCrosses
-    // → wallBlocksPath
+    // §5.2.3: noWallsRemaining → wallOutOfBounds → wallOverlaps → wallBlocksPath
+    // (`wallCrosses` was removed from this chain in spec v2.0.0: same-anchor,
+    // opposite-orientation walls are legal, so it is unreachable.)
     if (state.wallsRemaining(player) <= 0) {
       return ActionFailure.noWallsRemaining;
     }
@@ -142,15 +143,11 @@ class ActionValidator {
       }
     }
 
-    // Check crossing: same anchor, different orientation
-    for (final existing in state.walls) {
-      if (existing.anchorRow == anchor.row &&
-          existing.anchorColumn == anchor.column &&
-          existing.orientation != orient) {
-        return ActionFailure.wallCrosses;
-      }
-    }
-
+    // Same-orientation overlap is the only remaining shape conflict (R-WALL-07).
+    // A same-anchor wall of the *other* orientation is legal as of spec v2.0.0
+    // (R-WALL-08): the pair forms a "+" and each still blocks only its own two
+    // edges, so no check is needed here.
+    //
     // Check path preservation
     final testWall = Wall(
       anchorRow: anchor.row,

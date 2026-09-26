@@ -1,6 +1,6 @@
 /// Wallforge domain layer: framework-independent, deterministic game engine.
 ///
-/// Implements game_spec.md v1.0.4.
+/// Implements game_spec.md v2.0.0.
 /// No Flutter, dart:ui, Firebase, or dart:io imports allowed here.
 library;
 
