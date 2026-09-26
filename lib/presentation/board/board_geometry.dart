@@ -37,6 +37,17 @@ class BoardGeometry {
   /// Guard band that keeps a cell-centre tap outside wall-snap range.
   static const double _cellCentreGuard = 0.5;
 
+  /// Nudge applied before rounding a cross-axis coordinate to an anchor index.
+  ///
+  /// Anchor ownership boundaries fall on exact half-cell values, but the
+  /// fractional cell coordinate is computed by division, so a value that is
+  /// mathematically exactly `k + 0.5` can arrive as `k + 0.5 - 1e-15` (for
+  /// example `450 / 7` is not representable in binary). Without this nudge the
+  /// boundary would resolve differently depending on the board size, breaking
+  /// determinism. At `1e-9` of a cell it is ~1e-7 px on a 640 px board, far
+  /// below any pointer precision, and only decides exact ties.
+  static const double _anchorMidpointNudge = 1e-9;
+
   // --- Derived metrics -------------------------------------------------------
 
   /// Effective board area after padding.
@@ -127,7 +138,7 @@ class BoardGeometry {
   /// the closer one decides the orientation; exact ties resolve to horizontal,
   /// matching `game_spec.md` §3.10 R-ORDER-03 (H before V) and the previous
   /// scan order. The snapped index on that axis is the nearest line, the other
-  /// index is the cell that contains the tap, so each anchor stays centred on
+  /// index is the nearest bar span centre, so each anchor stays centred on
   /// its own two-cell bar. When the winning line is farther away than
   /// [wallHitTolerance] the result is null, so a tap in the middle of a cell is
   /// never reported as a wall slot.
@@ -158,13 +169,26 @@ class BoardGeometry {
     return null;
   }
 
-  /// Index of the cell that contains [coordinate], clipped to the valid anchor
-  /// range `0..boardSize - 2`.
+  /// Nearest wall anchor to [coordinate] on the cross axis, clipped to the
+  /// valid anchor range `0..boardSize - 2`.
+  ///
+  /// A wall anchored at `c` is drawn as a two-cell bar spanning `c .. c + 2`, so
+  /// its visual midpoint is `c + 1`. Snapping to the centre of that span rather
+  /// than to the cell that happens to contain the tap keeps the anchor stable
+  /// across the bar's whole central half — the right half of its first cell plus
+  /// the left half of its second cell — including the midpoint itself.
+  ///
+  /// `c = round(t - 1)` where `t` is the fractional cell coordinate. Ownership
+  /// boundaries therefore fall on the midpoints *between* adjacent bar centres
+  /// (`t = c + 1.5`), and an exact boundary resolves to the higher anchor.
+  /// [_anchorMidpointNudge] keeps that tie stable across board sizes whose cell
+  /// size is not exactly representable in binary.
   int _anchorCellIndex(double coordinate) {
-    final cell = ((coordinate - padding) / cellSize).floor();
-    if (cell < 0) return 0;
-    if (cell > boardSize - 2) return boardSize - 2;
-    return cell;
+    final anchor =
+        ((coordinate - padding) / cellSize - 1 + _anchorMidpointNudge).round();
+    if (anchor < 0) return 0;
+    if (anchor > boardSize - 2) return boardSize - 2;
+    return anchor;
   }
 
   /// Nearest interior grid line to [coordinate] on one axis.
