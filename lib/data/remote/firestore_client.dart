@@ -53,4 +53,79 @@ abstract interface class FirestoreClient {
   /// room that is negligible against the 50,000 reads/day no-cost quota, but it
   /// is the reason the lobby must not write on a timer.
   Stream<Map<String, dynamic>?> watch(String path);
+
+  /// Reads up to [limit] documents from [collectionPath], oldest first by
+  /// [orderBy] when given.
+  ///
+  /// Added in Phase 8.1 for the matchmaking queue.
+  ///
+  /// **There is deliberately no filter parameter.** Firestore only serves
+  /// "equality filter on one field + `orderBy` on a different field" from a
+  /// *composite* index, which is a manual console step (or a Blaze-plan deploy).
+  /// Partitioning the queue by board configuration in the *path* instead
+  /// (`matchmaking/{boardKey}/waiting/{uid}`) means the only query needed is a
+  /// bare `orderBy` + `limit` on one subcollection, which the automatic
+  /// single-field index serves. That keeps the feature inside the Spark plan with
+  /// no manual index step. Verified against current Firestore indexing docs
+  /// rather than assumed.
+  Future<List<FirestoreDocument>> query({
+    required String collectionPath,
+    String? orderBy,
+    int limit = 10,
+  });
+
+  /// Runs [action] as an atomic transaction, retrying it on conflict.
+  ///
+  /// Added in Phase 8.1. Matchmaking's correctness rests entirely on "verify the
+  /// candidate is still claimable, then claim it" being a single atomic step — a
+  /// plain read followed by a write lets two simultaneous clients claim the same
+  /// queue entry, or both create rooms and never pair.
+  ///
+  /// Implementations must re-run [action] on conflict, as Firestore itself does.
+  ///
+  /// ## Why this takes no `query`
+  ///
+  /// `cloud_firestore`'s `Transaction.get` accepts only a `DocumentReference`; it
+  /// cannot run a query. That is a real SDK limitation, not an oversight here, and
+  /// it shapes the whole design: candidate discovery happens with a plain
+  /// [FirestoreClient.query] *outside* the transaction, and the transaction then
+  /// re-reads that one candidate document to confirm it is still claimable before
+  /// claiming it. The commit is still atomic, and a lost race surfaces as a
+  /// conflict that re-runs the callback, which then sees the candidate gone.
+  ///
+  /// Reads inside a transaction must all happen before writes; [set] and [delete]
+  /// only stage a change until the transaction commits.
+  Future<T> runTransaction<T>(
+    Future<T> Function(FirestoreTransaction txn) action,
+  );
+}
+
+/// A document returned by [FirestoreClient.query], carrying the path needed to
+/// address it again.
+class FirestoreDocument {
+  const FirestoreDocument({required this.path, required this.data});
+
+  /// Full document path.
+  final String path;
+
+  /// The document's fields.
+  final Map<String, dynamic> data;
+
+  @override
+  String toString() => 'FirestoreDocument($path)';
+}
+
+/// The staging area handed to a [FirestoreClient.runTransaction] callback.
+///
+/// Document operations only — see [FirestoreClient.runTransaction] for why a
+/// query cannot appear here.
+abstract interface class FirestoreTransaction {
+  /// Reads a document, or null when it does not exist.
+  Future<Map<String, dynamic>?> get(String path);
+
+  /// Stages a write at [path]. Committed only if the transaction succeeds.
+  void set(String path, Map<String, dynamic> data);
+
+  /// Stages a delete at [path]. Committed only if the transaction succeeds.
+  void delete(String path);
 }

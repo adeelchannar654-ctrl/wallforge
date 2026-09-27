@@ -106,4 +106,130 @@ class InMemoryFirestoreClient implements FirestoreClient {
     failNextOperation = false;
     throw StateError('simulated Firestore failure');
   }
+
+  // --- Queries and transactions (Phase 8.1) -----------------------------------
+
+  /// Bumped on every committed write or delete.
+  ///
+  /// A transaction captures this at its start and re-runs if it moved before
+  /// commit, which is how the double models Firestore's conflict detection. It is
+  /// deliberately coarse: a change to *any* document aborts the transaction, so
+  /// the retry path is genuinely exercised rather than accidentally avoided.
+  int _revision = 0;
+
+  /// How many upcoming transaction commits should fail with a conflict.
+  ///
+  /// Lets a test prove the retry loop recovers, instead of only proving that
+  /// contention never happens.
+  int conflictsToInject = 0;
+
+  /// How many transaction attempts have been made, including retries.
+  int transactionAttempts = 0;
+
+  /// How many of those attempts were aborted by a conflict.
+  int transactionConflicts = 0;
+
+  @override
+  Future<List<FirestoreDocument>> query({
+    required String collectionPath,
+    String? orderBy,
+    int limit = 10,
+  }) async {
+    _maybeFail();
+    final entries = documents.entries
+        .where((e) => _isInCollection(e.key, collectionPath))
+        .toList();
+    if (orderBy != null) {
+      entries.sort((a, b) => _compareBy(a.value, b.value, orderBy));
+    }
+    return entries
+        .take(limit)
+        .map(
+          (e) => FirestoreDocument(
+            path: e.key,
+            data: Map<String, dynamic>.from(e.value),
+          ),
+        )
+        .toList();
+  }
+
+  /// True when [path] sits directly inside [collectionPath].
+  static bool _isInCollection(String path, String collectionPath) {
+    if (!path.startsWith('$collectionPath/')) return false;
+    final rest = path.substring(collectionPath.length + 1);
+    return !rest.contains('/');
+  }
+
+  static int _compareBy(
+    Map<String, dynamic> a,
+    Map<String, dynamic> b,
+    String field,
+  ) {
+    final left = a[field];
+    final right = b[field];
+    if (left is int && right is int) return left.compareTo(right);
+    return (left?.toString() ?? '').compareTo(right?.toString() ?? '');
+  }
+
+  @override
+  Future<T> runTransaction<T>(
+    Future<T> Function(FirestoreTransaction txn) action,
+  ) async {
+    // Mirrors Firestore: re-run the callback until it commits without conflict.
+    for (var attempt = 0; attempt < maxTransactionAttempts; attempt++) {
+      transactionAttempts++;
+      final startRevision = _revision;
+      final transaction = _InMemoryTransaction(this);
+      final result = await action(transaction);
+      if (_revision != startRevision || conflictsToInject > 0) {
+        if (conflictsToInject > 0) conflictsToInject--;
+        transactionConflicts++;
+        continue;
+      }
+      // Commit every staged write as one indivisible step, so a listener never
+      // observes a half-applied transaction.
+      transaction.staged.forEach((path, data) {
+        if (data == null) {
+          documents.remove(path);
+        } else {
+          documents[path] = data;
+          writeLog.add(path);
+        }
+        _emit(path);
+        _revision++;
+      });
+      return result;
+    }
+    throw StateError(
+      'transaction contention: gave up after $maxTransactionAttempts attempts',
+    );
+  }
+
+  /// Upper bound on transaction retries before giving up.
+  static const int maxTransactionAttempts = 5;
+}
+
+/// Stages a transaction's writes so they commit together or not at all.
+class _InMemoryTransaction implements FirestoreTransaction {
+  _InMemoryTransaction(this._client);
+
+  final InMemoryFirestoreClient _client;
+
+  /// Path -> data, or null for a staged delete.
+  final Map<String, Map<String, dynamic>?> staged = {};
+
+  @override
+  Future<Map<String, dynamic>?> get(String path) async {
+    // Reads see committed state only: a staged write is not visible until commit,
+    // which is what stops a transaction "helping itself" across two attempts.
+    final data = _client.documents[path];
+    return data == null ? null : Map<String, dynamic>.from(data);
+  }
+
+  @override
+  void set(String path, Map<String, dynamic> data) =>
+      staged[path] = Map<String, dynamic>.from(data);
+
+  @override
+  void delete(String path) => staged[path] = null;
 }

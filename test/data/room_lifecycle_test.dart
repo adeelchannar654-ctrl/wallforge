@@ -718,4 +718,20 @@ class _WriteFailingClient implements FirestoreClient {
 
   @override
   Stream<Map<String, dynamic>?> watch(String path) => inner.watch(path);
+
+  @override
+  Future<List<FirestoreDocument>> query({
+    required String collectionPath,
+    String? orderBy,
+    int limit = 10,
+  }) => inner.query(
+    collectionPath: collectionPath,
+    orderBy: orderBy,
+    limit: limit,
+  );
+
+  @override
+  Future<T> runTransaction<T>(
+    Future<T> Function(FirestoreTransaction txn) action,
+  ) => inner.runTransaction(action);
 }

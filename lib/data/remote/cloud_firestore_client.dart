@@ -73,4 +73,60 @@ class CloudFirestoreClient implements FirestoreClient {
         })
         .handleError((Object _) => null);
   }
+
+  @override
+  Future<List<FirestoreDocument>> query({
+    required String collectionPath,
+    String? orderBy,
+    int limit = 10,
+  }) async {
+    try {
+      Query<Map<String, dynamic>> query = _firestore.collection(collectionPath);
+      if (orderBy != null) query = query.orderBy(orderBy);
+      final snapshot = await query.limit(limit).get();
+      return snapshot.docs
+          .map(
+            (doc) =>
+                FirestoreDocument(path: doc.reference.path, data: doc.data()),
+          )
+          .toList();
+    } on Object {
+      // A failed query is an empty queue, not a crash: the caller will simply
+      // keep waiting, which is the correct behaviour when the network is down.
+      return const <FirestoreDocument>[];
+    }
+  }
+
+  @override
+  Future<T> runTransaction<T>(
+    Future<T> Function(FirestoreTransaction txn) action,
+  ) =>
+      // Firestore retries the callback itself on conflict, so the retry loop
+      // lives in the SDK and this method is a direct delegation.
+      _firestore.runTransaction<T>(
+        (transaction) => action(_CloudTransaction(_firestore, transaction)),
+      );
+}
+
+class _CloudTransaction implements FirestoreTransaction {
+  _CloudTransaction(this._firestore, this._txn);
+
+  /// `Transaction` exposes neither `doc()` nor `collection()`, so references are
+  /// built from the Firestore instance and handed to the transaction.
+  final FirebaseFirestore _firestore;
+  final Transaction _txn;
+
+  @override
+  Future<Map<String, dynamic>?> get(String path) async {
+    final snapshot = await _txn.get(_firestore.doc(path));
+    return snapshot.data();
+  }
+
+  /// Staged, not applied: Firestore applies transaction writes at commit.
+  @override
+  void set(String path, Map<String, dynamic> data) =>
+      _txn.set(_firestore.doc(path), data);
+
+  @override
+  void delete(String path) => _txn.delete(_firestore.doc(path));
 }
