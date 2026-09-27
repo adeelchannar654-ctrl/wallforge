@@ -382,6 +382,38 @@ class _BoardPreviewScreenState extends State<BoardPreviewScreen> {
               _buildAiDifficultySelector(),
               const SizedBox(height: AppSpacing.lg),
 
+              // --- Online play (Phase 8) ---
+              //
+              // An additional path, added alongside the two above rather than
+              // replacing them: `design.md` §18 lists Online as the third primary
+              // mode, and nothing about local or vs-AI changes.
+              Center(
+                child: OutlinedButton(
+                  onPressed: () {
+                    Navigator.of(context).pushNamed(
+                      AppRoutes.online,
+                      arguments: _state.boardConfig,
+                    );
+                  },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.secondaryContainer,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.xl,
+                      vertical: AppSpacing.md,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    side: const BorderSide(color: AppColors.secondaryContainer),
+                  ),
+                  child: const Text(
+                    'ONLINE PLAY',
+                    style: AppTypography.labelCaps,
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+
               // --- Status ---
               _buildStatus(),
               const SizedBox(height: AppSpacing.md),

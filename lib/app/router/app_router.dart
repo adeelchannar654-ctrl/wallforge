@@ -4,10 +4,12 @@ import '../../data/local/in_memory_repositories.dart';
 import '../../domain/models/board_config.dart';
 import '../../app/application/ai/ai_difficulty.dart';
 import '../../app/application/local_game_controller.dart';
+import '../../app/application/online/online_lobby_factory.dart';
 import '../../app/application/persistence_factory.dart';
 import '../../app/application/match_setup.dart';
 import '../../presentation/screens/board_preview/board_preview_screen.dart';
 import '../../presentation/screens/game/game_screen.dart';
+import '../../presentation/screens/online/online_lobby_screen.dart';
 
 /// Canonical route paths for the application (see `architecture.md` §18).
 class AppRoutes {
@@ -18,6 +20,9 @@ class AppRoutes {
 
   /// Local pass-and-play game.
   static const String game = '/game';
+
+  /// Online room lobby (Phase 8).
+  static const String online = '/online';
 }
 
 /// Builds the application's [Route] from a [RouteSettings].
@@ -31,6 +36,16 @@ class AppRouter {
           settings: settings,
           builder: (_) => GameScreen(controller: _controllerFor(settings)),
         );
+      case AppRoutes.online:
+        final lobby = OnlineLobbyFactory.firebase(
+          boardConfig: _onlineBoardConfig(settings),
+        );
+        return MaterialPageRoute<void>(
+          settings: settings,
+          // The route built the controller, so the screen disposes it.
+          builder: (_) =>
+              OnlineLobbyScreen(controller: lobby, ownsController: true),
+        );
       case AppRoutes.home:
       default:
         return MaterialPageRoute<void>(
@@ -38,6 +53,13 @@ class AppRouter {
           builder: (_) => const BoardPreviewScreen(),
         );
     }
+  }
+
+  /// The board a created room will use. A [BoardConfig] argument is honoured;
+  /// anything else means the default 9x9.
+  static BoardConfig _onlineBoardConfig(RouteSettings settings) {
+    final args = settings.arguments;
+    return args is BoardConfig ? args : const BoardConfig();
   }
 
   /// Builds the controller for the game route.

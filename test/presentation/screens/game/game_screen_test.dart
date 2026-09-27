@@ -323,7 +323,12 @@ void main() {
       await tester.ensureVisible(preset);
       await tester.tap(preset);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('START LOCAL MATCH'));
+      // Scrolled to the preset, so the start button needs bringing back into
+      // view. Asserting on the game screen should not depend on how long the
+      // entry page has grown.
+      final start = find.text('START LOCAL MATCH');
+      await tester.ensureVisible(start);
+      await tester.tap(start);
       await tester.pumpAndSettle();
 
       final game = tester.widget<GameScreen>(find.byType(GameScreen));
