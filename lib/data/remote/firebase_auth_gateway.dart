@@ -21,14 +21,37 @@ import '../../domain/repositories/auth.dart';
 /// pattern Phase 7 established. The app must still be playable offline and in a
 /// build with no Firebase configuration at all, so a sign-in failure is a
 /// reported state rather than an error dialog or a hang.
+///
+/// ## Why Firebase is resolved lazily
+///
+/// `fb.FirebaseAuth.instance` throws immediately — `[core/no-app]` — when no
+/// Firebase app has been initialised, which is the real state of a fresh clone,
+/// since `.gitignore` forbids committing the client config. Resolving it in the
+/// constructor's initializer list therefore made `FirebaseAuthGateway()` itself
+/// throw, *before* any of the try/catch blocks in this class could run. That is
+/// what made tapping "Online Play" silently do nothing: route construction threw
+/// and no lobby was ever shown.
+///
+/// So resolution is deferred to [_auth], a cached getter, and is only ever
+/// reached from inside a guarded call path. This mirrors
+/// `CloudFirestoreClient._firestore`, which had the identical bug and was fixed
+/// the same way in Phase 7. A failed resolution is not cached, so a gateway
+/// constructed before `Firebase.initializeApp()` still works afterwards.
 class FirebaseAuthGateway implements AuthGateway {
   FirebaseAuthGateway({fb.FirebaseAuth? auth, DateTime Function()? clock})
-    : _auth = auth ?? fb.FirebaseAuth.instance,
+    : _injected = auth,
       _clock = clock ?? DateTime.now;
 
   static const AppLogger _log = AppLogger('auth');
 
-  final fb.FirebaseAuth _auth;
+  final fb.FirebaseAuth? _injected;
+  fb.FirebaseAuth? _resolved;
+
+  /// The Firebase Auth instance, resolved on first use.
+  ///
+  /// Only call this from inside a try/catch-guarded method.
+  fb.FirebaseAuth get _auth =>
+      _resolved ??= _injected ?? fb.FirebaseAuth.instance;
 
   /// Injected for tests; the server needs a real timestamp.
   final DateTime Function() _clock;
@@ -62,9 +85,16 @@ class FirebaseAuthGateway implements AuthGateway {
 
   @override
   Future<AuthState> current() async {
-    final user = _auth.currentUser;
-    if (user == null) return const AuthState.signedOut();
-    return AuthState.signedIn(user.uid);
+    // Guarded like every other method here: an unguarded `_auth` read turns
+    // "no Firebase app" into a rejected Future, which is exactly the throw the
+    // class promises never to throw.
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return const AuthState.signedOut();
+      return AuthState.signedIn(user.uid);
+    } on Object catch (e) {
+      return AuthState.unavailable(e.runtimeType.toString());
+    }
   }
 
   @override
@@ -78,17 +108,39 @@ class FirebaseAuthGateway implements AuthGateway {
   }
 
   @override
-  Stream<AuthState> authStateChanges() => _auth.authStateChanges().map(
-    (user) => user == null
-        ? const AuthState.signedOut()
-        : AuthState.signedIn(user.uid),
-  );
+  Stream<AuthState> authStateChanges() {
+    // A stream is not covered by the `Future` methods' try/catch pattern: the
+    // expression is evaluated when this method is *called*, so an unresolved
+    // Firebase would throw synchronously to the caller. Caught here and reported
+    // as a single `unavailable` event, which is the truthful state — nobody is
+    // signed in, and no change will ever arrive.
+    try {
+      return _auth.authStateChanges().map(
+        (user) => user == null
+            ? const AuthState.signedOut()
+            : AuthState.signedIn(user.uid),
+      );
+    } on Object catch (e) {
+      _log.error('auth stream unavailable: ${e.runtimeType}');
+      return Stream<AuthState>.value(
+        AuthState.unavailable('auth state unavailable (${e.runtimeType})'),
+      );
+    }
+  }
 
   @override
   Future<String?> currentUid() async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null || uid.isEmpty) return null;
-    return uid;
+    // This is the `userId` resolver every Phase 6/7/8 repository is handed, so a
+    // throw here would propagate out of `load()`/`save()` on an unconfigured
+    // build. Null is the documented "no owner, store nothing" answer.
+    try {
+      final uid = _auth.currentUser?.uid;
+      if (uid == null || uid.isEmpty) return null;
+      return uid;
+    } on Object catch (e) {
+      _log.error('uid unavailable: ${e.runtimeType}');
+      return null;
+    }
   }
 
   /// Exposed so the sign-in moment can be timestamped in a room document.

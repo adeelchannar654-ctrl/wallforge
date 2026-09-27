@@ -160,9 +160,16 @@ class OnlineLobbyController extends ChangeNotifier {
     _authState = await auth.signInAnonymously();
     if (_disposed) return;
     if (!_authState.isSignedIn) {
+      // The wording deliberately does not blame connectivity: the most common
+      // cause by far is a build with no Firebase configuration, which says
+      // nothing about the player's connection. The auth layer's own reason is
+      // included because it is credential-free and safe to show.
+      final detail = _authState.detail;
       _fail(
         RoomFailureReason.notAuthenticated,
-        'Could not sign in. Online play needs a connection.',
+        detail == null
+            ? 'Could not sign in. Online play is unavailable.'
+            : 'Could not sign in. Online play is unavailable ($detail).',
       );
       return;
     }
