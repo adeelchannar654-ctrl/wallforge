@@ -90,6 +90,11 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
                     ..._buildEntry(controller)
                   else
                     ..._buildRoom(controller),
+                  if (controller.phase == OnlineLobbyPhase.searching &&
+                      !controller.isInRoom) ...[
+                    const SizedBox(height: AppSpacing.md),
+                    _buildSearching(context, controller),
+                  ],
                   if (controller.failureMessage != null) ...[
                     const SizedBox(height: AppSpacing.md),
                     _buildError(controller.failureMessage!),
@@ -125,6 +130,7 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
       ),
       OnlineLobbyPhase.waiting => ('WAITING', AppColors.textSecondary),
       OnlineLobbyPhase.ready => ('CONNECTED', AppColors.primaryContainer),
+      OnlineLobbyPhase.searching => ('SEARCHING', AppColors.textSecondary),
       OnlineLobbyPhase.started => ('CONNECTED', AppColors.tertiaryContainer),
       OnlineLobbyPhase.failed => ('DISCONNECTED', AppColors.error),
     };
@@ -146,6 +152,29 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
   List<Widget> _buildEntry(OnlineLobbyController controller) {
     final board = controller.boardConfig;
     return <Widget>[
+      if (controller.hasMatchmaking)
+        _card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              const Text('QUICK MATCH', style: AppTypography.labelCaps),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                'Get paired with someone else automatically. No room code '
+                'needed — a ${board.size}x${board.size} board.',
+                style: AppTypography.bodyBase.copyWith(
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              _primaryButton(
+                label: 'FIND OPPONENT',
+                onPressed: controller.isBusy ? null : controller.quickMatch,
+              ),
+            ],
+          ),
+        ),
+      if (controller.hasMatchmaking) const SizedBox(height: AppSpacing.md),
       _card(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -225,6 +254,34 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
       ),
     ];
   }
+
+  /// The matchmaking waiting state, with a cancel action.
+  Widget _buildSearching(
+    BuildContext context,
+    OnlineLobbyController controller,
+  ) => _card(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        const Text('LOOKING FOR AN OPPONENT', style: AppTypography.labelCaps),
+        const SizedBox(height: AppSpacing.xs),
+        Text(
+          'Waiting for someone else to pick Quick Match on a '
+          '${controller.boardConfig.size}x${controller.boardConfig.size} '
+          'board. This does not poll — you are notified the moment you are '
+          'paired.',
+          style: AppTypography.bodyBase.copyWith(
+            color: AppColors.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        _primaryButton(
+          label: 'CANCEL',
+          onPressed: () => controller.cancelQuickMatch(),
+        ),
+      ],
+    ),
+  );
 
   Future<void> _join() async {
     final code = _codeField.text;

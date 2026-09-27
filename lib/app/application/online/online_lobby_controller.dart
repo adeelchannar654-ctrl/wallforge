@@ -17,6 +17,9 @@ enum OnlineLobbyPhase {
   /// No identity yet, or the last attempt failed.
   needsSignIn,
 
+  /// Waiting in the matchmaking queue for an opponent to appear.
+  searching,
+
   /// Signing in or performing a room operation.
   busy,
 
@@ -55,6 +58,7 @@ class OnlineLobbyController extends ChangeNotifier {
   OnlineLobbyController({
     required this.auth,
     required this.rooms,
+    this.matchmaking,
     this.boardConfig = const BoardConfig(),
   });
 
@@ -66,6 +70,13 @@ class OnlineLobbyController extends ChangeNotifier {
   /// Room storage.
   final RoomRepository rooms;
 
+  /// Random matchmaking, when the build offers it.
+  ///
+  /// Optional so the code-based flow keeps working — and keeps working in the
+  /// existing tests — in a build with no matchmaking at all. When null,
+  /// [quickMatch] reports a rejection rather than pretending to search.
+  final MatchmakingRepository? matchmaking;
+
   /// Board both players will play on when the creator creates a room.
   final BoardConfig boardConfig;
 
@@ -74,6 +85,7 @@ class OnlineLobbyController extends ChangeNotifier {
   RoomFailure? _lastFailure;
   OnlineLobbyPhase _phase = OnlineLobbyPhase.needsSignIn;
   StreamSubscription<Room?>? _watch;
+  StreamSubscription<Room?>? _matchWatch;
   bool _disposed = false;
 
   // --- Observable state -------------------------------------------------------
@@ -144,6 +156,9 @@ class OnlineLobbyController extends ChangeNotifier {
 
   /// Whether the match has started.
   bool get hasStarted => _room?.status == RoomStatus.started;
+
+  /// Whether this build offers random matchmaking.
+  bool get hasMatchmaking => matchmaking != null;
 
   /// The room code to show, or null.
   String? get roomCode => _room?.code;
@@ -223,6 +238,86 @@ class OnlineLobbyController extends ChangeNotifier {
       _room = result;
       _setPhase(OnlineLobbyPhase.started);
     }
+  }
+
+  /// Requests an opponent, or reports why it could not.
+  ///
+  /// Three outcomes, and the difference matters:
+  ///
+  /// * **matched immediately** — someone was already waiting; the shared room is
+  ///   entered through the same path a code-joined room takes, so ready state,
+  ///   match start and Phase 9 behave identically.
+  /// * **queued** — nobody was waiting, so the caller waits and watches its own
+  ///   `matched` document. No polling.
+  /// * **rejected** — nothing was written and nothing is being watched, so the
+  ///   player is told rather than left on a spinner.
+  Future<void> quickMatch({BoardConfig? config}) async {
+    final service = matchmaking;
+    if (service == null) {
+      _fail(
+        RoomFailureReason.notAMember,
+        'Quick Match is not available in this build.',
+      );
+      return;
+    }
+    final id = uid;
+    if (id == null) {
+      _fail(RoomFailureReason.notAuthenticated, 'Sign in to play online.');
+      return;
+    }
+
+    final board = config ?? boardConfig;
+    _setPhase(OnlineLobbyPhase.searching);
+    final result = await service.findMatch(config: board);
+    if (_disposed) return;
+
+    switch (result) {
+      case MatchFound(:final room):
+        _lastFailure = null;
+        await _enterRoom(room);
+      case MatchQueued():
+        _lastFailure = null;
+        _setPhase(OnlineLobbyPhase.searching);
+        // The waiting player is notified by a listener, not by polling.
+        await _watchForMatch(board, id);
+      case MatchRejected(:final failure):
+        _lastFailure = RoomFailure(
+          RoomFailureReason.invalidRoomDocument,
+          failure.message,
+        );
+        _setPhase(OnlineLobbyPhase.failed);
+    }
+  }
+
+  /// Leaves the matchmaking queue, returning to the entry state.
+  Future<void> cancelQuickMatch() async {
+    final service = matchmaking;
+    final id = uid;
+    if (service == null || id == null) {
+      _setPhase(OnlineLobbyPhase.idle);
+      return;
+    }
+    _setPhase(OnlineLobbyPhase.busy);
+    await service.cancel(config: boardConfig);
+    await _matchWatch?.cancel();
+    _matchWatch = null;
+    if (_disposed) return;
+    _lastFailure = null;
+    _setPhase(OnlineLobbyPhase.idle);
+  }
+
+  /// Watches the caller's own match notification, entering the room when it lands.
+  Future<void> _watchForMatch(BoardConfig config, String uid) async {
+    await _matchWatch?.cancel();
+    if (_disposed) return;
+    _matchWatch = matchmaking!.watchForMatch(config: config, uid: uid).listen((
+      room,
+    ) {
+      if (_disposed) return;
+      if (room == null) return; // still waiting
+      _log.log('matched into ${room.code}');
+      unawaited(_enterRoom(room));
+    });
   }
 
   /// Leaves or cancels the room and returns to the idle state.
@@ -337,7 +432,9 @@ class OnlineLobbyController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     unawaited(_watch?.cancel());
+    unawaited(_matchWatch?.cancel());
     _watch = null;
+    _matchWatch = null;
     super.dispose();
   }
 }
