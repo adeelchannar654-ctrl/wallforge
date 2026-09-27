@@ -17,7 +17,7 @@ A wall may never remove the last route to either player's goal.
 
 ## Status
 
-**Phases 0–8 are complete, with one owner-side caveat.** See
+**Phases 0–8 and 8.1 are complete, with one owner-side caveat.** See
 [`phase.md`](phase.md) for the full plan and the per-phase results.
 
 - **Phase 0 — Project Foundation.** Flutter project, platform targets, folder
@@ -58,6 +58,14 @@ A wall may never remove the last route to either player's goal.
   an agreed board and seat assignment. **Moves are not synchronised yet** —
   that is Phase 9, and the lobby says so on screen. Local and vs-AI play are
   unchanged.
+- **Phase 8.1 — Random Matchmaking.** A Quick Match option alongside Create
+  and Join Room: a player is paired with a stranger automatically, with no
+  room code. Pairing is atomic — simultaneous requests cannot double-book
+  anyone or leave a player stranded — and the resulting room is the same
+  Phase 8 room, so ready state, match start and Phase 9 behave identically
+  however the two players found each other. Added by owner request after
+  Phase 8 shipped; it is recorded in [`phase.md`](phase.md) as its own phase
+  rather than folded in silently.
 
 **Firebase still needs owner-side setup in the Console.** The app
 code is complete and tested, but this repository ships no Firebase client
@@ -73,10 +81,19 @@ for project `wallforge-efdb3`, and creating the Firestore database — are in
 tested against an in-process Firestore double rather than a live backend. That
 means anonymous sign-in actually working, the `matches/{code}` document being
 readable, and realtime updates converging between two real devices are all
-still unverified. The three Firebase adapters (`firebase_auth_gateway.dart`,
-`cloud_firestore_client.dart`, `online_lobby_factory.dart`) sit at 0% test
-coverage for that reason alone. See [`memory.md`](memory.md) §13p for the
-full list of what is and is not proven.
+still unverified.
+
+**Online Play now works without configuration.** A bug found after Phase 8
+shipped made tapping "Online Play" silently do nothing, because
+`FirebaseAuthGateway` resolved the Firebase SDK in its constructor and threw
+before any error handling could run. That is fixed, with a regression test
+that builds the real gateway with no Firebase configured. Entering the lobby
+now shows a clear "online play is unavailable" state instead of failing
+silently. It remains true that the Firebase adapters are barely covered by
+tests — `cloud_firestore_client.dart` is at 2.56% and the success paths of
+`firebase_auth_gateway.dart` are unverified — because verifying them needs
+the live project described above. See [`memory.md`](memory.md) §13p and
+§13q for the full list of what is and is not proven.
 
 **The rules changed after Phase 4.** `game_spec.md` is now at **v2.0.0**: a
 horizontal and a vertical wall may share an anchor, forming a legal "+". This was

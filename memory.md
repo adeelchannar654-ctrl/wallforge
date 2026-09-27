@@ -2263,3 +2263,296 @@ as evidence that the backend works.
 - Q-7.1 and Q-7.2 are resolved above; Q-7.3, Q-7.4 and Q-7.5 remain open and are
   restated honestly in §13o.
 - Q-6.1 … Q-6.4, Q-5.1, Q-4.1 … Q-4.10, Q-2.1 remain open and unaffected.
+
+---
+
+# 13q. Phase 8.1 Record (Random Matchmaking) — and the Part A auth fix
+
+Two pieces of work in one session, recorded together because they were requested
+together: a bug fix found by reading the Phase 8 code rather than by trusting its
+green test run, and a new owner-approved feature.
+
+## Part A — `FirebaseAuthGateway` resolved Firebase eagerly
+
+### The bug, and it was wider than reported
+
+`FirebaseAuthGateway` resolved `fb.FirebaseAuth.instance` in its **constructor's
+initializer list**. That expression runs at construction, before any `try`/`catch`
+in the class, and it throws `[core/no-app]` when no Firebase app is
+initialised — which is the real state of a fresh clone, since `.gitignore`
+forbids committing the client config.
+
+Confirmed empirically before fixing anything, with a throwaway test:
+
+```
+Expected: return normally
+  Actual: <Closure: () => FirebaseAuthGateway>
+   Which: threw FirebaseException:<[core/no-app] No Firebase App '[DEFAULT]'
+   has been created - call Firebase.initializeApp()>
+```
+
+Because `OnlineLobbyFactory.firebase()` constructs the gateway, and the `/online`
+route builds the lobby during route construction, tapping "Online Play" threw
+before any screen was built. The app silently did nothing. That is the
+owner-reported symptom, and the route-level test in
+`test/presentation/screens/online/online_entry_navigation_test.dart` now pins it.
+
+Auditing the file properly found **four** defects of the same class, not one:
+
+| # | Location | Defect |
+| --- | --- | --- |
+| 1 | constructor | `_auth` resolved eagerly, before any guard |
+| 2 | `current()` | `_auth.currentUser` read outside a try/catch, so it *threw* instead of reporting `unavailable` |
+| 3 | `currentUid()` | same, and this one is the `userId` resolver handed to **every** Phase 6/7/8 repository, so a throw escaped `load()` and `save()` |
+| 4 | `authStateChanges()` | a `Stream`, so no `Future`-shaped try/catch protected it; `_auth` was touched when the method was *called* |
+
+Only #1 was in the original report. #3 is arguably worse, because it sits on the
+seam every repository depends on. All four are fixed: resolution moved to a
+cached `_auth` getter, every `Future` method is guarded, and `authStateChanges()`
+returns a single `unavailable` event when Firebase cannot be resolved rather than
+throwing to its caller.
+
+A repo-wide grep for `.instance` found no other eager resolution:
+`cloud_firestore_client.dart` resolves inside a getter (Phase 7's fix) and
+`firebase_bootstrap.dart` calls `initializeApp()` inside a try/catch. **No other
+instance of this bug class exists.**
+
+### Why the Phase 8 test suite missed it
+
+Every Phase 8 test injected a fake: `FakeAuthGateway` in the controller tests,
+`_StubAuth` in the widget tests, `_StubAuth2` for the second simulated device. The
+real class was only ever constructed with the `auth:` parameter, which skips the
+faulty expression entirely. The zero-argument path — the only one production uses
+— was never executed by a single test.
+
+The honest part: Phase 8's own record *named* this as a 0%-coverage gap (Q-8.2).
+Recording a coverage gap is not the same as the gap being safe, and this is the
+second time in two phases that a documented gap turned out to be a real defect
+(the first being the `dispose()`-during-load bug in Phase 7). The lesson worth
+keeping: **an adapter with no tests is untested code, not "covered by the tests
+that exist"** — and a constructor is code.
+
+### The regression test
+
+`test/data/firebase_auth_gateway_test.dart` constructs the **real,
+zero-argument** gateway with no Firebase app and asserts the whole public surface
+is total: construction does not throw, `signInAnonymously` resolves to
+`unavailable` (with a timeout, so a hang fails rather than stalls),
+`currentUid` resolves to null, and `authStateChanges` can be obtained and reports
+`unavailable`.
+
+It also asserts its own premise — that `fb.FirebaseAuth.instance` throws — so the
+file cannot silently become vacuous if a future test environment ever
+initialises a Firebase app.
+
+## Part B — Phase 8.1: Random Matchmaking
+
+Owner-approved and added to the plan itself (`phase.md`, between Phase 8 and Phase
+9) rather than folded in silently.
+
+### Document layout
+
+```text
+matchmaking/{boardKey}/waiting/{uid}    a player waiting; the doc id is the uid
+matchmaking/{boardKey}/matched/{uid}    "you have been matched"; value is the room
+matches/{code}                         the Phase 8 room, written by the claimer
+```
+
+The waiting entry's document id being the uid means a player can hold at most one
+queue entry per board, and re-queuing is idempotent.
+
+### Why pairing is race-free
+
+Two mechanisms, and the second is the subtle one.
+
+**1. The claim is a transaction.** Claiming candidate `X` re-reads `X` inside the
+transaction, so if another client already claimed it, `X` is gone and the claim
+aborts; the loser retries with a different candidate.
+
+**2. One transaction writes *both* participants' `matched` documents.** Those
+shared documents are the mutual-exclusion token. If A claims B while B
+simultaneously claims A, both transactions write `matched/A` and `matched/B`, so
+Firestore detects a write-write conflict, aborts one, and re-runs it; the re-run
+sees its own `matched` document already present and backs off.
+
+The two-simultaneous-requests case, concretely, from an empty queue:
+
+- A and B each write their own `waiting` entry. Different documents, so no
+  conflict. Then each queries and finds the other.
+- A's and B's claim transactions both run, and both write `matched/A` and
+  `matched/B`. They conflict; one commits.
+- The winner returns its room directly. The loser, on retry, finds
+  `matched/{self}` present, abandons its claim, re-reads its own matched document
+  and returns **the same room**.
+
+Exactly one room exists, both players are in it, and neither is double-booked or
+left waiting. Tested with `Future.wait` over simultaneous `findMatch` calls, and
+repeated 20 times with a fresh store each round so one lucky interleaving cannot
+hide a failure.
+
+The waiting player learns about the match through a listener on its own `matched`
+document — no polling and no periodic write.
+
+### An SDK constraint that shaped the design
+
+`cloud_firestore`'s `Transaction.get` accepts only a `DocumentReference`; **it
+cannot run a query**. So candidate discovery is a plain query *outside* the
+transaction, and the transaction re-reads the single chosen candidate to confirm
+it is still claimable. The commit — the part that genuinely has to be atomic —
+still is. This is recorded in the port's own documentation because it is not an
+obvious limitation, and designing a "query inside the transaction" approach first
+would have produced code that cannot compile.
+
+### No new manual Firebase console step
+
+Firestore serves an equality filter plus an `orderBy` on a *different* field only
+from a **composite** index, which is a manual console step or a Blaze-plan deploy
+— and `architecture.md` §10 rules Cloud Functions and Blaze out. Verified against
+current Firestore indexing documentation rather than assumed.
+
+The queue is therefore partitioned by board configuration **in the path**
+(`matchmaking/s9w10/waiting/...`), so the only query needed is a bare
+`orderBy('queuedAt')` + `limit` on one subcollection, which the automatic
+single-field index serves. **No composite index, no manual console step.** Had the
+board config been a document field instead, this feature would have required the
+owner to create an index before a single match could be found.
+
+### Compatibility scope: exact `BoardConfig` only
+
+No source document specifies configurable online match settings — `PRD.md` §6.4
+and `design.md` §19 list only "create match / join match / room code / opponent
+status / connection state". So matchmaking pairs **only on an exact `BoardConfig`
+match**, recorded as a ledger decision (Q-8.9) rather than a silent
+simplification. It also avoids the ambiguity of "compatible but not equal" boards,
+where a player could be dropped into a board size they did not choose.
+
+### Abandoned queue entries
+
+A player who closes the app mid-wait leaves an entry nothing will ever clear;
+without a rule, that entry would eventually be claimed into a room whose opponent
+never appears, stranding the claimer in a lobby forever. So entries carry a
+`queuedAt` timestamp, and `findMatch` reaps any entry older than `staleAfter`
+(default **60 seconds**) before considering it. Reaping is a plain write, not a
+transaction, because the worst case is two clients deleting the same stale entry.
+
+Sixty seconds is a reasoned default, not a documented figure — someone unpaired
+for a minute has almost certainly left. Recorded as Q-8.10. A malformed entry
+(missing `uid`) is reaped too, so it cannot block the queue.
+
+### Two defects the tests caught
+
+1. **The claimer never removed its own queue entry.** After a successful claim the
+   client was seated in a room *and* still in the queue, so a third player could
+   pair with someone already in a match. The "nobody is left stranded" assertion
+   found it. Fixed by deleting the claimer's own entry in the same transaction,
+   and a fourth read was added to the transaction to refuse claiming a candidate
+   who is *already* matched — closing the related case of a leftover entry from an
+   earlier session.
+2. **A player who lost a race was told matchmaking had failed.** The first rule was
+   "if I saw a partner and never committed, report a failure", which misfired
+   whenever the loss was a *race* rather than a commit failure — and a lost race
+   leaves the client's own queue entry intact, so it was queued all along. The
+   deciding question is now "am I actually in the queue?", checked directly. The
+   truthiness is also better: a player who is genuinely waiting is told they are
+   waiting.
+
+### Reuse, not duplication
+
+A matched pair lands in the **same** `Room`, at the same `matches/{code}` path,
+with the same serialised shape as a code-created room. `RoomRepository` is
+untouched: after matchmaking, ready state, match start and Phase 9's move sync all
+work through the existing Phase 8 code, and a test asserts a quick-matched room
+is loaded and mutated by the Phase 8 repository like any other. The only
+difference is how the two players found each other.
+
+The player who was *already waiting* becomes the host in Blue, matching the
+convention of a code room: whoever set the room up is Blue, and Blue moves first
+(`game_spec.md` R-PLAYER-07).
+
+`MatchmakingRepository` is optional on `OnlineLobbyController`, so a build without
+it keeps the code flow working and simply does not offer Quick Match.
+
+## Quality gates (real output, 2026-09-27)
+
+- `dart format --set-exit-if-changed lib test` → `Formatted 108 files (0 changed)`
+- `flutter analyze` → `No issues found!`
+- `flutter test` → `1188: All tests passed!` (was 1129; +59)
+- New-code coverage: `firestore_matchmaking_repository.dart` 100%,
+  `in_memory_firestore_client.dart` 100% (including the transaction and query
+  paths), `room.dart` 100%, `room_code_generator.dart` 100%,
+  `online_lobby_screen.dart` 96.46%, `firestore_room_repository.dart` 98.08%,
+  `auth.dart` 93.75%, `matchmaking.dart` 93.75%, `online_lobby_controller.dart`
+  93.83%.
+- `flutter build web` → `√ Built build\web`
+- `check_spec_consistency.py` → `OK: spec is consistent with the reference engine.`
+- Oracle vectors byte-identical: 1,229,568 bytes, SHA-256 `6f1e3c05…`. `git diff`
+  confirms `game_spec.md`, `lib/domain/engine`, `lib/domain/models` and
+  `lib/domain/serialization` are untouched — no game rule moved.
+- `tool/encoding/scan_mojibake.py` → `0 files with mojibake`
+
+Tests added: 12 (`firebase_auth_gateway_test.dart`) + 7 (online entry navigation) +
+29 (matchmaking) + 12 (interleaving/transaction mechanics) + 11 (quick-match
+controller and full flow) + 7 (quick-match screen) = 78 across Part A and Part B,
+against a 1110 baseline.
+
+### Gaps, named rather than hidden
+
+- `cloud_firestore_client.dart` is at **2.56%** — it now also carries the real
+  `query` and `runTransaction` adapters, and those cannot be exercised without a
+  live Firebase platform. The in-memory double covers the *logic*; only the SDK
+  call itself is unverified. This is Q-7.5, unchanged in kind and now larger in
+  surface.
+- `firebase_auth_gateway.dart` rose from 0% to **64.71%** thanks to Part A's
+  tests, which now cover the real unconfigured path. The remaining third is the
+  *success* paths, which need a live project. Q-8.2 stands, but it is materially
+  less blind than it was.
+- `online_lobby_factory.dart` is at 70%: the uncovered part is the `firebase()`
+  constructor body, which only runs where a platform exists.
+- The in-memory double models transaction atomicity and conflicts, but it cannot
+  model a real partial write, and its conflict detection is coarse — *any* write
+  aborts an in-flight transaction. That makes retry testing stricter than reality,
+  not laxer, but the retry counts it reports are not Firestore's.
+
+### Still unverified against a real backend
+
+Unchanged from Phase 8 and worth restating, because matchmaking adds a second
+write path: anonymous sign-in succeeding; `matches/{code}` and the two
+`matchmaking/` subcollections being readable and writable; `snapshots()` on a
+queue partition converging between two real devices; whether a real transaction
+retries as often as the double's coarse conflict detection implies; and whether
+the write-write conflict on the shared `matched` documents behaves as the pairing
+argument assumes. The Q-7.4 console steps in §13o must be completed before any of
+this can be checked. The no-new-index conclusion is a documentation finding, not
+an observed one — it should be re-confirmed in the Console when it is set up.
+
+## Open Questions
+
+- **Q-8.1 … Q-8.7** remain as recorded in §13p, except Q-8.2, which Part A
+  materially improved (0% → 64.71%).
+- **Q-8.8 (new)** — a waiting player is told when they are matched, but there is
+  no "opponent found" sound, animation or notification of any kind. `design.md`
+  §19 specifies opponent status and connection state, which are covered, but says
+  nothing about feedback for the pairing moment. Whether that needs designing or
+  is implied by the existing motion language is a UI question, not a rules one.
+- **Q-8.9 (new)** — matchmaking pairs only on an exact `BoardConfig` match. A
+  player who wants a 7x7 cannot be paired with someone queueing for 9x9, and
+  there is no way to express "any size" in the queue. If playtesting shows
+  mismatched expectations, the fix is a wildcard partition such as `sAny`, which
+  the path-partitioned design supports at no extra index cost.
+- **Q-8.10 (new)** — the 60-second staleness window is a reasoned default with no
+  documented source. It is a balance parameter, not a rule, and 30 or 120 seconds
+  could both be defensible. It is injectable precisely because it is a guess.
+- **Q-8.11 (new)** — the pairing algorithm is "first come, first served" by
+  `queuedAt`. There is no skill rating, no rating-based matching, and no widening
+  search window. `PRD.md` §6.4 says nothing about matchmaking quality, and Phase 5
+  established the AI is stateless with no rating, so there is no skill signal to
+  match on. Recorded so it is not mistaken for a skill-based system later.
+- **Q-8.12 (new)** — a `matched` document is never deleted. It is overwritten when
+  the same player queues for the same board again, and `cancel` deliberately
+  leaves it alone so an opponent walking into the room is not stranded. That means
+  one small document per (player, board) persists indefinitely — negligible
+  against the 1 GiB quota, but it is unbounded in principle and a Phase 10 cleanup
+  policy may be wanted.
+- Q-7.1 and Q-7.2 remain resolved as recorded in §13p. Q-7.3, Q-7.4, Q-7.5 remain
+  open.
+- Q-6.1 … Q-6.4, Q-5.1, Q-4.1 … Q-4.10, Q-2.1 remain open and unaffected.
