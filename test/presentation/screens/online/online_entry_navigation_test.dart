@@ -88,7 +88,11 @@ void main() {
     await tapOnlinePlay(tester);
     expect(find.byType(OnlineLobbyScreen), findsOneWidget);
 
-    await tester.tap(find.text('BACK'));
+    // Brought into view explicitly: the lobby grows as features are added, and
+    // an 800x600 test viewport no longer reaches the bottom on its own.
+    final back = find.text('BACK');
+    await tester.ensureVisible(back);
+    await tester.tap(back);
     await tester.pumpAndSettle();
 
     expect(find.byType(OnlineLobbyScreen), findsNothing);
@@ -100,7 +104,11 @@ void main() {
   ) async {
     await openEntry(tester);
     await tapOnlinePlay(tester);
-    await tester.tap(find.text('BACK'));
+    // Brought into view explicitly: the lobby grows as features are added, and
+    // an 800x600 test viewport no longer reaches the bottom on its own.
+    final back = find.text('BACK');
+    await tester.ensureVisible(back);
+    await tester.tap(back);
     await tester.pumpAndSettle();
 
     // The route owns the controller and the screen disposes it. If disposal were
