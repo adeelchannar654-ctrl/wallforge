@@ -21,6 +21,7 @@ import 'dart:async';
 ///
 /// Phase 8+ can widen this interface (sub-collections, queries, transactions)
 /// without touching the repositories, because they only ever see this contract.
+/// The first widening was [watch], added for the online lobby.
 abstract interface class FirestoreClient {
   /// Reads the document at [path], or null when it does not exist.
   ///
@@ -34,4 +35,22 @@ abstract interface class FirestoreClient {
 
   /// Removes the document at [path]. A missing document is not an error.
   Future<void> delete(String path);
+
+  /// Emits the document at [path] now and again on every change, emitting null
+  /// when it does not exist.
+  ///
+  /// Added in Phase 8, which needs the room creator to see the opponent join
+  /// without polling. `phase.md` Phase 7 anticipated exactly this widening, and
+  /// the repositories are unchanged by it because they only ever see this
+  /// contract.
+  ///
+  /// **Free-tier cost, verified against current Firestore documentation rather
+  /// than assumed:** a real-time listener is not billed as its own operation, but
+  /// "real-time updates are billed as standard document reads — you are charged
+  /// one read each time a document is added or updated in the listener's result
+  /// set". So a listener on a document costs one extra read per write for every
+  /// client watching it. With two players in a lobby and a handful of writes per
+  /// room that is negligible against the 50,000 reads/day no-cost quota, but it
+  /// is the reason the lobby must not write on a timer.
+  Stream<Map<String, dynamic>?> watch(String path);
 }

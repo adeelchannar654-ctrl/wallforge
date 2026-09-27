@@ -57,4 +57,20 @@ class CloudFirestoreClient implements FirestoreClient {
       // Nothing to do; the document is already absent from our point of view.
     }
   }
+
+  @override
+  Stream<Map<String, dynamic>?> watch(String path) {
+    // Errors are mapped to "gone" rather than propagated, matching [read]: the
+    // lobby must show a connection problem, not crash the screen. The caller
+    // detects the disconnection from the repository's own status, not from a
+    // stream error.
+    return _firestore
+        .doc(path)
+        .snapshots()
+        .map((snapshot) {
+          final data = snapshot.data();
+          return data == null ? null : Map<String, dynamic>.from(data);
+        })
+        .handleError((Object _) => null);
+  }
 }

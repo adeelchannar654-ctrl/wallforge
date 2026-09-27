@@ -1,3 +1,9 @@
+// ignore_for_file: close_sinks — the realtime controllers in this file are
+// long-lived by design and are closed by closeWatchers() in tearDown. Closing a
+// broadcast controller on first cancel instead would break the second simulated
+// client watching the same document, which is the point of the lobby test.
+library;
+
 import 'dart:async';
 
 import 'firestore_client.dart';
@@ -39,6 +45,7 @@ class InMemoryFirestoreClient implements FirestoreClient {
     _maybeFail();
     documents[path] = Map<String, dynamic>.from(data);
     writeLog.add(path);
+    _emit(path);
   }
 
   @override
@@ -46,6 +53,52 @@ class InMemoryFirestoreClient implements FirestoreClient {
     _maybeFail();
     documents.remove(path);
     writeLog.add(path);
+    _emit(path);
+  }
+
+  // --- Realtime watching (Phase 8) --------------------------------------------
+
+  /// Live document streams, one broadcast controller per path.
+  ///
+  /// A broadcast controller is used so two simulated clients can watch the same
+  /// document — which is exactly what the lobby test needs to prove the room
+  /// creator sees the opponent arrive. Each write emits to every watcher, so the
+  /// double reproduces the one-read-per-write cost the real listener bills.
+  final Map<String, StreamController<Map<String, dynamic>?>> _watchers =
+      <String, StreamController<Map<String, dynamic>?>>{};
+
+  @override
+  Stream<Map<String, dynamic>?> watch(String path) async* {
+    final controller = _controllerFor(path);
+    // The current value first, matching the real listener's initial event.
+    yield _snapshot(path);
+    yield* controller.stream;
+  }
+
+  StreamController<Map<String, dynamic>?> _controllerFor(String path) =>
+      _watchers.putIfAbsent(
+        path,
+        StreamController<Map<String, dynamic>?>.broadcast,
+      );
+
+  Map<String, dynamic>? _snapshot(String path) {
+    final data = documents[path];
+    return data == null ? null : Map<String, dynamic>.from(data);
+  }
+
+  void _emit(String path) {
+    final controller = _watchers[path];
+    if (controller == null || controller.isClosed) return;
+    controller.add(_snapshot(path));
+  }
+
+  /// Closes every open stream. Tests call this in `tearDown` so a pending
+  /// microtask cannot outlive the test.
+  void closeWatchers() {
+    for (final controller in _watchers.values) {
+      if (!controller.isClosed) controller.close();
+    }
+    _watchers.clear();
   }
 
   void _maybeFail() {
