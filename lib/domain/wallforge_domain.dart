@@ -8,6 +8,7 @@ export 'engine/engine.dart';
 export 'models/models.dart';
 export 'repositories/app_settings.dart';
 export 'repositories/auth.dart';
+export 'repositories/matchmaking.dart';
 export 'repositories/match_statistics.dart';
 export 'repositories/repositories.dart';
 export 'repositories/room.dart';
