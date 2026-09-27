@@ -1914,3 +1914,352 @@ Nothing below can be automated from here, and none of it may be committed:
   model, and `phase.md` assigns Firestore rules to Phase 10. Worth confirming that
   is the intent rather than an omission.
 - Q-6.1 … Q-6.4, Q-5.1, Q-4.1 … Q-4.10, Q-2.1 remain open and unaffected.
+
+---
+
+# 13p. Phase 8 Record (Online Rooms)
+
+## The honest headline
+
+Anonymous auth plus a two-player room lifecycle, tested end to end against an
+in-process Firestore double. **The Firebase console setup from Q-7.4 has not been
+done** — confirmed with the owner during this phase, and confirmed by the absence
+of `firebase_options.dart`, `google-services.json`, `GoogleService-Info.plist`,
+`.firebaserc` and `firebase.json` in the working tree. So every claim about *this
+code* is verified, and every claim about *real Firebase* is not. The three
+platform-bound adapters sit at 0% coverage and are named below rather than
+quietly counted as "tested".
+
+## Auth: anonymous, and it is spec-derived
+
+Not a preference. `rules.md` §6: "Authentication can initially use an appropriate
+low-friction method such as anonymous authentication", and the same paragraph
+anticipates account linking "if the product later needs durable cross-device
+identity". `PRD.md` §6.4 says "Anonymous or account-based authentication as
+appropriate". `architecture.md` §10 only asks for something that identifies
+users.
+
+The limitation `rules.md` §6 explicitly warns about is carried into
+`AuthGateway`'s docs rather than glossed: **anonymous identity is not a durable
+account.** A user who clears app data or reinstalls loses that uid and their
+cloud data becomes unreachable. Phase 8 does not promise cross-device data
+restoration, and `PRD.md` §6.5's display names / avatars remain unimplemented
+because nothing in the product needs them yet.
+
+`AuthGateway` is declared in the domain layer and implemented in
+`lib/data/remote/firebase_auth_gateway.dart`, matching the Phase 6/7 repository
+pattern. Failure is total: every path returns `AuthState.unavailable(reason)`
+rather than throwing, following the non-fatal `FirebaseStatus` convention Phase 7
+established. `AuthStatus.unavailable` is deliberately distinct from `signedOut`
+because retrying automatically is reasonable for the first and not the second.
+
+`AuthState.isSignedIn` rejects an **empty** uid as well as null. Found by a test:
+the first version accepted `''`, which would have let a document be written under
+a blank key — the same failure mode the Phase 6/7 repositories guard against with
+`uid == null || uid.isEmpty`.
+
+## Room model
+
+One document per room at `matches/{code}`, extending `architecture.md` §11's
+conceptual `matches/{matchId}` structure. The room code **is** the document id,
+which is what makes joining a single document read: no query, no index, no
+collection scan.
+
+```text
+matches/{code}
+  code, status, boardSize, wallsPerPlayer
+  hostId
+  blue: { playerId, ready }
+  red:  { playerId, ready }
+  createdAt, updatedAt, version, schemaVersion
+```
+
+`currentPlayerId`, `turnNumber`, `winnerId` and `boardState` from §11 are
+deliberately **absent**. Writing a `boardState` before moves are exchanged would
+imply a synchronisation that does not exist. `version` is seeded at 1 because it
+is monotonic bookkeeping Phase 9 extends and `PRD.md` §9 asks for monotonic
+turn/version values.
+
+`RoomStatus` (`waiting` / `ready` / `started` / `cancelled`) is a separate
+application/data concept, **not** a reuse of `GameStatus`. A room exists before
+any `GameState` does, and `GameStatus` is only `inProgress` / `finished`
+(`game_spec.md` §6.1) — it cannot express "waiting for an opponent".
+
+`RoomStatus.ready` is *derived* on every write from the seats
+(`_withDerivedStatus`), so there is no code path that reaches `ready` without both
+players present and readied. Status can therefore never drift from the seats.
+
+### Side assignment
+
+The **creator takes Blue**, the joiner takes Red. `game_spec.md` R-PLAYER-07
+("Blue moves first") fixes Blue as the first player, and Q-6.2 already settled
+that the local code treats Blue as the first player. Note the prompt's suggested
+check: D-03/D-04 turned out to be about board orientation (row 0 is the top edge,
+orthogonal adjacency), *not* sides — the side rules are R-PLAYER-01/02/03, with
+start cells `(size-1, size~/2)` for Blue and `(0, size~/2)` for Red.
+
+The assignment is stored explicitly in the document rather than implied by join
+order, so it survives a re-join and is readable without re-deriving anything.
+
+## Room codes: format and collisions
+
+No format is specified anywhere in the source documents — `PRD.md` §6.4 and
+`design.md` §19 both list only "Room code" — so this is a reasoned default:
+**six characters from a 32-symbol alphabet excluding `0`, `O`, `1` and `I`**, giving
+32^6 ≈ 1.07e9 combinations. Omitting the visually ambiguous symbols is the whole
+point: a code read aloud or copied off a screenshot must be unambiguous.
+`RoomCode.tryParse` is case-insensitive and strips separators, so `"ab3-9hk"`,
+`"AB39HK"` and `" ab39hk "` are the same room.
+
+**Collision handling is a bounded read-then-write retry, and the write is verified
+afterwards.** A read-then-write cannot be made atomic without a transaction or a
+Cloud Function, and Cloud Functions require the Blaze plan, which
+`architecture.md` §10 forbids depending on. So rather than pretend the check is
+atomic, the repository re-reads after writing: if the confirming read shows a
+different host, another creator won the race and we try the next code. That closes
+the race instead of documenting it away. Bounded at 5 attempts, after which the
+result is `codeGenerationFailed` — a distinct reason from `networkUnavailable`,
+because a transport failure is not a code-space problem and retrying it five times
+would only produce a misleading error. A test asserts exactly that distinction.
+
+## Lifecycle and the leave asymmetry
+
+| Step | Behaviour |
+| --- | --- |
+| create | Generates a code, seats the creator in Blue, status `waiting` |
+| join | Fills the free seat; a re-join by a seated player is a no-op, not an error |
+| ready | Only ever the caller's own seat; a non-member is refused |
+| start | Host-only, and only once both seats are filled and both are ready |
+| leave (host) | **Deletes the document** |
+| leave (guest) | **Reopens the seat** for the next player |
+| leave (started) | Refused as `roomAlreadyStarted`; disconnect is Phase 10 |
+
+The asymmetry is deliberate, because the two situations are not the same. A host
+leaving strands a room with no host, nothing able to start it, and nobody to
+maintain it — deleting it also frees the code and stops it occupying the 1 GiB
+no-cost storage quota indefinitely. A guest leaving leaves a healthy room the host
+is still waiting on, so the seat simply reopens.
+
+`RoomStatus.cancelled` is modelled but unused by the shipped paths. That is
+recorded rather than papered over: a room is never left in a cancelled state,
+because deleting is strictly better for both the quota and the code space.
+
+## Failure handling: values, not exceptions
+
+`rules.md` §7 says expected invalid states must return structured failures, and
+the domain already had a precedent (`ActionResult` / `FailureResult`). So
+`RoomResult` is a sealed union of `RoomSuccess` and `RoomRejected`, and
+`RoomRejected` carries a `RoomFailure` with a machine-readable
+`RoomFailureReason` **and** a player-facing message.
+
+Thirteen reasons, each distinguishable, because "that room is full" and "that room
+does not exist" call for different actions: `notAuthenticated`,
+`invalidRoomCode`, `roomNotFound`, `roomFull`, `roomCancelled`,
+`roomAlreadyStarted`, `notAMember`, `playersNotReady`, `notTheHost`,
+`invalidRoomDocument`, `codeGenerationFailed`, `networkUnavailable`. A test
+asserts no message leaks the word "Exception", which is `rules.md` §7's explicit
+bad-example check.
+
+One deliberate deviation from the Phase 6/7 repositories, for a stated reason: the
+Phase 7 persistence repositories swallow write failures (a lost setting must not
+break the app), but here a swallowed write would report a room that does not
+exist or a ready state the opponent never received. So room writes return
+`networkUnavailable` instead of pretending to succeed.
+
+## Realtime listening, and what it actually costs
+
+`design.md` §19 requires "opponent status", so the creator has to see the joiner
+arrive — that means a listener, which meant widening the `FirestoreClient` port
+with `watch(path)`. Phase 7 anticipated exactly this ("Phase 8+ can widen this
+interface ... without touching the repositories"), and the Phase 6/7
+repositories were not touched by it.
+
+Cost was **checked against current Firebase documentation rather than assumed**:
+"real-time updates are billed as standard document reads — you are charged one
+read each time a document is added or updated in the listener's result set." So a
+listener is not a separate charge, but each write costs one extra read per
+watching client. The no-cost quota is 50,000 reads/day and 20,000 writes/day
+(stored data 1 GiB, 20,000 deletes/day, 10 GiB/month egress), which is ample for
+two players and a handful of writes per room. The design consequence is why
+`FirestoreRoomRepository` contains **no polling and no periodic write** — every
+write is a state change a player asked for.
+
+`InMemoryFirestoreClient.watch` is a broadcast stream so two simulated clients can
+watch one document, which is how the test proves the creator sees the opponent
+arrive. It needs a file-level `close_sinks` suppression because the controllers
+must outlive a single subscriber; `closeWatchers()` is called in `tearDown`.
+
+## Interface boundary
+
+`RoomRepository` sits in `lib/domain/repositories/repositories.dart` next to the
+Phase 6/7 contracts; `Room`, `RoomSeat`, `RoomCode`, `RoomResult` and the failure
+types sit in `lib/domain/repositories/room.dart`; the Firestore implementation is
+in `lib/data/remote/firestore_room_repository.dart`. Phase 9 can attach
+move-synchronisation to the same abstraction, and the test double substitutes
+exactly as `InMemoryFirestoreClient` already does.
+
+## Q-7.1 and Q-7.2, resolved
+
+**Q-7.2 (the `userId` seam) — resolved.** `FirestoreRoomRepository` takes the same
+`UserIdResolver` the Phase 6/7 repositories take, and
+`OnlineLobbyFactory.firebase` passes `auth.currentUid` into it. A real
+authenticated uid now reaches the seam exactly as Phase 7 designed it to, with no
+change to the repositories. The "null means do nothing" contract is preserved: with
+no uid, every room operation refuses with `notAuthenticated` and **nothing is
+written under a placeholder identity** — tested for all five entry points.
+
+**Q-7.1 (local vs remote storage for settings/statistics) — deliberately still
+local, now with a source rather than just a principle.** Phase 7 kept local
+storage to honour "without changing local game behavior". That reasoning still
+holds, and it now has explicit backing: `PRD.md` §9 says "Local game state and
+local settings should be stored locally", and `rules.md` §4 lists `shared_preferences`
+for "small local settings / tutorial completion / simple local preferences" and
+names the online Firestore documents as "online matches, user cloud data, match
+metadata" — not device settings. Confirmed with the owner during this phase, who
+chose to keep storage local. Flipping it is now a one-line change
+(`PersistenceFactory.attachRemote`) should that ever be wanted, because the
+uid-resolving seam already exists.
+
+## Two defects the tests caught
+
+1. **The document version did not advance on a join.** `_persistSeated` compared
+   the mutated room against *itself* to decide whether to bump the version, which
+   is never true, so a join that only filled a seat left `version` at 1. Phase 9
+   will rely on that version for optimistic concurrency, so this was a real latent
+   bug, caught by asserting the version increases across a join. Fixed by passing
+   the previously-read room in and comparing against that.
+2. **The host could not ready up once the opponent joined.** The lobby screen hid
+   the ready toggle whenever the room was full, which is exactly when it matters.
+   Caught by a widget test, not by a controller test — the controller was always
+   capable, the screen just never offered it. Ready-up is now always available to
+   a seated player.
+
+A third, smaller one: nothing in the UI ever triggered sign-in, so the lobby sat
+in `needsSignIn` with no way out — `createRoom` and `joinRoom` both refuse without
+a uid, making the screen unusable. Anonymous auth exists precisely to remove
+friction (`rules.md` §6), so the screen now signs in on entry. The auto-sign-in
+path also made the "sign-in failed" state reachable and testable.
+
+## Tests
+
+- `test/data/room_code_test.dart` — 12: format, alphabet properties, case and
+  separator normalisation, rejection cases, generator validity/uniqueness, and
+  determinism under a seeded `Random`.
+- `test/data/room_lifecycle_test.dart` — 56: the full lifecycle against two
+  independent repositories over one shared store, the real document layout, every
+  failure reason, the leave asymmetry, collision retry and exhaustion, transport
+  failure, identity safety, realtime watching (including two watchers on one
+  document), serialisation rejection cases, and value semantics.
+- `test/data/auth_state_test.dart` — 7: `AuthState` semantics, and a compile-time
+  proof that `currentUid` matches the `UserIdResolver` shape the repositories take.
+- `test/application/online_lobby_controller_test.dart` — 18: sign-in success and
+  failure, create/wait, opponent arriving via the watch, per-player ready state,
+  host-only start, leave/cancel from both sides, and robustness including a
+  dispose during an in-flight create.
+- `test/presentation/screens/online/online_lobby_screen_test.dart` — 9: entry
+  state, generated code and seats, malformed and unknown codes, per-player ready
+  rendering, the started view and its no-synchronisation notice, and controller
+  ownership on teardown.
+
++38 tests overall, 1072 → 1110.
+
+One existing test needed a fix rather than a code change: a `game_screen_test`
+case scrolled to a preset chip and then tapped the start button, which worked only
+because the entry page had not grown. Adding the online button made the page
+longer and the button scrolled out of view. It now calls `ensureVisible` on the
+button it taps, so the assertion no longer depends on page length.
+
+## Quality gates (real output, 2026-09-27)
+
+- `dart format --set-exit-if-changed lib test` → `Formatted 101 files (0 changed)`
+- `flutter analyze` → `No issues found!`
+- `flutter test` → `1110: All tests passed!`
+- New-code coverage: `firestore_room_repository.dart` 98.08%, `room.dart` 98.72%,
+  `in_memory_firestore_client.dart` 100%, `room_code_generator.dart` 100%,
+  `online_lobby_screen.dart` 95.40%, `auth.dart` 93.75%,
+  `online_lobby_controller.dart` 87.60%.
+- `flutter build web` → `√ Built build\web`
+- `check_spec_consistency.py` → `OK: spec is consistent with the reference engine.`
+- Oracle vectors byte-identical: 1,229,568 bytes, SHA-256 `6f1e3c05…`, no diff
+  against HEAD. `git diff` also confirms `game_spec.md`, `lib/domain/engine` and
+  `lib/domain/models` are untouched — the domain rule layer did not move.
+- `tool/encoding/scan_mojibake.py` → `0 files with mojibake`
+
+### Coverage gaps, named rather than hidden
+
+Three files are at **0%**, all for the same single reason — they need a live
+Firebase platform, and there is neither a configured project nor an emulator
+(Q-7.3/Q-7.4):
+
+- `firebase_auth_gateway.dart` (28 lines) — **new this phase.** Anonymous sign-in
+  against real `FirebaseAuth`. Not exercised by any test.
+- `cloud_firestore_client.dart` (19 lines) — the Phase 7 adapter, still 0% as
+  Q-7.5 recorded, now also carrying the `watch` implementation.
+- `online_lobby_factory.dart` (9 lines) — only wires the two above together.
+
+`FirebaseAuthGateway` is the honest gap to care about: its error mapping
+(`FirebaseAuthException` → `unavailable`, no-app → `unavailable`) is exactly the
+logic that decides whether a player sees a clear message or a crash, and it is
+unverified. Exercising it needs `FirebaseAuthPlatform` mocked or an emulator, so
+it is Q-8.2 rather than something quietly skipped.
+
+The 2% and 1.4% shortfalls in the repository and controller are a watch-stream
+`onError` path and a defensive branch that current leave semantics make
+unreachable (the Blue-seat branch of `_seatPlayer` cannot be hit, because the only
+player who can leave the Blue seat is the host, and the host's departure deletes
+the document). Left in place deliberately.
+
+## What is not verified against a real backend
+
+Everything below is unproven and will stay unproven until the console work is
+done:
+
+- That anonymous sign-in succeeds, and what it does when disabled in the Console.
+- That `matches/{code}` is readable and writable, and that the document shape
+  above is accepted.
+- That `snapshots()` delivers room changes to a second device in practice, and how
+  long a real listener takes to converge.
+- Whether the read-then-write race actually behaves as the verify-after-write
+  logic assumes.
+- Whether a real `set()` is as atomic as the in-memory double's map assignment.
+  The double cannot model a partial write.
+
+To close all of it, the Q-7.4 steps in §13o must be completed and either the
+Firestore emulator or two real devices used. Nothing in this phase should be read
+as evidence that the backend works.
+
+## Open Questions
+
+- **Q-8.1 (new)** — the room code alphabet is a reasoned default with no source in
+  the documents. Six characters from 32 symbols is a judgement call about how often
+  players mistype codes. If playtesting shows too many failures, 8 characters is
+  the obvious change; the document id stays the code either way.
+- **Q-8.2 (new)** — `firebase_auth_gateway.dart` has 0% coverage. The fix is an
+  emulator-based integration test or a `FirebaseAuthPlatform` fake, not a mock of
+  the gateway itself. Worth doing before trusting anonymous sign-in in the field.
+- **Q-8.3 (new)** — `RoomStatus.cancelled` has no producer. It exists for a future
+  cancel affordance and Phase 10's timeout handling. If neither arrives it should
+  be deleted rather than left as decoration.
+- **Q-8.4 (new)** — `design.md` §19 lists a `reconnecting` connection state, and
+  this phase does not implement it. Detecting it properly means reading Firestore
+  snapshot metadata (a snapshot served from cache rather than the server), which
+  is meaningful once Phase 9 streams moves but would be a guess here. Phase 9
+  should add it.
+- **Q-8.5 (new)** — `design.md` §19 specifies the lobby's *contents* but no visual
+  treatment, and no Stitch screen covers a lobby. This screen reuses existing
+  tokens and component shapes, following the pattern Phase 5 set for the AI
+  selector. A real lobby design belongs with the Phase 11 UI work.
+- **Q-8.6 (new)** — `GameScreen` never disposes the `LocalGameController` the
+  `/game` route builds for it, so those controllers outlive the route. Pre-existing
+  since Phase 4 and out of scope here; the new online screen avoids it with an
+  explicit `ownsController` flag. Worth fixing rather than leaving a known leak.
+- **Q-8.7 (new)** — security rules were still not authored. `architecture.md` §12
+  lists what they must enforce (authenticated identity, match membership, turn
+  ownership, expected types, monotonic version) and `phase.md` assigns Firestore
+  rules to Phase 10. The document shape now exists, so Phase 10 can finally write
+  them against something real. Until then the default test-mode rules are the only
+  protection, and the app trusts the client for room contents — which
+  `architecture.md` §12 explicitly says is not a sufficient long-term position.
+- Q-7.1 and Q-7.2 are resolved above; Q-7.3, Q-7.4 and Q-7.5 remain open and are
+  restated honestly in §13o.
+- Q-6.1 … Q-6.4, Q-5.1, Q-4.1 … Q-4.10, Q-2.1 remain open and unaffected.

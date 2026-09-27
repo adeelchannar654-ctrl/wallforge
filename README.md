@@ -17,7 +17,7 @@ A wall may never remove the last route to either player's goal.
 
 ## Status
 
-**Phases 0–7 are complete, with one owner-side caveat.** See
+**Phases 0–8 are complete, with one owner-side caveat.** See
 [`phase.md`](phase.md) for the full plan and the per-phase results.
 
 - **Phase 0 — Project Foundation.** Flutter project, platform targets, folder
@@ -51,8 +51,15 @@ A wall may never remove the last route to either player's goal.
   defensive startup that survives a build with no Firebase configuration.
   The app still defaults to local storage, so nothing about how it plays has
   changed yet — see the note below.
+- **Phase 8 — Online Rooms.** Anonymous sign-in and a two-player room:
+  create a room, share the six-character code, join by code, ready up, and
+  start. The room code is the Firestore document id, so joining is a single
+  read with no query or index. Two devices can now reach a shared room with
+  an agreed board and seat assignment. **Moves are not synchronised yet** —
+  that is Phase 9, and the lobby says so on screen. Local and vs-AI play are
+  unchanged.
 
-**Phase 7 still needs owner-side setup in the Firebase Console.** The app
+**Firebase still needs owner-side setup in the Console.** The app
 code is complete and tested, but this repository ships no Firebase client
 configuration on purpose: `.gitignore` excludes `google-services.json`,
 `GoogleService-Info.plist` and `firebase_options.dart` and says never to merge
@@ -60,8 +67,16 @@ exceptions for them. Until those files are added locally, the app logs
 `Firebase unavailable` at startup and runs on local storage. The exact manual
 steps — registering the Android/iOS/Web apps, running `flutterfire configure`
 for project `wallforge-efdb3`, and creating the Firestore database — are in
-[`memory.md`](memory.md) §13o. Cloud persistence is not used by the app until
-Phase 8 supplies a real user id.
+[`memory.md`](memory.md) §13o.
+
+**This was confirmed still outstanding during Phase 8**, so the online code is
+tested against an in-process Firestore double rather than a live backend. That
+means anonymous sign-in actually working, the `matches/{code}` document being
+readable, and realtime updates converging between two real devices are all
+still unverified. The three Firebase adapters (`firebase_auth_gateway.dart`,
+`cloud_firestore_client.dart`, `online_lobby_factory.dart`) sit at 0% test
+coverage for that reason alone. See [`memory.md`](memory.md) §13p for the
+full list of what is and is not proven.
 
 **The rules changed after Phase 4.** `game_spec.md` is now at **v2.0.0**: a
 horizontal and a vertical wall may share an anchor, forming a legal "+". This was

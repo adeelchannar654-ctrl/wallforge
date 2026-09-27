@@ -636,6 +636,117 @@ Allow two users to create and join matches.
 
 Two devices can enter the same match.
 
+### Result — Phase 8 (2026-09-27)
+
+Authentication and the two-player room lifecycle. No game rule changed; the spec
+checker and oracle vectors are untouched and still green, and local and vs-AI play
+are unaffected.
+
+- **What "match start" means here:** both players are seated in one shared record
+  with an agreed `BoardConfig` and side assignment. **Moves are not synchronised
+  in this phase** — that is Phase 9 — and the lobby says so on screen rather than
+  letting a player believe otherwise.
+- **Auth: Firebase Anonymous.** Spec-derived, not a preference — `rules.md` §6
+  ("an appropriate low-friction method such as anonymous authentication"),
+  `PRD.md` §6.4 ("Anonymous or account-based authentication as appropriate").
+  `rules.md` §6's warning is carried forward, not glossed: anonymous identity is
+  not a durable account, so a reinstall loses access to that uid's cloud data.
+  Phase 8 does not promise cross-device data restoration.
+- **Layering:** `AuthGateway` and `RoomRepository` are declared in
+  `lib/domain/repositories/` beside the Phase 6/7 contracts, and implemented in
+  `lib/data/remote/`. Nothing above that line knows Firebase exists, so Phase 9
+  attaches move sync to the same abstraction and tests substitute a double exactly
+  as `InMemoryFirestoreClient` already does.
+- **Storage:** one document per room at `matches/{code}`, extending
+  `architecture.md` §11's `matches/{matchId}` structure. The room code *is* the
+  document id, so joining is a single read — no query, no index, no collection
+  scan. `currentPlayerId` / `turnNumber` / `winnerId` / `boardState` are
+  deliberately absent: writing a board state before moves are exchanged would
+  imply a synchronisation that does not exist. `version` is seeded at 1 for
+  Phase 9's optimistic concurrency.
+- **Creator takes Blue, joiner takes Red**, because Blue moves first
+  (`game_spec.md` R-PLAYER-07) and Q-6.2 already treated Blue as the first player.
+  Stored explicitly rather than implied by join order.
+- **Room codes:** six characters from a 32-symbol alphabet excluding `0`, `O`,
+  `1` and `I` (32^6 ≈ 1.07e9). No format is specified in any source document, so
+  this is a reasoned default, chosen so a code read aloud is unambiguous. Input is
+  case-insensitive and separator-tolerant. Collisions use a **bounded
+  read-then-write retry with a verify-after-write**: a transaction or Cloud
+  Function would need the Blaze plan, which `architecture.md` §10 forbids, so the
+  confirming re-read detects a lost race and the repository tries the next code.
+- **Leave is deliberately asymmetric.** The host leaving **deletes** the document
+  (it could never be started, and it would occupy the 1 GiB storage quota
+  forever); a guest leaving **reopens the seat** for the next player. Leaving after
+  the start is refused as Phase 10's concern rather than half-done.
+- **Failures are values, not exceptions**, per `rules.md` §7 and the existing
+  `ActionResult` precedent: 13 distinguishable `RoomFailureReason`s, each with a
+  player-facing message. No message leaks "Exception". One deliberate deviation from
+  Phase 6/7: room writes report `networkUnavailable` instead of swallowing, because
+  a swallowed write would report a room that does not exist.
+- **Realtime:** `design.md` §19 requires the creator to see the opponent arrive, so
+  `FirestoreClient` gained `watch(path)` — the widening Phase 7 anticipated, and
+  the Phase 6/7 repositories were untouched by it. Cost verified against current
+  Firebase docs rather than assumed: listeners are billed as document reads (one
+  per document added or updated in the listener's result set), against a no-cost
+  quota of 50,000 reads/day and 20,000 writes/day. Hence no polling and no periodic
+  write anywhere in the repository.
+- **Q-7.2 resolved:** a real authenticated uid now reaches the Phase 6/7 `userId`
+  seam via `auth.currentUid`, with no change to those repositories. The "null means
+  do nothing" contract is preserved and tested for all five entry points.
+- **Q-7.1 deliberately still local**, now with a source rather than only a
+  principle: `PRD.md` §9 ("local settings should be stored locally") and
+  `rules.md` §4. Confirmed with the owner. Flipping is one line
+  (`PersistenceFactory.attachRemote`) because the seam now resolves.
+- **Three defects the tests caught:** the document version did not advance on a
+  join (the change check compared the mutated room against itself); the host could
+  not ready up once the opponent joined (the screen hid the toggle when the room
+  filled); and nothing in the UI ever triggered sign-in, leaving the lobby in
+  `needsSignIn` with no way out.
+- Tests: 12 room-code + 56 room-lifecycle + 7 auth + 18 lobby-controller + 9 widget
+  = +38 overall, 1072 → 1110.
+- `dart format --set-exit-if-changed lib test` → `Formatted 101 files (0 changed)`.
+- `flutter analyze` → `No issues found!`
+- `flutter test` → `1110: All tests passed!`
+- New-code coverage: `firestore_room_repository.dart` 98.08%, `room.dart` 98.72%,
+  `in_memory_firestore_client.dart` 100%, `room_code_generator.dart` 100%,
+  `online_lobby_screen.dart` 95.40%, `auth.dart` 93.75%,
+  `online_lobby_controller.dart` 87.60%.
+  **Three files at 0%** — `firebase_auth_gateway.dart` (new), and
+  `cloud_firestore_client.dart` / `online_lobby_factory.dart` — all because they
+  need a live Firebase platform. Not hidden; see Q-8.2.
+- `flutter build web` → `√ Built build\web`
+- `check_spec_consistency.py` → `OK: spec is consistent with the reference engine.`
+- Oracle vectors → byte-identical, 1,229,568 bytes, SHA-256 `6f1e3c05…`. `git diff`
+  also confirms `game_spec.md`, `lib/domain/engine` and `lib/domain/models` are
+  untouched.
+- `tool/encoding/scan_mojibake.py` → `0 files with mojibake`
+
+### Not verified against a real backend
+
+**The Phase 7 console setup (Q-7.4) has not been done** — confirmed with the owner
+and confirmed by the absence of `firebase_options.dart`, `google-services.json`,
+`GoogleService-Info.plist`, `.firebaserc` and `firebase.json`. So the following are
+unproven and should not be read as working: anonymous sign-in succeeding, the
+`matches/{code}` document being readable and writable, `snapshots()` converging
+between two real devices, the read-then-write race behaving as the
+verify-after-write logic assumes, and a real `set()` being as atomic as an
+in-memory map assignment. All Firestore tests ran against an in-process double
+behind the same port. The manual steps remain those in `memory.md` §13o; running
+them plus the emulator or two real devices is what closes the gap.
+
+Security rules are still unwritten — `architecture.md` §12 lists what they must
+enforce and `phase.md` assigns them to Phase 10, which can now write them against
+a real document shape. Until then the client is trusted for room contents, which
+`architecture.md` §12 explicitly says is not a sufficient long-term position.
+
+Open: Q-8.1 (code alphabet is a reasoned default), Q-8.2 (`firebase_auth_gateway`
+0% coverage), Q-8.3 (`RoomStatus.cancelled` has no producer), Q-8.4 (`reconnecting`
+connection state deferred to Phase 9), Q-8.5 (no lobby visual design exists), Q-8.6
+(`GameScreen` never disposes its controller — pre-existing), Q-8.7 (security rules
+deferred to Phase 10). Q-7.1/Q-7.2 resolved; Q-7.3/Q-7.4/Q-7.5 restated in §13p.
+Full record in `memory.md` §13p.
+
+
 ---
 
 # Phase 9 — Online Game Synchronization
