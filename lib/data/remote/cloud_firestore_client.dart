@@ -79,10 +79,20 @@ class CloudFirestoreClient implements FirestoreClient {
     required String collectionPath,
     String? orderBy,
     int limit = 10,
+    String? startAfterDocumentId,
   }) async {
     try {
       Query<Map<String, dynamic>> query = _firestore.collection(collectionPath);
       if (orderBy != null) query = query.orderBy(orderBy);
+      if (startAfterDocumentId != null) {
+        // Firestore has no offset, so paging is done with a document-id cursor.
+        // Move records are named after their zero-padded ply, so ordering by
+        // the document id is the same order as ordering by `turnNumber` — which
+        // is what makes the cursor agree with the page boundary.
+        query = query.orderBy(FieldPath.documentId).startAfter([
+          startAfterDocumentId,
+        ]);
+      }
       final snapshot = await query.limit(limit).get();
       return snapshot.docs
           .map(

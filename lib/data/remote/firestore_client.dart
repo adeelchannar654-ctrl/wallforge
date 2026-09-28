@@ -68,10 +68,17 @@ abstract interface class FirestoreClient {
   /// single-field index serves. That keeps the feature inside the Spark plan with
   /// no manual index step. Verified against current Firestore indexing docs
   /// rather than assumed.
+  /// Reads at most [limit] documents from [collectionPath], newest-last.
+  ///
+  /// [startAfterDocumentId] resumes *after* a document already read, which is
+  /// how a caller pages a log that does not fit in one response. It is a
+  /// document id rather than a numeric offset because Firestore has no offset;
+  /// ordering by document id makes the cursor and the page boundary agree.
   Future<List<FirestoreDocument>> query({
     required String collectionPath,
     String? orderBy,
     int limit = 10,
+    String? startAfterDocumentId,
   });
 
   /// Runs [action] as an atomic transaction, retrying it on conflict.

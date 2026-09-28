@@ -173,13 +173,29 @@ class InMemoryFirestoreClient implements FirestoreClient {
     required String collectionPath,
     String? orderBy,
     int limit = 10,
+    String? startAfterDocumentId,
   }) async {
     _maybeFail();
-    final entries = documents.entries
+    var entries = documents.entries
         .where((e) => _isInCollection(e.key, collectionPath))
         .toList();
     if (orderBy != null) {
       entries.sort((a, b) => _compareBy(a.value, b.value, orderBy));
+    }
+    if (startAfterDocumentId != null) {
+      // Resume strictly after the cursor document, comparing the same way the
+      // page was ordered, so a page boundary cannot skip or repeat a row.
+      final seen = entries.any((e) => e.key.endsWith('/$startAfterDocumentId'));
+      final index = entries.indexWhere(
+        (e) => e.key.endsWith('/$startAfterDocumentId'),
+      );
+      if (seen) {
+        entries = entries.sublist(orderBy == null ? index + 1 : index + 1);
+      } else {
+        // A cursor the server does not have: return nothing rather than
+        // silently restarting from the beginning and duplicating the log.
+        return const <FirestoreDocument>[];
+      }
     }
     return entries
         .take(limit)

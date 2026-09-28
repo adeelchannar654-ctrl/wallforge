@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../../core/logging/app_logger.dart';
 import '../../domain/engine/game_engine.dart';
 import '../../domain/models/action_failure.dart';
 import '../../domain/models/game_action.dart';
@@ -75,6 +76,8 @@ class FirestoreMatchRepository implements MatchRepository {
   final String movesCollection;
 
   final DateTime Function() _clock;
+
+  static const AppLogger _log = AppLogger('match_sync');
 
   int get _nowMs => _clock().millisecondsSinceEpoch;
 
@@ -250,21 +253,47 @@ class FirestoreMatchRepository implements MatchRepository {
     int limit = defaultRecoveryPageSize,
   }) async {
     try {
-      final docs = await client.query(
-        collectionPath: '${_matchPath(code)}/$movesCollection',
-        orderBy: 'turnNumber',
-        limit: limit,
-      );
-      return docs
-          .map(
-            (doc) => MatchMove.fromJson(
-              doc.data['turnNumber'] is int ? doc.data['turnNumber'] as int : 0,
-              doc.data,
-            ),
-          )
-          .whereType<MatchMove>()
-          .toList()
-        ..sort((a, b) => a.turnNumber.compareTo(b.turnNumber));
+      // Paged, not truncated. Reading one page and returning it would hand the
+      // caller a *prefix* of the log that looks exactly like a complete one, and
+      // a caller rebuilding state from a prefix concludes it is up to date. That
+      // failure is silent and wrong, so pages are followed to the end.
+      final moves = <MatchMove>[];
+      String? cursor;
+      var pages = 0;
+      while (true) {
+        final docs = await client.query(
+          collectionPath: '${_matchPath(code)}/$movesCollection',
+          orderBy: 'turnNumber',
+          limit: limit,
+          startAfterDocumentId: cursor,
+        );
+        moves.addAll(
+          docs
+              .map(
+                (doc) => MatchMove.fromJson(
+                  doc.data['turnNumber'] is int
+                      ? doc.data['turnNumber'] as int
+                      : 0,
+                  doc.data,
+                ),
+              )
+              .whereType<MatchMove>(),
+        );
+        if (docs.length < limit) break;
+        pages++;
+        if (pages >= maxRecoveryPages) {
+          // A log this long cannot be a legal game, so it is corrupt or
+          // hostile. Stopping quietly would be the silent-prefix bug again.
+          _log.log(
+            'move log exceeded $maxRecoveryPages pages of $limit; '
+            'treating the match as unrecoverable',
+          );
+          return const <MatchMove>[];
+        }
+        cursor = docs.last.path.split('/').last;
+      }
+      moves.sort((a, b) => a.turnNumber.compareTo(b.turnNumber));
+      return moves;
     } on Object {
       return const <MatchMove>[];
     }
@@ -381,12 +410,19 @@ class FirestoreMatchRepository implements MatchRepository {
     _ => 'That move is not legal.',
   };
 
-  /// How many move records one recovery read may return.
+  /// How many move records one page of a recovery read may return.
   ///
-  /// The port's `query` has no cursor, so a replay beyond this would need the
-  /// interface widened. The longest game in the independently generated oracle
-  /// vectors is 431 plies, so 500 covers any game the engine can currently reach;
-  /// a larger limit would only pay for reads that cannot happen. Recorded as
-  /// Q-9.4.
-  static const int defaultRecoveryPageSize = 500;
+  /// A page size, not a cap: [readMoves] follows the cursor to the end of the
+  /// log, so this only decides how many records cost one round trip.
+  static const int defaultRecoveryPageSize = 200;
+
+  /// Hard ceiling on pages in one recovery read.
+  ///
+  /// A safety bound against a corrupt or hostile log, not a claim about how long
+  /// a game can be. Random-play testing produced a 501-ply game, which already
+  /// exceeded the original single-page bound of 500 — so a bound presented as
+  /// "longer than any legal game" was not one. Reaching this ceiling means the
+  /// log cannot be a legal game, and [readMoves] reports an empty log rather than
+  /// a truncated prefix. Recorded as Q-9.4.
+  static const int maxRecoveryPages = 25;
 }

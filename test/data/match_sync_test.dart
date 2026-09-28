@@ -813,7 +813,7 @@ void main() {
         reason: 'spec notation is stored',
       );
     });
-    test('a bounded read is honoured', () async {
+    test('a small page size still returns the whole log', () async {
       for (var turn = 0; turn < 4; turn++) {
         await forTurn(turn).matches.submitAction(
           code: code,
@@ -821,9 +821,56 @@ void main() {
           action: kScriptedGame[turn].$2,
         );
       }
+
       final moves = await host.matches.readMoves(code: code, limit: 2);
-      expect(moves, hasLength(2));
-      expect(moves.first.turnNumber, 0);
+
+      expect(
+        moves,
+        hasLength(4),
+        reason:
+            'limit is a page size, not a cap. Returning 2 of 4 would hand a '
+            'caller rebuilding state a prefix that looks like the whole log',
+      );
+      expect(moves.map((m) => m.turnNumber), [
+        0,
+        1,
+        2,
+        3,
+      ], reason: 'paging must not skip or repeat a record');
+    });
+
+    test('paging works past the first page in a long game', () async {
+      // Well past defaultRecoveryPageSize, so recovery genuinely has to follow
+      // the cursor instead of relying on a single response.
+      var state = GameState.initial(const BoardConfig(size: 7));
+      const config = BoardConfig(size: 7, wallsPerPlayer: 4);
+      final longCode =
+          (await host.rooms.create(config: config) as RoomSuccess).room.code;
+      await guest.rooms.join(longCode);
+      await host.rooms.setReady(code: longCode, ready: true);
+      await guest.rooms.setReady(code: longCode, ready: true);
+      await host.rooms.start(longCode);
+
+      var ply = 0;
+      while (state.status == GameStatus.inProgress && ply < 400) {
+        final legal = GameEngine.legalActions(state);
+        final action = legal[ply % legal.length];
+        final mover = state.currentPlayer == PlayerId.blue ? host : guest;
+        final result = await mover.matches.submitAction(
+          code: longCode,
+          expectedTurnNumber: ply,
+          action: action,
+        );
+        expect(result, isA<MoveApplied>(), reason: 'ply $ply');
+        state = (result as MoveApplied).state;
+        ply++;
+      }
+
+      final moves = await host.matches.readMoves(code: longCode, limit: 50);
+      expect(moves, hasLength(ply), reason: 'every record, across pages');
+      expect(moves.map((m) => m.turnNumber).toList(), [
+        for (var i = 0; i < ply; i++) i,
+      ], reason: 'consecutive, in order, with no gap or repeat at a boundary');
     });
 
     test('an unreadable record is skipped, not guessed at', () async {

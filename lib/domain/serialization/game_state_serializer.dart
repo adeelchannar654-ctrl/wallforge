@@ -520,10 +520,17 @@ class GameStateSerializer {
               return 'walls[$i] and walls[$j] overlap';
             }
           }
-        } else if (a.anchorRow == b.anchorRow &&
-            a.anchorColumn == b.anchorColumn) {
-          return 'walls[$i] and walls[$j] cross';
         }
+        // Perpendicular walls sharing an anchor are deliberately NOT rejected.
+        // R-WALL-08 (spec v2.0.0, D-12) makes that shape legal: the pair forms
+        // a "+" and each wall still blocks only its own two edges, and
+        // `ActionValidator` has no `wallCrosses` check to match.
+        //
+        // This branch used to reject it, which was a stale v1 check. The engine
+        // happily produced such a position, so the first legal "+" in a match
+        // produced a state that could be neither stored nor decoded again: the
+        // shared document became unreadable and the match was permanently
+        // wedged. A codec that rejects a state the rules permit is the bug.
       }
     }
     return null;
