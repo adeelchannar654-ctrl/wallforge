@@ -16,31 +16,52 @@ import '../../board/board.dart';
 /// - Mobile (< 768px): single-column, board above controls.
 /// - Desktop (>= 768px): 3-column, 280px side rails with HUD + board center.
 class GameScreen extends StatelessWidget {
-  const GameScreen({super.key, required this.controller});
+  const GameScreen({
+    super.key,
+    required this.controller,
+    this.ownsController = false,
+  });
 
   final LocalGameController controller;
 
+  /// Whether this widget disposes [controller] when the route is popped.
+  ///
+  /// Fixes Q-8.6: since Phase 4 the `/game` route built a controller per push
+  /// and nothing ever disposed it, so every game left a `ChangeNotifier` — and
+  /// its persistence subscriptions — alive for the life of the process. The
+  /// route therefore sets this.
+  ///
+  /// It is opt-in rather than automatic because a test that injects a controller
+  /// usually wants to assert on it after the route is gone, and disposing it
+  /// behind the test's back would break that. A test that passes `true` is
+  /// declaring that the screen owns the controller's lifetime.
+  final bool ownsController;
+
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: controller,
-      builder: (context, _) {
-        final isDesktop = MediaQuery.sizeOf(context).width >= 768;
-        return Scaffold(
-          backgroundColor: AppColors.background,
-          body: Stack(
-            children: [
-              SafeArea(
-                child: isDesktop
-                    ? _buildDesktopLayout(context)
-                    : _buildMobileLayout(context),
-              ),
-              if (controller.showingResult)
-                Positioned.fill(child: _buildResultOverlay(context)),
-            ],
-          ),
-        );
-      },
+    return _ControllerOwnership(
+      controller: controller,
+      owns: ownsController,
+      child: ListenableBuilder(
+        listenable: controller,
+        builder: (context, _) {
+          final isDesktop = MediaQuery.sizeOf(context).width >= 768;
+          return Scaffold(
+            backgroundColor: AppColors.background,
+            body: Stack(
+              children: [
+                SafeArea(
+                  child: isDesktop
+                      ? _buildDesktopLayout(context)
+                      : _buildMobileLayout(context),
+                ),
+                if (controller.showingResult)
+                  Positioned.fill(child: _buildResultOverlay(context)),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -461,4 +482,35 @@ class GameScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Disposes a controller when the screen is torn down, if it owns it.
+///
+/// A private `StatefulWidget` rather than making [GameScreen] itself stateful:
+/// it keeps the public widget shape and the rendered tree byte-identical, so
+/// the Phase 3–4 golden tests cannot be affected by a lifetime fix.
+class _ControllerOwnership extends StatefulWidget {
+  const _ControllerOwnership({
+    required this.controller,
+    required this.owns,
+    required this.child,
+  });
+
+  final LocalGameController controller;
+  final bool owns;
+  final Widget child;
+
+  @override
+  State<_ControllerOwnership> createState() => _ControllerOwnershipState();
+}
+
+class _ControllerOwnershipState extends State<_ControllerOwnership> {
+  @override
+  void dispose() {
+    if (widget.owns) widget.controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

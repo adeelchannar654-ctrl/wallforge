@@ -34,7 +34,12 @@ class AppRouter {
       case AppRoutes.game:
         return MaterialPageRoute<void>(
           settings: settings,
-          builder: (_) => GameScreen(controller: _controllerFor(settings)),
+          // The route builds the controller, so the screen disposes it with the
+          // route (Q-8.6). Previously it leaked for the life of the process.
+          builder: (_) => GameScreen(
+            controller: _controllerFor(settings),
+            ownsController: true,
+          ),
         );
       case AppRoutes.online:
         final lobby = OnlineLobbyFactory.firebase(
