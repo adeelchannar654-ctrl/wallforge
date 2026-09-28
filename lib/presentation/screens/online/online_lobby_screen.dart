@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/application/online/online_game_controller.dart';
 import '../../../app/application/online/online_lobby_controller.dart';
-import '../../../app/router/app_router.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_radii.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
 import '../../../domain/wallforge_domain.dart';
+import 'online_game_screen.dart';
 
 /// Online lobby: choose create or join, then the shared room.
 ///
@@ -255,6 +256,35 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
     ];
   }
 
+  /// Opens the online match for a started room.
+  ///
+  /// The match controller is built here so the lobby keeps ownership of its uid
+  /// and repositories, and so a failed connection cannot leave a half-built
+  /// screen on the stack.
+  Future<void> _enterMatch(
+    BuildContext context,
+    OnlineLobbyController controller,
+    Room room,
+  ) async {
+    final match = OnlineGameController(
+      rooms: controller.roomsRepository!,
+      matches: controller.matchRepository!,
+      uid: controller.uid!,
+      code: room.code,
+    );
+    await match.connect();
+    if (!context.mounted) {
+      match.dispose();
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            OnlineGameScreen(controller: match, ownsController: true),
+      ),
+    );
+  }
+
   /// The matchmaking waiting state, with a cancel action.
   Widget _buildSearching(
     BuildContext context,
@@ -380,21 +410,17 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
             children: <Widget>[
               const Text('MATCH STARTED', style: AppTypography.labelCaps),
               const SizedBox(height: AppSpacing.xs),
-              // The important honest line: this phase does not sync moves.
               Text(
                 'You play ${controller.mySide?.name.toUpperCase()}. '
-                'Moves are not synchronised between devices yet — that '
-                'arrives with online game synchronisation.',
+                'Turns are synchronised between devices.',
                 style: AppTypography.bodyBase.copyWith(
                   color: AppColors.onSurfaceVariant,
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
               _primaryButton(
-                label: 'CONTINUE',
-                onPressed: () =>
-                    Navigator.of(context)
-                        .pushNamed(AppRoutes.game, arguments: room.boardConfig),
+                label: 'PLAY',
+                onPressed: () => _enterMatch(context, controller, room),
               ),
             ],
           ),

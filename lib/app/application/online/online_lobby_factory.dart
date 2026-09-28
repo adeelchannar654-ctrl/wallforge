@@ -1,5 +1,6 @@
 import '../../../data/remote/cloud_firestore_client.dart';
 import '../../../data/remote/firebase_auth_gateway.dart';
+import '../../../data/remote/firestore_match_repository.dart';
 import '../../../data/remote/firestore_matchmaking_repository.dart';
 import '../../../data/remote/firestore_room_repository.dart';
 import '../../../domain/wallforge_domain.dart';
@@ -34,6 +35,13 @@ class OnlineLobbyFactory {
         client: client,
         userId: auth.currentUid,
       ),
+      // Phase 9: the same client and the same uid resolver, so a matched room
+      // and the match document inside it are reached through one connection and
+      // one identity.
+      matches: FirestoreMatchRepository(
+        client: client,
+        userId: auth.currentUid,
+      ),
       boardConfig: boardConfig ?? const BoardConfig(),
     );
   }
@@ -43,11 +51,13 @@ class OnlineLobbyFactory {
     required AuthGateway auth,
     required RoomRepository rooms,
     MatchmakingRepository? matchmaking,
+    MatchRepository? matches,
     BoardConfig boardConfig = const BoardConfig(),
   }) => OnlineLobbyController(
     auth: auth,
     rooms: rooms,
     matchmaking: matchmaking,
+    matches: matches,
     boardConfig: boardConfig,
   );
 }

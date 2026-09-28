@@ -59,8 +59,9 @@ class OnlineLobbyController extends ChangeNotifier {
     required this.auth,
     required this.rooms,
     this.matchmaking,
+    MatchRepository? matches,
     this.boardConfig = const BoardConfig(),
-  });
+  }) : _matchRepository = matches;
 
   static const AppLogger _log = AppLogger('online_lobby');
 
@@ -159,6 +160,22 @@ class OnlineLobbyController extends ChangeNotifier {
 
   /// Whether this build offers random matchmaking.
   bool get hasMatchmaking => matchmaking != null;
+
+  /// The room repository, so a screen can build a match controller for a started
+  /// room without re-wiring the Firebase clients.
+  ///
+  /// Exposed deliberately: the lobby and the match are two views of one match
+  /// document, and a second set of repositories would be a second set of
+  /// ownership. Phase 9's screen reads it once, here.
+  RoomRepository? get roomsRepository => rooms;
+
+  /// The match repository, when this build has one.
+  ///
+  /// Null in a build without match synchronisation, which is what the screen
+  /// checks before offering to play.
+  MatchRepository? get matchRepository => _matchRepository;
+
+  final MatchRepository? _matchRepository;
 
   /// The room code to show, or null.
   String? get roomCode => _room?.code;

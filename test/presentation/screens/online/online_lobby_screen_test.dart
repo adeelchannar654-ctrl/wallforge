@@ -231,9 +231,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('MATCH STARTED'), findsOneWidget);
-      expect(find.text('CONTINUE'), findsOneWidget);
+      expect(find.text('PLAY'), findsOneWidget);
       // The screen must not imply moves are synchronised.
-      expect(find.textContaining('not synchronised'), findsOneWidget);
+      expect(
+        find.textContaining('synchronised between devices'),
+        findsOneWidget,
+      );
       expect(find.textContaining('You play BLUE'), findsOneWidget);
     });
   });

@@ -317,13 +317,15 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
   void _onDocument(SharedMatchDocument document) {
     if (_disposed) return;
 
+    // Connectivity is a property of *this* document, not of the room. A live
+    // (non-cached) snapshot is itself proof the server is reachable, and a
+    // cached one is proof it is not. Deriving it from `_room` instead left the
+    // chip stuck on WAITING whenever the room document happened to arrive
+    // after the match document, because nothing re-evaluated it.
     _setConnection(
       document.fromCache
           ? OnlineConnectionState.reconnecting
-          : _state.status == GameStatus.inProgress &&
-                _room.blue.playerId != null
-          ? OnlineConnectionState.connected
-          : OnlineConnectionState.waiting,
+          : OnlineConnectionState.connected,
     );
 
     if (document.fromCache) {
@@ -378,9 +380,6 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
       _log.log('recovered from ${_sync.name} at turn ${_state.turnNumber}');
     }
     _sync = OnlineSyncState.inSync;
-    if (_state.status == GameStatus.finished) {
-      _setConnection(OnlineConnectionState.connected);
-    }
     _resolvePendingAfterSync();
     notifyListeners();
   }

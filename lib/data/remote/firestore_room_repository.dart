@@ -266,10 +266,16 @@ class FirestoreRoomRepository implements RoomRepository {
       return _gone;
     }
     if (!room.isMember(uid)) return _notAMember;
-    if (room.status == RoomStatus.started) {
+    if (room.status == RoomStatus.started ||
+        room.status == RoomStatus.finished) {
       // Leaving after the start is a disconnect. That belongs to Phase 10
       // (`phase.md`: "reconnection", "timeout/disconnect UX"), so it is reported
       // plainly rather than half-implemented here.
+      //
+      // A *finished* room is included for a different reason, and it matters:
+      // without it the host branch below deletes the document, so a completed
+      // game could be erased and — worse — its host seat reopened, letting a
+      // third player join a match that already has a winner.
       return const RoomResult.failure(
         RoomFailureReason.roomAlreadyStarted,
         message: 'The match already started. Disconnect handling comes later.',

@@ -238,6 +238,15 @@ class Room {
   /// Used by the repository to build the next document version from a freshly
   /// read one, so a write is always derived from observed state rather than from
   /// whatever the caller happened to be holding.
+  /// Sentinel for "leave this field alone".
+  ///
+  /// A nullable parameter cannot carry both intents: `null` already means
+  /// "keep the current value" because of `??`, so `copyWith(currentPlayerId:
+  /// null)` silently kept the old value. Completion has to *clear*
+  /// `currentPlayerId` on a room where it was set, so "absent" and "null" have
+  /// to be told apart.
+  static const Object _keep = Object();
+
   Room copyWith({
     RoomStatus? status,
     RoomSeat? blue,
@@ -246,8 +255,8 @@ class Room {
     int? version,
     GameState? boardState,
     int? turnNumber,
-    String? currentPlayerId,
-    String? winnerId,
+    Object? currentPlayerId = _keep,
+    Object? winnerId = _keep,
   }) => Room(
     code: code,
     status: status ?? this.status,
@@ -260,8 +269,10 @@ class Room {
     version: version ?? this.version,
     boardState: boardState ?? this.boardState,
     turnNumber: turnNumber ?? this.turnNumber,
-    currentPlayerId: currentPlayerId ?? this.currentPlayerId,
-    winnerId: winnerId ?? this.winnerId,
+    currentPlayerId: identical(currentPlayerId, _keep)
+        ? this.currentPlayerId
+        : currentPlayerId as String?,
+    winnerId: identical(winnerId, _keep) ? this.winnerId : winnerId as String?,
   );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
