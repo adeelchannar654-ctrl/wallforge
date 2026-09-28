@@ -17,7 +17,7 @@ A wall may never remove the last route to either player's goal.
 
 ## Status
 
-**Phases 0–8 and 8.1 are complete, with one owner-side caveat.** See
+**Phases 0–9 are complete in code, with one owner-side caveat.** See
 [`phase.md`](phase.md) for the full plan and the per-phase results.
 
 - **Phase 0 — Project Foundation.** Flutter project, platform targets, folder
@@ -66,6 +66,22 @@ A wall may never remove the last route to either player's goal.
   however the two players found each other. Added by owner request after
   Phase 8 shipped; it is recorded in [`phase.md`](phase.md) as its own phase
   rather than folded in silently.
+- **Phase 9 - Online Game Synchronization.** Two clients can now play a
+  synchronised match. Each action is validated against the authoritative
+  snapshot inside a single transaction that writes the match document and its
+  move record together, so a listener never sees half a move; the client cache is
+  never trusted for legality. Snapshots are verified before they are shown, a
+  lost acknowledgement is retried idempotently, and a finished match is a
+  record that cannot be erased or played into. The schema as built is in
+  [`architecture.md`](architecture.md) §11, and the reasoning, the two real
+  defects that random full-game testing exposed, and an owner acceptance script
+  are in [`memory.md`](memory.md) §13q.
+
+  **The Phase 9 exit criterion - two players completing a match across real
+  devices - is not yet verified**, because Firebase Console setup (Q-7.4) is
+  still outstanding. Everything above is proven against an in-memory Firestore
+  double that models transactions, conflicts, offline failure, listeners and
+  cache metadata, but is not Firestore.
 
 **Firebase still needs owner-side setup in the Console.** The app
 code is complete and tested, but this repository ships no Firebase client

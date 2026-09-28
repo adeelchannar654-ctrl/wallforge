@@ -2556,3 +2556,223 @@ an observed one — it should be re-confirmed in the Console when it is set up.
 - Q-7.1 and Q-7.2 remain resolved as recorded in §13p. Q-7.3, Q-7.4, Q-7.5 remain
   open.
 - Q-6.1 … Q-6.4, Q-5.1, Q-4.1 … Q-4.10, Q-2.1 remain open and unaffected.
+
+---
+
+## 13q. Phase 9 — Online Game Synchronization (2026-09-28)
+
+### What was built
+
+The online mode went from a lobby that could start a room and then said so
+plainly ("turns are not synchronised between devices yet") to a real two-client
+match protocol. Layers, outside in:
+
+| Layer | Files |
+| --- | --- |
+| Domain | `lib/domain/repositories/room.dart` (schema 2, `RoomStatus.finished`), `lib/domain/repositories/match.dart` (`SharedMatchDocument`, `MatchMove`, `MatchSyncFailure`, `MatchRepository`, `MatchSeating`) |
+| Port | `lib/data/remote/firestore_client.dart` — `watchWithMetadata`, `FirestoreSnapshot.fromCache`, `query(startAfterDocumentId:)` |
+| Data | `firestore_match_repository.dart` (transactional protocol, paged recovery), `firestore_room_repository.dart` (seeds the initial snapshot on start), `in_memory_firestore_client.dart` (conflicts, offline, cache metadata, cursor) |
+| Application | `lib/app/application/game_interaction.dart` (extracted from `LocalGameController`, no behaviour change), `online_game_controller.dart` |
+| Presentation | `online_game_screen.dart`, plus the lobby's `PLAY` transition |
+
+### Schema as built
+
+`matches/{code}` is the room document. One document, not two, so seating,
+lifecycle and board state are written as a single atomic fact:
+
+```text
+matches/{code}                        # schemaVersion 2
+  status          waiting | ready | started | finished | cancelled
+  blue / red      { playerId, ready }
+  hostId
+  boardConfig     { size, wallsPerPlayer }
+  version         int   # bumped once per applied action
+  turnNumber      int   # must equal boardState.turnNumber
+  currentPlayerId ?uid  # null once finished
+  winnerId        ?uid  # derived from the engine only
+  boardState      GameState (nested, authoritative)
+
+matches/{code}/moves/{NNNNNN}         # zero-padded, so the id is the ply
+  playerId, turnNumber, action, notation, createdAt, resultingVersion
+```
+
+Schema 1 rooms stay readable; new fields are written as explicit `null` before
+the match starts so a reader never has to distinguish "absent" from "null".
+
+### Protocol
+
+One atomic write per action. The transaction reads the match document and the
+move record, re-validates the action **against the stored snapshot through
+`GameEngine`** (never the client cache), then stages the new room document and
+the move record together. Firestore forbids querying inside a transaction, so
+candidate and move-log reads happen before it.
+
+Turn ownership, staleness and duplicates are decided in this order: not a member
+→ finished → wrong turn → already applied → conflicting duplicate → stale turn
+→ `invalidRemoteData` if the denormalised `turnNumber` disagrees with the
+snapshot → engine validation.
+
+### Listener and verification
+
+One `watchWithMetadata` on the match document. `fromCache` is the connectivity
+signal: a cached snapshot is shown as-is and never re-verified, because
+`rules.md` §9 requires preserving local state and a cached copy cannot have
+moved. A live snapshot is verified before adoption — one turn of reachability, a
+version gap proportional to the number of turns missed, or replay from the log.
+Anything that fails all three stops the match with a stated error rather than
+showing a board the player would act on.
+
+Connectivity is derived from **the match document itself**, not from the room
+state. That distinction is not cosmetic: an earlier version read a field of the
+room document, which may arrive after the match document and is never re-read,
+so the chip sat on `WAITING` for a perfectly healthy match.
+
+### Q-9.1 — Board orientation: unchanged (decided)
+
+Phase 9 does **not** flip the board. The canonical orientation stays and the
+player's own seat is marked (`YOU` next to the seat row, an outline as well as a
+colour). A flip is presentation, Phase 9's job is correctness, and Phase 11 owns
+the result presentation. Cost of reversal is one board-orientation transform if
+playtesting disagrees.
+
+### Q-9.2 — Rematch: deferred (decided)
+
+Rematch is a new room with a fresh seat assignment and an explicit consent step
+from both players. It is **not** Phase 9: it needs its own room lifecycle
+decision, and Phase 10 already owns timeout/forfeit/turn clocks. Recorded here
+so "rematch" is not read as implied by "match completion".
+
+### Q-9.3 — Phase 9 reconnects only this client (decided)
+
+This client preserves its state, shows `RECONNECTING`, and converges when the
+snapshot returns. What the *opponent* sees when someone stays gone — turn clocks,
+forfeit, abandonment — is Phase 10, as is anything that would require a server
+authority. Phase 9 deliberately contains no timer, because a timer that fires
+without authority is worse than no timer.
+
+### Q-9.4 — Move-log recovery pages to the end (decided, and the first answer was wrong)
+
+The original bound was one page of 500, documented as exceeding the longest game
+in the oracle vectors (431 plies). **Random full-game testing found a 501-ply
+game**, so that claim was false and, worse, the failure was silent: the caller
+received a 500-record *prefix* that is indistinguishable from a complete log,
+and a caller rebuilding state from a prefix concludes it is up to date.
+
+`FirestoreClient.query` now takes `startAfterDocumentId`, because Firestore has
+no offset and ordering by the zero-padded document id makes the cursor agree
+with the page boundary. `readMoves` follows pages to the end (200 per page, 25
+pages maximum). A log too long to be a legal game yields an empty log and a log
+line — reported, never quietly cut.
+
+### Defects found by the 201 random full games
+
+67 games each on 5x5, 7x7 and 9x9, seeded per game so a failure reproduces.
+They were not green when written.
+
+1. **A legal position could not be stored.** `GameStateSerializer` still
+   rejected two perpendicular walls sharing an anchor as "crossing" — a v1 check
+   left over from before R-WALL-08 (spec v2.0.0) made that shape legal, at which
+   point `ActionValidator` also lost its `wallCrosses` branch. The engine produced
+   such positions freely. The first legal "+" in a match therefore produced a
+   state that could neither be stored nor read back: the shared document became
+   undecodable, every later submission was refused as `invalidRemoteData`, and
+   the match was permanently wedged. **The codec was wrong, not the rules.** The
+   codec was corrected and `game_spec.md` is untouched — the oracle fixture is
+   byte-identical (1,229,568 bytes, SHA-256 `6f1e3c05…`).
+
+   The general lesson: a codec that rejects a state the rules permit is a
+   product bug, and the two authorities can drift apart silently because each is
+   internally consistent. Round-tripping engine output through the codec is now a
+   test, not an assumption.
+
+2. **Silent truncation on recovery** (Q-9.4 above).
+
+Three more, found while building the UI, are recorded in the commit log:
+`Room.copyWith` could not clear `currentPlayerId` (a nullable parameter already
+means "keep", so the repository's `null` on completion did nothing, and a
+finished document still named a player to act); a finished match could be deleted
+by leaving, which reopened its host seat to a third player; and the connection
+chip described above.
+
+### Verification
+
+- `flutter analyze` clean; `flutter test` 1,470 passing; `flutter build web
+  --release` succeeds.
+- Spec consistency green (80 rows, 65 rule IDs, 65 in matrix); oracle fixture
+  unchanged; `game_spec.md` and `rules.md` untouched.
+- Q-8.6 resolved: `GameScreen.ownsController` disposes the controller a route
+  created, and the injected-controller case is covered.
+
+### Open, and the blocker
+
+**Q-7.4 (owner action) is still open, so the Phase 9 exit criterion "two players
+can complete a match across devices" is NOT verified.** There is no
+`firebase_options.dart`, `google-services.json`, `GoogleService-Info.plist`,
+`.firebaserc` or `firebase.json`. Every result above comes from two independent
+client stacks over one `InMemoryFirestoreClient` — a faithful model of
+transactions, conflicts, offline failure, listeners and cache metadata, but not
+Firestore.
+
+Unverified until then, and only against live Firebase or the emulator:
+`CloudFirestoreClient.watchWithMetadata`, its query cursor (`startAfter` on the
+document id) and its transaction adapter; listener convergence and per-document
+read cost against real quotas; Security Rules and match authorization (Phase 10).
+
+### Owner acceptance script (requires Firebase setup first)
+
+1. `flutter run -d chrome` twice, in two separate profiles or windows.
+2. Host: Quick Match on 7x7. Confirm the second device offers the same board and
+   both show the room code.
+3. Both tap ready, host starts. Both must land on the online board, with one
+   showing `YOUR TURN` and the other `OPPONENT'S TURN` plus a stated reason.
+4. Blue moves. Red must see the move appear **without a refresh**, and Blue's
+   turn indicator must clear.
+5. Turn on airplane mode on the moving device, make a move, then restore. The
+   chip must show `RECONNECTING`, the move must land exactly once, and no
+   duplicate move record may appear in `matches/{code}/moves/`.
+6. Both play to a win. Both must show the same winner, and a further move must be
+   refused.
+7. Inspect `matches/{code}`: `version` must equal the number of applied actions,
+   `turnNumber` must equal `boardState.turnNumber`, and `currentPlayerId` must be
+   null once finished.
+8. With a match in progress, check the Firebase usage dashboard: reads should be
+   roughly two per action (one listener delivery per client) and writes two per
+   action (match document + move record). A materially higher read count means a
+   listener is being re-subscribed rather than reused.
+
+### Q-9.5 (new) — the match document is the room document
+
+One `matches/{code}` carries lobby fields and the board snapshot together, rather
+than a `rooms/` document plus a `matches/` document. This keeps seating,
+lifecycle and state a single atomic fact, at the cost of mixing two concerns in
+one schema. If Phase 10's authorization rules become hard to write against a
+document with both kinds of field, splitting is the change to make.
+
+### Q-9.6 (new) — no board flip, and the cost of changing that
+
+Decided in Q-9.1. The reason it is recorded rather than merely done: a flip is
+not only a transform, it changes which goal row reads as "yours", so the result
+screen, the seat colours and any future animation all key off it. Doing it
+inside Phase 9 would have mixed a presentation change into a correctness phase.
+
+### Q-9.7 (new) — `pending` is the answer to a lost acknowledgement
+
+An action that cannot be sent is held and resubmitted, rather than queued in
+Firestore or discarded. The interesting case is the one the design has to get
+right: a move whose acknowledgement was lost may appear to have succeeded while
+the client believes it failed. Resolving that is why an *echo* — a document
+identical to the local view — still clears the pending action. Without that, the
+pending action is stuck forever behind a move that actually landed.
+
+### Q-9.8 (new) — random full games are the only reason two of these were found
+
+Neither the crossing-wedge nor the silent truncation was reachable from a
+hand-written scripted game or from unit tests of the individual pieces. Both
+needed a long, legal, *unusual* sequence produced by the engine itself. Any
+future work on serialization or the move log should assume a scripted game is
+insufficient evidence, and that property-based coverage is the cheapest defect
+finder available here — it runs in ~15 seconds and needs no Firebase.
+
+Q-7.1 and Q-7.2 remain resolved as recorded in §13p. Q-7.3, Q-7.4, Q-7.5 remain
+open. Q-8.x remain as recorded in §13p, except Q-8.6 which is now resolved.
+Q-6.1 … Q-6.4, Q-5.1, Q-4.1 … Q-4.10, Q-2.1 remain open and unaffected.

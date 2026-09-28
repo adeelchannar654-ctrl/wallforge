@@ -905,6 +905,102 @@ Synchronize turns reliably.
 
 Two players can complete a match across devices.
 
+### Result - Phase 9 (2026-09-28)
+
+**Status: implemented and verified against the in-memory Firestore double. The
+across-devices exit criterion is NOT met — see Blocker below.**
+
+#### Delivered
+
+| Task | How | Where |
+| --- | --- | --- |
+| Match state model | `Room` schema 2 carries `boardState`, `turnNumber`, `version`, `currentPlayerId`, `winnerId`, `status`. Schema 1 stays readable. | `lib/domain/repositories/room.dart` |
+| Turn number | Denormalised on the room and asserted equal to `boardState.turnNumber`; a mismatch is `invalidRemoteData` rather than a coin flip. | `firestore_match_repository.dart` |
+| State version | Bumped once per applied action inside the same transaction. | `firestore_match_repository.dart` |
+| Move records | `matches/{code}/moves/{NNNNNN}`, zero-padded so the id is the ply. | `firestore_match_repository.dart` |
+| Firestore listeners | One `watchWithMetadata` on the match document; `fromCache` distinguishes a cached snapshot from a live one. | `online_game_controller.dart` |
+| Write validation | The stored snapshot is validated through `GameEngine`; the client cache is never trusted for a submission. | `firestore_match_repository.dart` |
+| Duplicate move protection | Same turn + same action is `MoveAlreadyApplied`; same turn + different action is `conflictingDuplicate`. | `firestore_match_repository.dart` |
+| Reconnection | Five connection states; a cached snapshot is displayed as-is per `rules.md` §9 and never re-verified, because it cannot have moved. | `online_game_controller.dart` |
+| Conflict handling | One turn of reachability, or a version gap proportional to the number of turns, or replay from the log. Inconsistent data stops the match rather than showing a fiction. | `online_game_controller.dart` |
+| Match completion | The engine alone decides the winner; the room is locked and further submissions are refused. | `firestore_match_repository.dart` |
+
+One atomic write per action: the room document and its move record are staged in
+a single transaction, so a listener never observes half a move.
+
+#### Decided, and why
+
+- **The match document is the room document.** One `matches/{code}` holds both
+  the lobby fields and the board snapshot, rather than a separate match
+  collection. Seating, lifecycle and state are then read and written as one
+  atomic fact, and no cross-document invariant has to be maintained.
+- **Transactions are not queued.** `cloud_firestore` fails a transaction
+  offline, and a queued write would apply later against a state the player no
+  longer believes. The controller holds the action as *pending* and resubmits
+  it, which is also how a lost acknowledgement is resolved.
+- **Queries happen outside the transaction.** Firestore forbids querying inside
+  one, so candidate and move-log reads precede the transaction and the
+  transaction only claims and writes documents.
+- **Recovery pages the move log.** A single page would return a *prefix* that
+  looks exactly like a complete log, and a caller rebuilding state from a prefix
+  concludes it is up to date. The query port therefore carries a document-id
+  cursor, and recovery follows it to the end. See Q-9.4.
+- **Board orientation is unchanged** (Q-9.1). Phase 9 adds a `YOU` marker rather
+  than a flip; a flip is presentation, and Phase 11 owns the result presentation.
+- **Phase 9 reconnects only this client** (Q-9.2). Turn clocks, forfeit and
+  abandonment are Phase 10, and Rematch is deferred past Phase 9.
+
+#### Defects found and fixed
+
+Random full-game testing (201 games: 67 each on 5x5, 7x7 and 9x9, per-game
+seeds) was not green when written. Both causes were product defects:
+
+1. **`GameStateSerializer` rejected a legal position.** It still refused two
+   perpendicular walls sharing an anchor as "crossing" — a v1 check left behind
+   when R-WALL-08 made that shape legal in spec v2.0.0 and `ActionValidator`
+   dropped its matching `wallCrosses` branch. The engine produced such positions
+   freely, so the first legal "+" in a match created a state that could be
+   neither stored nor read back: the shared document became undecodable, every
+   later submission was refused as `invalidRemoteData`, and the match was
+   permanently wedged. The codec was wrong, not the rules, so the codec changed
+   and `game_spec.md` is untouched — the oracle fixture is byte-identical.
+2. **Move-log recovery silently truncated.** `readMoves` returned one page, so a
+   501-ply game produced a 500-record prefix indistinguishable from a complete
+   log. Fixed by the cursor above.
+
+Three more surfaced while building the UI and are recorded in the commit log: a
+connection chip stuck on `WAITING` for healthy matches (state derived from a
+document that had not arrived yet), `Room.copyWith` unable to clear
+`currentPlayerId` so a finished document still named a player to act, and a
+finished match being deletable by leaving, which reopened its host seat to a
+third player.
+
+#### Verification
+
+- `flutter analyze`: no issues.
+- `flutter test`: **1,470 passing**.
+- `flutter build web --release`: succeeds.
+- Spec consistency: 80 catalog rows, 65 rule IDs, 65 in matrix.
+- Oracle fixture: 1,229,568 bytes, SHA-256 `6f1e3c05…`, unchanged.
+- `game_spec.md` and `rules.md`: unmodified.
+
+#### Blocker — Q-7.4 (owner action)
+
+**The exit criterion "two players can complete a match across devices" is not
+verified and cannot be verified from here.** There is no `firebase_options.dart`,
+`google-services.json`, `GoogleService-Info.plist`, `.firebaserc` or
+`firebase.json`; the owner has not completed Firebase Console setup. Every claim
+above comes from two independent client stacks over one
+`InMemoryFirestoreClient`, which models transactions, conflicts, offline
+failure, listeners and cache metadata but is not Firestore.
+
+Also unverified, and only checkable against live Firebase or the emulator:
+
+- `CloudFirestoreClient.watchWithMetadata`, its query cursor (`startAfter` on
+  the document id), and its transaction adapter.
+- Listener convergence and per-document read cost against real quotas.
+- Firestore Security Rules and match authorization (Phase 10).
+
 ---
 
 # Phase 10 — Online Reliability and Security

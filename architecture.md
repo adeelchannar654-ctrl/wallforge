@@ -329,38 +329,106 @@ Firebase's current Spark plan provides no-cost quotas for products such as Authe
 
 ## 11. Online Match Model
 
-Conceptual Firestore structure:
+**As implemented in Phase 9.** This section replaces the earlier conceptual
+sketch; where the two differ, this one describes what the code does.
+
+### Documents
 
 ```text
-users/{userId}
+matches/{code}                          # the room document, and the match
+  schemaVersion   2                     # 1 is still readable
+  code            str
+  status          waiting | ready | started | finished | cancelled
+  hostId          uid
+  blue            { playerId, ready }
+  red             { playerId, ready }
+  boardConfig     { size, wallsPerPlayer }
+  createdAt       int                   # ms
+  updatedAt       int
+  version         int                   # +1 per applied action
+  boardState      GameState             # nested, authoritative
+  turnNumber      int                   # must equal boardState.turnNumber
+  currentPlayerId ?uid                  # null once finished
+  winnerId        ?uid                  # from the engine only
 
-matches/{matchId}
-  status
-  createdAt
-  updatedAt
-  currentPlayerId
-  turnNumber
-  version
-  winnerId
-  boardState
-  playerIds
-  playerData
-
-matches/{matchId}/moves/{moveId}
-  playerId
-  turnNumber
-  actionType
-  actionPayload
-  createdAt
+matches/{code}/moves/{NNNNNN}           # zero-padded: the id is the ply
+  playerId        uid
+  turnNumber      int
+  action          { type, ... }         # structured, not free text
+  notation        str                   # e.g. "W H 2,0", for audit only
+  createdAt       int
+  resultingVersion int
 ```
 
-The final schema must be implemented consistently and documented before online coding.
+### Why one document holds both roles
+
+The match document **is** the room document; there is no separate `rooms/`
+collection. Seating, lifecycle and board state are then written as a single
+atomic fact, so no cross-document invariant has to be maintained and no
+transaction has to span two documents to keep them consistent.
+
+The cost is that one schema carries two kinds of field. If Phase 10's
+authorization rules prove hard to write against that, splitting the documents is
+the change to make (Q-9.5 in `memory.md`).
 
 ### State strategy
 
-For the MVP, a match document may contain a compact authoritative snapshot plus a move sequence for audit/recovery.
+The document holds a compact authoritative snapshot **plus** an append-only move
+log, as this section always intended. The snapshot is what both clients render;
+the log exists for recovery and audit, and is never read to decide whether a
+move is legal.
 
-Avoid repeatedly writing large redundant documents.
+The snapshot is not a "large redundant document" problem at this scale: the
+worst case measured for a 9x9 board is a few kilobytes against a 1 MiB Firestore
+document limit. Avoiding repeated large writes is handled by writing **once per
+action**, atomically with that action's move record — not by splitting the state.
+
+### Field rules
+
+- `boardState` is written as an explicit `null` before the match starts, so a
+  reader never has to distinguish "absent" from "null".
+- `turnNumber` is denormalised. It exists so a reader can sanity-check without
+  decoding the whole snapshot, and a disagreement with `boardState.turnNumber`
+  is treated as corruption (`invalidRemoteData`), not resolved by preferring one.
+- `currentPlayerId` and `winnerId` are `null` when they do not apply. This
+  requires a `copyWith` that can distinguish "leave alone" from "set to null";
+  see the `_keep` sentinel in `Room`.
+- `status: finished` is a record, not a lobby. It cannot be left (which would
+  otherwise delete the document and reopen the host seat), cannot be joined, and
+  accepts no further moves. `cancelled` remains separate and unused in Phase 9.
+
+### Transactions
+
+`cloud_firestore` forbids querying inside a transaction, so reads that need a
+query happen before it. The transaction itself only claims and writes documents:
+
+1. read the match document and this turn's move record;
+2. decide membership, lifecycle, turn ownership, staleness and duplicates;
+3. validate the action **against the stored snapshot** through `GameEngine`,
+   never against a client cache;
+4. stage the updated match document and the move record, which commit together.
+
+A transaction is not queued while offline; it fails. The controller holds the
+action as *pending* and resubmits, which is also how a lost acknowledgement
+resolves (Q-9.7 in `memory.md`).
+
+### Reading the log
+
+`FirestoreClient.query` carries a `startAfterDocumentId` cursor. Firestore has
+no offset, and ordering by the zero-padded document id makes the cursor agree
+with the page boundary. `readMoves` follows pages to the end of the log.
+
+This matters more than it looks: reading a single page returns a *prefix* that
+is indistinguishable from a complete log, and a caller rebuilding state from a
+prefix concludes it is up to date. A silent prefix is worse than the gap it
+hides (Q-9.4 in `memory.md`).
+
+### Not in this model
+
+Phase 9 contains no board flip, no rematch, no turn clock, no forfeit, and no
+Security Rules. The client is not trusted for legality — but Phase 9 enforces
+legality by validating every submission against the stored snapshot, which is
+correctness, not authorization. Authorization is §12 and Phase 10.
 
 ---
 
