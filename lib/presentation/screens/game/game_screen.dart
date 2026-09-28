@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/application/game_interaction.dart';
 import '../../../app/application/local_game_controller.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_elevation.dart';

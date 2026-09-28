@@ -10,19 +10,10 @@ import '../../domain/models/game_action.dart';
 import '../../domain/models/game_state.dart';
 import '../../domain/models/game_status.dart';
 import '../../domain/models/player_id.dart';
-import '../../domain/models/wall_orientation.dart';
 import '../../domain/repositories/repositories.dart';
 import 'ai/ai_difficulty.dart';
+import 'game_interaction.dart';
 import 'ai/ai_opponent.dart';
-
-/// Interaction mode for the board.
-enum InteractionMode {
-  /// Tap a highlighted cell to move.
-  move,
-
-  /// Tap a wall slot to place a wall.
-  wall,
-}
 
 /// How long the AI "thinks" before moving.
 ///
@@ -38,7 +29,7 @@ const PlayerId kAiPlayer = PlayerId.red;
 ///
 /// Manages a single match between two human players sharing a screen.
 /// Strictly ChangeNotifier-based per §2.3; no Flutter widget imports.
-class LocalGameController extends ChangeNotifier {
+class LocalGameController extends ChangeNotifier with GameInteraction {
   /// Creates a controller with an optional initial board config.
   ///
   /// Pass `versusAi: true` to play the offline AI opponent at [aiDifficulty].
@@ -91,11 +82,6 @@ class LocalGameController extends ChangeNotifier {
   bool get hasPersistence => _settingsRepository != null;
 
   GameState _state = GameState.initial();
-  InteractionMode _mode = InteractionMode.move;
-  bool _confirmWallPlacement = true;
-  Cell? _selectedCell;
-  ({Cell anchor, WallOrientation orientation})? _pendingWall;
-  ActionFailure? _lastFailure;
   bool _showingResult = false;
 
   /// Phase 5: optional offline AI opponent.
@@ -114,22 +100,11 @@ class LocalGameController extends ChangeNotifier {
   // --- Read-only getters ----------------------------------------------------
 
   GameState get state => _state;
-  InteractionMode get mode => _mode;
-  bool get confirmWallPlacement => _confirmWallPlacement;
-  Cell? get selectedCell => _selectedCell;
-  ({Cell anchor, WallOrientation orientation})? get pendingWall => _pendingWall;
-  ActionFailure? get pendingWallFailure {
-    final pending = _pendingWall;
-    if (pending == null) return null;
-    return GameEngine.validate(
-      _state,
-      _state.currentPlayer,
-      GameAction.wall(orientation: pending.orientation, anchor: pending.anchor),
-    );
-  }
-
-  ActionFailure? get lastFailure => _lastFailure;
   bool get showingResult => _showingResult;
+
+  /// The state the shared interaction layer validates against.
+  @override
+  GameState get interactionState => _state;
 
   /// Whether this match is against the offline AI rather than pass-and-play.
   bool get versusAi => _versusAi;
@@ -148,15 +123,6 @@ class LocalGameController extends ChangeNotifier {
   bool get isFinished => _state.status == GameStatus.finished;
   PlayerId get currentPlayer => _state.currentPlayer;
 
-  Set<Cell> get legalMoveTargets {
-    if (_mode != InteractionMode.move) return {};
-    if (_state.status == GameStatus.finished) return {};
-    return GameEngine.legalActions(_state)
-        .whereType<MoveAction>()
-        .map((a) => a.destination)
-        .toSet();
-  }
-
   // --- Actions called by presentation ---------------------------------------
 
   /// Start a new match.
@@ -166,10 +132,7 @@ class LocalGameController extends ChangeNotifier {
     AiDifficulty aiDifficulty = AiDifficulty.easy,
   }) {
     _state = GameState.initial(config);
-    _mode = InteractionMode.move;
-    _selectedCell = null;
-    _pendingWall = null;
-    _lastFailure = null;
+    resetInteraction();
     _showingResult = false;
     _versusAi = versusAi;
     _aiDifficulty = aiDifficulty;
@@ -222,86 +185,34 @@ class LocalGameController extends ChangeNotifier {
   /// turns the window from theoretical to routine.
   bool _disposed = false;
 
-  /// Toggle between move and wall interaction modes.
-  void setMode(InteractionMode mode) {
-    if (_state.status == GameStatus.finished) return;
-    _mode = mode;
-    _selectedCell = null;
-    _pendingWall = null;
-    _lastFailure = null;
-    notifyListeners();
-  }
-
-  /// Toggle the confirm-wall-placement setting.
-  void toggleConfirmWallPlacement() {
-    if (_state.status == GameStatus.finished) return;
-    _confirmWallPlacement = !_confirmWallPlacement;
-    notifyListeners();
-    unawaited(persistSettings());
-  }
-
-  /// Tap a cell on the board.
+  /// Applies [action] locally, or returns the engine's refusal.
   ///
-  /// In move mode: if the cell is a legal move target, apply the move.
-  /// In wall mode: ignored (use tapWallSlot for wall placement).
-  void tapCell(Cell cell) {
-    if (_state.status == GameStatus.finished) return;
-    _lastFailure = null;
-
-    if (_mode == InteractionMode.move) {
-      _selectedCell = cell;
-      final action = GameAction.move(cell);
-      final result = GameEngine.apply(_state, _state.currentPlayer, action);
-      if (result is SuccessResult) {
-        _state = result.state;
-        _selectedCell = null;
-        if (_state.status == GameStatus.finished) {
-          _showingResult = true;
-          unawaited(recordFinishedMatch());
-        } else {
-          _saveUnfinished();
-        }
-        _mode = InteractionMode.move;
-      } else if (result is FailureResult) {
-        _lastFailure = result.failure;
-      }
-      _recordAiPosition();
-      notifyListeners();
-      _scheduleAiTurn();
+  /// The local sink. Nothing is sent anywhere: the engine decides and the new
+  /// state replaces the old one. This is exactly the Phase 4/5 behaviour.
+  @override
+  ActionFailure? attemptAction(GameAction action) {
+    final result = GameEngine.apply(_state, _state.currentPlayer, action);
+    if (result is SuccessResult) {
+      _state = result.state;
+      return null;
     }
+    return (result as FailureResult).failure;
   }
 
-  /// Tap a wall slot on the board.
-  ///
-  /// If confirm mode is off, places the wall immediately.
-  /// If confirm mode is on, sets the pending wall for confirmation.
-  void tapWallSlot(Cell anchor, WallOrientation orientation) {
-    if (_state.status == GameStatus.finished) return;
-    _lastFailure = null;
-
-    if (_mode != InteractionMode.wall) return;
-
-    if (_confirmWallPlacement) {
-      _pendingWall = (anchor: anchor, orientation: orientation);
-      notifyListeners();
+  @override
+  void onActionApplied() {
+    if (_state.status == GameStatus.finished) {
+      _showingResult = true;
+      unawaited(recordFinishedMatch());
     } else {
-      _applyWall(anchor, orientation);
+      _saveUnfinished();
     }
+    _recordAiPosition();
+    _scheduleAiTurn();
   }
 
-  /// Confirm the pending wall placement.
-  void confirm() {
-    if (_pendingWall == null || pendingWallFailure != null) return;
-    _applyWall(_pendingWall!.anchor, _pendingWall!.orientation);
-  }
-
-  /// Cancel the pending wall placement.
-  void cancel() {
-    if (_state.status == GameStatus.finished) return;
-    _pendingWall = null;
-    _lastFailure = null;
-    notifyListeners();
-  }
+  @override
+  void onConfirmWallPlacementToggled() => unawaited(persistSettings());
 
   /// Dismiss the result dialog.
   void dismissResult() {
@@ -322,7 +233,7 @@ class LocalGameController extends ChangeNotifier {
       final loaded = await settingsRepo.load();
       if (_disposed) return;
       _settings = loaded;
-      _confirmWallPlacement = loaded.confirmWallPlacement;
+      setConfirmWallPlacementSilently(loaded.confirmWallPlacement);
       _aiDifficulty = _difficultyFromName(loaded.aiDifficulty);
     }
     if (_disposed) return;
@@ -360,11 +271,8 @@ class LocalGameController extends ChangeNotifier {
     _state = match.gameState;
     _versusAi = match.versusAi;
     _aiDifficulty = _difficultyFromName(match.aiDifficulty);
-    _pendingWall = null;
-    _lastFailure = null;
-    _selectedCell = null;
+    resetInteraction();
     _showingResult = false;
-    _mode = InteractionMode.move;
     _aiPreviousCell = null;
     _aiVisitOrder.clear();
     _recordAiPosition();
@@ -398,7 +306,7 @@ class LocalGameController extends ChangeNotifier {
     final repo = _settingsRepository;
     if (repo == null) return;
     _settings = _settings.copyWith(
-      confirmWallPlacement: _confirmWallPlacement,
+      confirmWallPlacement: confirmWallPlacement,
       aiDifficulty: _difficultyNameFor(_versusAi, _aiDifficulty),
     );
     await repo.save(_settings);
@@ -483,54 +391,19 @@ class LocalGameController extends ChangeNotifier {
     });
   }
 
-  /// Applies the AI's chosen action through the engine, exactly as a human
-  /// action is applied. The AI never bypasses validation.
+  /// Applies the AI's chosen action through the shared interaction layer,
+  /// exactly as a human action is. The AI never bypasses validation.
   void _playAiAction(GameAction action) {
-    final player = _state.currentPlayer;
-    final result = GameEngine.apply(_state, player, action);
-    if (result is! SuccessResult) {
-      // Unreachable: the action came from the validated legal-action set.
-      _lastFailure = (result as FailureResult).failure;
-      notifyListeners();
-      return;
-    }
     _aiPreviousCell = _state.pawnPosition(kAiPlayer);
-    _state = result.state;
-    _pendingWall = null;
-    _lastFailure = null;
-    if (_state.status == GameStatus.finished) {
-      _showingResult = true;
-      unawaited(recordFinishedMatch());
-    } else {
-      _saveUnfinished();
-    }
-    _mode = InteractionMode.move;
-    _recordAiPosition();
+    setModeSilently(InteractionMode.move);
+    final failure = attemptAction(action);
+    if (failure == null) onActionApplied();
     notifyListeners();
-    _scheduleAiTurn();
   }
 
-  void _applyWall(Cell anchor, WallOrientation orientation) {
-    final action = GameAction.wall(orientation: orientation, anchor: anchor);
-    final result = GameEngine.apply(_state, _state.currentPlayer, action);
-    if (result is SuccessResult) {
-      _state = result.state;
-      _pendingWall = null;
-      _lastFailure = null;
-      if (_state.status == GameStatus.finished) {
-        _showingResult = true;
-        unawaited(recordFinishedMatch());
-      } else {
-        _saveUnfinished();
-      }
-      _mode = InteractionMode.move;
-    } else if (result is FailureResult) {
-      _lastFailure = result.failure;
-    }
-    _recordAiPosition();
-    notifyListeners();
-    _scheduleAiTurn();
-  }
+  /// Returns mode without the notify that [setMode] performs, so the AI path
+  /// can switch mode and apply in one update.
+  void setModeSilently(InteractionMode mode) => interactionSetMode(mode);
 
   /// Returns a human-readable message for the given [failure].
   static String failureMessage(ActionFailure failure) => switch (failure) {

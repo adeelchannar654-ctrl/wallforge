@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wallforge/app/application/game_interaction.dart';
 import 'package:wallforge/app/application/local_game_controller.dart';
 import 'package:wallforge/app/router/app_router.dart';
 import 'package:wallforge/domain/models/board_config.dart';

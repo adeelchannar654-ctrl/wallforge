@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wallforge/app/application/game_interaction.dart';
 import 'package:wallforge/app/application/local_game_controller.dart';
 import 'package:wallforge/domain/engine/game_engine.dart';
 import 'package:wallforge/domain/models/action_failure.dart';

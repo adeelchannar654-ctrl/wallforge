@@ -4,6 +4,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wallforge/app/application/game_interaction.dart';
 import 'package:wallforge/app/application/local_game_controller.dart';
 import 'package:wallforge/domain/models/action_failure.dart';
 import 'package:wallforge/domain/models/cell.dart';
