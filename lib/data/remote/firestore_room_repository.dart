@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import '../../domain/models/board_config.dart';
+import '../../domain/models/game_state.dart';
+import '../../domain/models/player_id.dart';
 import '../../domain/repositories/repositories.dart';
 import 'firestore_client.dart';
 import 'firestore_settings_repository.dart' show UserIdResolver;
@@ -149,6 +151,8 @@ class FirestoreRoomRepository implements RoomRepository {
           message: 'That room was cancelled.',
         );
       case RoomStatus.started:
+      case RoomStatus.finished:
+        // A finished match cannot be joined either; same reason, same message.
         return const RoomResult.failure(
           RoomFailureReason.roomAlreadyStarted,
           message: 'That match has already started.',
@@ -226,8 +230,19 @@ class FirestoreRoomRepository implements RoomRepository {
       );
     }
 
+    // Phase 9: starting a match also seeds its authoritative snapshot, here
+    // rather than in a separate call so a room can never be `started` without
+    // one. The rule is uniform for both room kinds: whoever is seated in Blue
+    // plays first, because Blue moves first (`game_spec.md` R-PLAYER-07). For a
+    // code room Blue is the creator; for a Phase 8.1 quick-matched room Blue is
+    // whoever was already waiting. One rule, no per-flow special case.
+    final initial = GameState.initial(room.boardConfig);
+    final bluePlayerId = room.seatFor(PlayerId.blue).playerId;
     final started = room.copyWith(
       status: RoomStatus.started,
+      boardState: initial,
+      turnNumber: initial.turnNumber,
+      currentPlayerId: bluePlayerId,
       updatedAtMs: _nowMs,
       version: room.version + 1,
     );

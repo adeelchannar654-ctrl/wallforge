@@ -1,5 +1,7 @@
 import '../models/board_config.dart';
+import '../models/game_state.dart';
 import '../models/player_id.dart';
+import '../serialization/game_state_serializer.dart';
 
 /// Lifecycle of an online room.
 ///
@@ -24,9 +26,21 @@ enum RoomStatus {
   /// Explicitly abandoned before the start.
   ///
   /// Not used by the shipped leave paths — see `FirestoreRoomRepository.leave`
-  /// for why deletion is preferred — but kept so a future "cancel" affordance
-  /// and Phase 10's timeout handling have a state to move to.
+  /// for why deletion is preferred — but kept so a future "cancel" affordance and
+  /// Phase 10's timeout handling have a state to move to. Q-8.3 still records that
+  /// it has no producer; Phase 9 deliberately did **not** repurpose it for match
+  /// completion, because "cancelled before starting" and "played to a finish" are
+  /// different facts and collapsing them would lose the distinction Phase 8
+  /// established between a room and a game.
   cancelled,
+
+  /// The match reached a conclusion.
+  ///
+  /// Added in Phase 9, and separate from `GameStatus.finished` for the reason
+  /// Phase 8 separated the two enums: a room's lifecycle and a game's outcome are
+  /// different questions. Set only by the transaction that applies a game-ending
+  /// action, and terminal — no action is accepted afterwards.
+  finished,
 }
 
 /// One seat in a room.
@@ -87,6 +101,10 @@ class Room {
     required this.createdAtMs,
     required this.updatedAtMs,
     this.version = 1,
+    this.boardState,
+    this.turnNumber = 0,
+    this.currentPlayerId,
+    this.winnerId,
   });
 
   /// The shareable room code, also the document id.
@@ -113,8 +131,43 @@ class Room {
   /// Last write time, milliseconds since epoch.
   final int updatedAtMs;
 
-  /// Monotonic document version, seeded at 1. Extended by Phase 9.
+  /// Monotonic document version, seeded at 1.
+  ///
+  /// Advanced by **every** write that changes shared state (Phase 9), including
+  /// each accepted action. Phase 9 uses it as a second guard against submitting
+  /// against a stale document.
   final int version;
+
+  // --- Phase 9: shared match state -------------------------------------------
+
+  /// The authoritative board snapshot, or null when the match has not started.
+  ///
+  /// This is the "compact authoritative snapshot" of `architecture.md` §11: what
+  /// clients read on every change, and the single source both players render
+  /// from. The `moves` sub-collection is the audit trail and the recovery source,
+  /// not the steady-state read path.
+  final GameState? boardState;
+
+  /// Denormalised copy of [GameState.turnNumber], or 0 before the match starts.
+  ///
+  /// Duplicated so a reader can check turn ownership with one cheap field read,
+  /// and so a disagreement with [boardState] is detectable — a client verifying
+  /// the document compares the two rather than trusting either.
+  final int turnNumber;
+
+  /// The uid whose turn it is, or null before the match starts.
+  ///
+  /// Derived from [GameState.currentPlayer], which is itself derived from turn
+  /// parity (R-STATE-05), so this is a convenience for rules and a cross-check —
+  /// never the authority.
+  final String? currentPlayerId;
+
+  /// The uid the document declares as winner, or null.
+  ///
+  /// A convenience field only. `rules.md` §3.6 forbids trusting a client-declared
+  /// outcome, so the winner shown to players is always derived from the verified
+  /// [GameState.winner]; a disagreement here is treated as corruption.
+  final String? winnerId;
 
   /// The seat for [side].
   RoomSeat seatFor(PlayerId side) => side == PlayerId.blue ? blue : red;
@@ -174,6 +227,10 @@ class Room {
     createdAtMs: createdAtMs,
     updatedAtMs: updatedAtMs,
     version: version,
+    boardState: boardState,
+    turnNumber: turnNumber,
+    currentPlayerId: currentPlayerId,
+    winnerId: winnerId,
   );
 
   /// A copy with the given fields replaced.
@@ -187,6 +244,10 @@ class Room {
     RoomSeat? red,
     int? updatedAtMs,
     int? version,
+    GameState? boardState,
+    int? turnNumber,
+    String? currentPlayerId,
+    String? winnerId,
   }) => Room(
     code: code,
     status: status ?? this.status,
@@ -197,6 +258,10 @@ class Room {
     createdAtMs: createdAtMs,
     updatedAtMs: updatedAtMs ?? this.updatedAtMs,
     version: version ?? this.version,
+    boardState: boardState ?? this.boardState,
+    turnNumber: turnNumber ?? this.turnNumber,
+    currentPlayerId: currentPlayerId ?? this.currentPlayerId,
+    winnerId: winnerId ?? this.winnerId,
   );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -211,6 +276,14 @@ class Room {
     'updatedAt': updatedAtMs,
     'version': version,
     'schemaVersion': schemaVersion,
+    // Phase 9 fields. Written as null before the match starts so the shape is
+    // stable and a reader never has to distinguish "absent" from "null".
+    'boardState': boardState == null
+        ? null
+        : GameStateSerializer.toJson(boardState!),
+    'turnNumber': turnNumber,
+    'currentPlayerId': currentPlayerId,
+    'winnerId': winnerId,
   };
 
   static Map<String, dynamic> _seatToJson(RoomSeat seat) => <String, dynamic>{
@@ -252,6 +325,28 @@ class Room {
     // The host must actually be seated, or "start" has no defined meaning.
     if (blue.playerId != rawHost && red.playerId != rawHost) return null;
 
+    // --- Phase 9 fields, read leniently so a Phase 8 document still parses ---
+    //
+    // `schemaVersion` 1 documents predate the match state and simply lack these
+    // keys, which is legal: a room that has not started has no snapshot, turn
+    // number 0 and no current player. Rejecting them would strand every room
+    // created before this phase, and `PRD.md` §9 asks for version compatibility
+    // rather than version rigidity.
+    final rawTurnNumber = json['turnNumber'];
+    final rawWinner = json['winnerId'];
+    final rawCurrent = json['currentPlayerId'];
+    final rawBoard = json['boardState'];
+    GameState? boardState;
+    if (rawBoard is Map) {
+      // A stored snapshot that the engine refuses is *not* silently dropped: the
+      // document is returned with a null state and the caller sees turnNumber > 0
+      // with no state, which its verification rejects. Decoding it away here would
+      // hide exactly the corruption the check exists to catch.
+      boardState = GameStateSerializer.fromJson(
+        rawBoard.cast<String, dynamic>(),
+      ).stateOrNull;
+    }
+
     return Room(
       code: rawCode,
       status: status,
@@ -262,6 +357,16 @@ class Room {
       createdAtMs: _intOr(json['createdAt'], 0),
       updatedAtMs: _intOr(json['updatedAt'], 0),
       version: _intOr(json['version'], 1),
+      boardState: boardState,
+      turnNumber: (rawTurnNumber is int && rawTurnNumber >= 0)
+          ? rawTurnNumber
+          : 0,
+      currentPlayerId: (rawCurrent is String && rawCurrent.isNotEmpty)
+          ? rawCurrent
+          : null,
+      winnerId: (rawWinner is String && rawWinner.isNotEmpty)
+          ? rawWinner
+          : null,
     );
   }
 
@@ -286,7 +391,15 @@ class Room {
       (raw is int && raw >= 0) ? raw : fallback;
 
   /// Storage layout version, so a later migration is detectable.
-  static const int schemaVersion = 1;
+  ///
+  /// Bumped to 2 by Phase 9, which added `boardState`, `turnNumber`,
+  /// `currentPlayerId` and `winnerId`. The change is purely additive, so
+  /// [supportedSchemaVersions] still accepts 1: a Phase 8 room document parses
+  /// unchanged, with the new fields read as their pre-start values.
+  static const int schemaVersion = 2;
+
+  /// Versions this build can read.
+  static const Set<int> supportedSchemaVersions = {1, 2};
 
   @override
   bool operator ==(Object other) =>
@@ -300,7 +413,11 @@ class Room {
           red == other.red &&
           createdAtMs == other.createdAtMs &&
           updatedAtMs == other.updatedAtMs &&
-          version == other.version;
+          version == other.version &&
+          boardState == other.boardState &&
+          turnNumber == other.turnNumber &&
+          currentPlayerId == other.currentPlayerId &&
+          winnerId == other.winnerId;
 
   @override
   int get hashCode => Object.hash(
@@ -313,6 +430,10 @@ class Room {
     createdAtMs,
     updatedAtMs,
     version,
+    boardState,
+    turnNumber,
+    currentPlayerId,
+    winnerId,
   );
 
   @override
