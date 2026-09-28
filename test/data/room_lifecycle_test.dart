@@ -73,7 +73,10 @@ void main() {
       expect(store.documents.keys, <String>['matches/$code']);
       expect(code.length, RoomCode.length);
       expect(RoomCode.isValid(code), isTrue);
-      expect(store.documents['matches/$code']!['schemaVersion'], 1);
+      // Phase 9 added the match state fields, so the written version is now 2.
+      // Reading stays lenient: `Room.supportedSchemaVersions` still accepts 1, and
+      // the test below proves a Phase 8 document parses.
+      expect(store.documents['matches/$code']!['schemaVersion'], 2);
     });
 
     test('the creator is seated in Blue and is the host', () async {
@@ -102,7 +105,69 @@ void main() {
       expect(parsed.code, code);
       expect(parsed.status, RoomStatus.waiting);
       expect(parsed.blue.playerId, 'uid-host');
+      // Phase 9 added the match fields, so the written version moved to 2.
+      expect(raw['schemaVersion'], Room.schemaVersion);
+      expect(Room.schemaVersion, 2);
+      expect(
+        raw.containsKey('boardState'),
+        isTrue,
+        reason: 'the shape is stable before the match starts, not absent',
+      );
+      expect(raw['boardState'], isNull);
+      expect(raw['turnNumber'], 0);
     });
+
+    test('a Phase 8 document (schemaVersion 1) still parses', () async {
+      // Rooms created before Phase 9 lack the match fields entirely. They must
+      // keep working rather than be stranded, which is why reading stayed lenient.
+      final code = await createRoom(host);
+      final stored = store.documents['matches/$code']!;
+      final legacy = Map<String, dynamic>.from(stored)
+        ..['schemaVersion'] = 1
+        ..remove('boardState')
+        ..remove('turnNumber')
+        ..remove('currentPlayerId')
+        ..remove('winnerId');
+
+      final room = Room.fromJson(legacy);
+
+      expect(room, isNotNull);
+      expect(room!.code, code);
+      expect(room.status, RoomStatus.waiting);
+      expect(room.boardState, isNull, reason: 'no snapshot before the match');
+      expect(room.turnNumber, 0);
+      expect(room.currentPlayerId, isNull);
+      expect(room.winnerId, isNull);
+      // And the seats still round-trip, so the room is fully usable.
+      expect(room.blue.playerId, 'uid-host');
+      expect(room.isFull, isFalse);
+    });
+
+    test(
+      'a corrupt stored snapshot surfaces as a null state, not a default',
+      () async {
+        // The document is returned with its turn number intact and no state, which
+        // is what the client's verification rejects. Swallowing the decode failure
+        // would hide the very corruption the check exists to catch.
+        final code = await createRoom(host);
+        final stored = store.documents['matches/$code']!;
+        store.documents['matches/$code'] = <String, dynamic>{
+          ...stored,
+          'status': 'started',
+          'turnNumber': 4,
+          'boardState': <String, dynamic>{'nonsense': true},
+        };
+
+        final room = Room.fromJson(store.documents['matches/$code'])!;
+
+        expect(room.boardState, isNull);
+        expect(
+          room.turnNumber,
+          4,
+          reason: 'the denormalised field is untouched',
+        );
+      },
+    );
 
     test('two rooms get different codes', () async {
       final a = await createRoom(host);
@@ -718,6 +783,10 @@ class _WriteFailingClient implements FirestoreClient {
 
   @override
   Stream<Map<String, dynamic>?> watch(String path) => inner.watch(path);
+
+  @override
+  Stream<FirestoreSnapshot> watchWithMetadata(String path) =>
+      inner.watchWithMetadata(path);
 
   @override
   Future<List<FirestoreDocument>> query({

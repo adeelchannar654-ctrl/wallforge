@@ -98,6 +98,40 @@ abstract interface class FirestoreClient {
   Future<T> runTransaction<T>(
     Future<T> Function(FirestoreTransaction txn) action,
   );
+
+  /// Like [watch], but reports whether each snapshot came from the server or
+  /// from the local cache.
+  ///
+  /// Added in Phase 9. `design.md` §19 requires five connection states
+  /// including "Reconnecting", and detecting that honestly needs snapshot
+  /// metadata: a plain `watch` returning only data cannot distinguish
+  /// "connected, and the document has not changed" from "serving a stale cached
+  /// copy while the network is down". Guessing would mean showing a confident
+  /// "Connected" while the player is effectively playing a frozen board.
+  ///
+  /// [watch] is deliberately kept for the Phase 6/7/8/8.1 repositories, which do
+  /// not need the distinction and must not change.
+  Stream<FirestoreSnapshot> watchWithMetadata(String path);
+}
+
+/// A document snapshot plus the metadata needed to tell a live read from a
+/// cached one.
+class FirestoreSnapshot {
+  /// Creates a snapshot.
+  const FirestoreSnapshot({required this.data, this.fromCache = false});
+
+  /// The document's fields, or null when it does not exist.
+  final Map<String, dynamic>? data;
+
+  /// Whether this snapshot was served from the local cache rather than the
+  /// server.
+  final bool fromCache;
+
+  @override
+  String toString() =>
+      'FirestoreSnapshot('
+      '${data == null ? 'missing' : 'present'}'
+      '${fromCache ? ', fromCache' : ''})';
 }
 
 /// A document returned by [FirestoreClient.query], carrying the path needed to

@@ -64,22 +64,15 @@ class InMemoryFirestoreClient implements FirestoreClient {
   /// document — which is exactly what the lobby test needs to prove the room
   /// creator sees the opponent arrive. Each write emits to every watcher, so the
   /// double reproduces the one-read-per-write cost the real listener bills.
-  final Map<String, StreamController<Map<String, dynamic>?>> _watchers =
-      <String, StreamController<Map<String, dynamic>?>>{};
+  final Map<String, StreamController<FirestoreSnapshot>> _watchers =
+      <String, StreamController<FirestoreSnapshot>>{};
 
   @override
-  Stream<Map<String, dynamic>?> watch(String path) async* {
-    final controller = _controllerFor(path);
-    // The current value first, matching the real listener's initial event.
-    yield _snapshot(path);
-    yield* controller.stream;
-  }
+  Stream<Map<String, dynamic>?> watch(String path) =>
+      watchWithMetadata(path).map((snapshot) => snapshot.data);
 
-  StreamController<Map<String, dynamic>?> _controllerFor(String path) =>
-      _watchers.putIfAbsent(
-        path,
-        StreamController<Map<String, dynamic>?>.broadcast,
-      );
+  StreamController<FirestoreSnapshot> _controllerFor(String path) => _watchers
+      .putIfAbsent(path, StreamController<FirestoreSnapshot>.broadcast);
 
   Map<String, dynamic>? _snapshot(String path) {
     final data = documents[path];
@@ -89,7 +82,9 @@ class InMemoryFirestoreClient implements FirestoreClient {
   void _emit(String path) {
     final controller = _watchers[path];
     if (controller == null || controller.isClosed) return;
-    controller.add(_snapshot(path));
+    controller.add(
+      FirestoreSnapshot(data: _snapshot(path), fromCache: _offline),
+    );
   }
 
   /// Closes every open stream. Tests call this in `tearDown` so a pending
@@ -101,7 +96,51 @@ class InMemoryFirestoreClient implements FirestoreClient {
     _watchers.clear();
   }
 
+  // --- Offline simulation (Phase 9) -------------------------------------------
+
+  bool _offline = false;
+
+  /// Whether the simulated network is down.
+  bool get isOffline => _offline;
+
+  /// Simulates the network dropping.
+  ///
+  /// Modelled on the two real Firestore behaviours that shape Phase 9's
+  /// reconnection design:
+  ///
+  /// * **A transaction fails; it does not queue.** Firestore has no offline
+  ///   write queue for transactions, so a submit while offline is rejected rather
+  ///   than silently buffered. That is why the app has to hold a pending action
+  ///   and resubmit it itself.
+  /// * **A listener keeps serving the last value, flagged as cached.** The board
+  ///   stays on screen rather than blanking, which is what `rules.md` §9 requires
+  ///   ("preserve the current local state"), and the client can tell the player it
+  ///   is looking at a frozen copy.
+  void goOffline() {
+    if (_offline) return;
+    _offline = true;
+    for (final path in _watchers.keys) {
+      final controller = _watchers[path];
+      if (controller == null || controller.isClosed) continue;
+      controller.add(FirestoreSnapshot(data: _snapshot(path), fromCache: true));
+    }
+  }
+
+  /// Simulates the network coming back, re-emitting current values as live.
+  void goOnline() {
+    if (!_offline) return;
+    _offline = false;
+    for (final path in _watchers.keys) {
+      final controller = _watchers[path];
+      if (controller == null || controller.isClosed) continue;
+      controller.add(FirestoreSnapshot(data: _snapshot(path)));
+    }
+  }
+
   void _maybeFail() {
+    if (_offline) {
+      throw StateError('simulated offline failure');
+    }
     if (!failNextOperation) return;
     failNextOperation = false;
     throw StateError('simulated Firestore failure');
@@ -172,9 +211,20 @@ class InMemoryFirestoreClient implements FirestoreClient {
   }
 
   @override
+  @override
+  Stream<FirestoreSnapshot> watchWithMetadata(String path) async* {
+    final controller = _controllerFor(path);
+    yield FirestoreSnapshot(data: _snapshot(path), fromCache: _offline);
+    yield* controller.stream;
+  }
+
+  @override
   Future<T> runTransaction<T>(
     Future<T> Function(FirestoreTransaction txn) action,
   ) async {
+    // A transaction fails outright while offline, exactly as Firestore does.
+    // There is no write queue, so nothing is silently buffered.
+    _maybeFail();
     // Mirrors Firestore: re-run the callback until it commits without conflict.
     for (var attempt = 0; attempt < maxTransactionAttempts; attempt++) {
       transactionAttempts++;

@@ -106,6 +106,18 @@ class CloudFirestoreClient implements FirestoreClient {
       _firestore.runTransaction<T>(
         (transaction) => action(_CloudTransaction(_firestore, transaction)),
       );
+  @override
+  Stream<FirestoreSnapshot> watchWithMetadata(String path) => _firestore
+      .doc(path)
+      .snapshots()
+      .map(
+        (snapshot) => FirestoreSnapshot(
+          data: snapshot.data(),
+          // `metadata.isFromCache` is the honest signal for "this came off the
+          // device, not the server" — the basis of the Reconnecting state.
+          fromCache: snapshot.metadata.isFromCache,
+        ),
+      );
 }
 
 class _CloudTransaction implements FirestoreTransaction {

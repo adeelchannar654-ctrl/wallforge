@@ -49,6 +49,10 @@ class _InterleavingClient implements FirestoreClient {
   Stream<Map<String, dynamic>?> watch(String path) => inner.watch(path);
 
   @override
+  Stream<FirestoreSnapshot> watchWithMetadata(String path) =>
+      inner.watchWithMetadata(path);
+
+  @override
   Future<T> runTransaction<T>(
     Future<T> Function(FirestoreTransaction txn) action,
   ) => inner.runTransaction(action);
