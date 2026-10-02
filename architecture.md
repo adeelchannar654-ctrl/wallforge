@@ -342,10 +342,11 @@ matches/{code}                          # the room document, and the match
   hostId          uid
   blue            { playerId, ready }
   red             { playerId, ready }
-  boardConfig     { size, wallsPerPlayer }
+  boardSize       int
+  wallsPerPlayer  int
   createdAt       int                   # ms
   updatedAt       int
-  version         int                   # +1 per applied action
+  version         int                   # +1 per shared-state-changing write
   boardState      GameState             # nested, authoritative
   turnNumber      int                   # must equal boardState.turnNumber
   currentPlayerId ?uid                  # null once finished
@@ -378,10 +379,17 @@ log, as this section always intended. The snapshot is what both clients render;
 the log exists for recovery and audit, and is never read to decide whether a
 move is legal.
 
-The snapshot is not a "large redundant document" problem at this scale: the
-worst case measured for a 9x9 board is a few kilobytes against a 1 MiB Firestore
-document limit. Avoiding repeated large writes is handled by writing **once per
-action**, atomically with that action's move record — not by splitting the state.
+The Phase 9 measurement serialised a 9x9 `GameState` with 20 wall records using
+the serializer's compact UTF-8 JSON shape: **1,573 bytes**. This is the game-state
+payload only; Firestore document names, field/index metadata and move documents
+add storage overhead. It is comfortably below Firestore's 1 MiB document limit.
+Avoiding repeated large writes is handled by writing **once per action**,
+atomically with that action's move record — not by splitting the state. This is
+an in-process payload measurement, not a Firestore storage-meter measurement.
+The implementation keeps the existing Phase 8 room's flat `boardSize` and
+`wallsPerPlayer` fields rather than nesting them under `boardConfig`; preserving
+the established room wire shape avoids changing lobby consumers. This is the
+documented schema deviation from the Phase 9 prompt's suggested shape.
 
 ### Field rules
 

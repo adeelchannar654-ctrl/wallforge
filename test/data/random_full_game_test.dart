@@ -28,10 +28,11 @@ class _Client {
 /// A ceiling, not an expectation.
 ///
 /// Play is uniformly random, so neither player is trying to win and a game ends
-/// only when the random walk happens to reach a goal row. Measured runs put the
-/// longest such game a little over 600 plies, and a 5x5 has only 9 cells a pawn
-/// can shuffle between, so 2000 is generous rather than tight. It exists to turn
-/// a wedged match into a failure instead of a hang, not to describe game length.
+/// only when the random walk happens to reach a goal row. The 201-game sample
+/// measured on 2026-10-01 reached 811 plies (seed 20269982). A 5x5 has only 9
+/// cells a pawn can shuffle between, so 2000 is a safety ceiling rather than an
+/// estimate of game length. It turns a wedged match into a failure instead of a
+/// hang; it is not a claim about the longest legal game.
 const int kPlyLimit = 2000;
 
 /// A rejection reason, without casting a result that may be a success.
@@ -50,12 +51,13 @@ void main() {
       final config = BoardConfig(size: size, wallsPerPlayer: size - 3);
 
       for (var game = 0; game < gamesPerSize; game++) {
-        test('${size}x$size game $game reaches a legal finish', () async {
+        final seed = 20260928 + size * 1000 + game;
+        test('${size}x$size game $game (seed $seed) reaches a legal finish', () async {
           // A per-game seed derived from the master one. Sharing a single
           // Random across the group would make the actions depend on test
           // execution order, so a failure could not be reproduced — and "it
           // passed on my run" is not a property of a protocol.
-          final random = Random(20260928 + size * 1000 + game);
+          final random = Random(seed);
           final store = InMemoryFirestoreClient();
           addTearDown(store.closeWatchers);
 
@@ -79,7 +81,8 @@ void main() {
             expect(
               plies,
               lessThan(kPlyLimit),
-              reason: 'game $game did not finish within $kPlyLimit plies',
+              reason:
+                  'game $game (seed $seed) did not finish within $kPlyLimit plies',
             );
 
             final legal = GameEngine.legalActions(reference);
@@ -100,7 +103,8 @@ void main() {
               result,
               isA<MoveApplied>(),
               reason:
-                  'ply $plies (${action.toNotation()}) was legal but the '
+                  'game $game (seed $seed): ply $plies '
+                  '(${action.toNotation()}) was legal but the '
                   'repository returned ${_describe(result)}',
             );
             submitted++;
@@ -121,12 +125,14 @@ void main() {
               expect(
                 stored,
                 reference,
-                reason: 'the shared snapshot diverged on ply $plies',
+                reason:
+                    'game $game (seed $seed): shared snapshot diverged on ply $plies',
               );
               expect(
                 await other.matches.readMoves(code: code),
                 hasLength(plies),
-                reason: 'the move log must record every applied action',
+                reason:
+                    'game $game (seed $seed): move log must record every applied action',
               );
             }
           }

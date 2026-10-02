@@ -2585,8 +2585,9 @@ matches/{code}                        # schemaVersion 2
   status          waiting | ready | started | finished | cancelled
   blue / red      { playerId, ready }
   hostId
-  boardConfig     { size, wallsPerPlayer }
-  version         int   # bumped once per applied action
+  boardSize       int
+  wallsPerPlayer  int
+  version         int   # +1 per shared-state-changing write
   turnNumber      int   # must equal boardState.turnNumber
   currentPlayerId ?uid  # null once finished
   winnerId        ?uid  # derived from the engine only
@@ -2720,25 +2721,41 @@ read cost against real quotas; Security Rules and match authorization (Phase 10)
 
 ### Owner acceptance script (requires Firebase setup first)
 
-1. `flutter run -d chrome` twice, in two separate profiles or windows.
-2. Host: Quick Match on 7x7. Confirm the second device offers the same board and
-   both show the room code.
-3. Both tap ready, host starts. Both must land on the online board, with one
-   showing `YOUR TURN` and the other `OPPONENT'S TURN` plus a stated reason.
-4. Blue moves. Red must see the move appear **without a refresh**, and Blue's
-   turn indicator must clear.
-5. Turn on airplane mode on the moving device, make a move, then restore. The
-   chip must show `RECONNECTING`, the move must land exactly once, and no
-   duplicate move record may appear in `matches/{code}/moves/`.
-6. Both play to a win. Both must show the same winner, and a further move must be
-   refused.
-7. Inspect `matches/{code}`: `version` must equal the number of applied actions,
-   `turnNumber` must equal `boardState.turnNumber`, and `currentPlayerId` must be
-   null once finished.
-8. With a match in progress, check the Firebase usage dashboard: reads should be
-   roughly two per action (one listener delivery per client) and writes two per
-   action (match document + move record). A materially higher read count means a
-   listener is being re-subscribed rather than reused.
+Before testing, create or confirm project `wallforge-efdb3`, keep it on Spark,
+register the Web/Android/iOS apps, enable **Anonymous** in Authentication, create
+the Firestore database, and run `flutterfire configure --project=wallforge-efdb3`
+for the platforms under test. Keep the generated `firebase_options.dart`,
+`google-services.json` and `GoogleService-Info.plist` local and uncommitted. If
+you choose Firestore test mode for this temporary check, its rules allow
+unrestricted client access and expire after **one month**; replace them with
+proper rules before relying on the database. Firebase's [Firestore quickstart](https://firebase.google.com/docs/firestore/quickstart)
+describes test mode; the [Firebase release notes](https://firebase.google.com/support/releases)
+confirm the one-month auto-expiry policy for Firestore test rules.
+
+Use two genuinely distinct anonymous users: two tabs in one Chrome profile share
+the same persisted uid. Use a normal and incognito profile, two Chrome profiles,
+or Chrome and an Android emulator.
+
+1. Device A creates a room and shares its six-character code.
+2. Device B joins by code; confirm each sees the other player's seat.
+3. Both players ready; A starts the match. Both must navigate to the online board
+   from the same initial snapshot, with opposite turn ownership.
+4. Play a complete game, including legal movement and wall placement. Confirm
+   each accepted move appears on the other device without refresh and the
+   non-active player's input is disabled.
+5. During the active player's turn, disconnect that device, make/hold one action,
+   then reconnect. Confirm `RECONNECTING` appears, the board is preserved, and
+   the same action lands at most once; also disconnect while the opponent moves
+   and confirm catch-up.
+6. Finish the game. Both devices must show the same engine-derived winner, and
+   further actions must be refused.
+7. Inspect `matches/{code}` and `moves`: versions and turns must be monotonic,
+   `turnNumber` must equal `boardState.turnNumber`, and there must be exactly one
+   move record per accepted action.
+8. Check Firestore usage after accounting for transaction reads plus one listener
+   document read per client per accepted action. The in-memory estimate is about
+   4 reads / 2 writes per action; the live usage dashboard is the acceptance
+   evidence for real billing.
 
 ### Q-9.5 (new) — the match document is the room document
 
@@ -2774,5 +2791,105 @@ insufficient evidence, and that property-based coverage is the cheapest defect
 finder available here — it runs in ~15 seconds and needs no Firebase.
 
 Q-7.1 and Q-7.2 remain resolved as recorded in §13p. Q-7.3, Q-7.4, Q-7.5 remain
-open. Q-8.x remain as recorded in §13p, except Q-8.6 which is now resolved.
+open. Q-8.3 remains open (the unused `cancelled` status is preserved); Q-8.4 is
+resolved by the Phase 9 metadata-backed connection states; Q-8.6 is resolved by
+route-owned `GameScreen` disposal. Other Q-8.x remain as recorded in §13p.
 Q-6.1 … Q-6.4, Q-5.1, Q-4.1 … Q-4.10, Q-2.1 remain open and unaffected.
+
+### Phase 9 source ledger
+
+| Source | Decision applied |
+| --- | --- |
+| `PRD.md` §6.4, §9 and §10 | A player's uid and seat determine input ownership; verified shared state, not local intent or a declared winner, determines the board and result. Rematch remains deferred; accounts, rating and ranked play stay out of scope. |
+| `architecture.md` §10–§13 | Stay on the Spark-compatible client architecture with no Cloud Functions. Extend `matches/{code}` and its `moves` subcollection as §11 documents; keep Firestore Rules and their enforcement limits in Phase 10. |
+| `rules.md` §§3.6, 5, 7, 9, 10, 16, 17 and 19 | Validate stored state through `GameEngine`; write only accepted actions; return structured failures; keep offline state and use idempotent retries; do not write for pointer/UI changes. |
+| `design.md` §§16, 19, 21, 26 and 29; Stitch tactical arena and gameplay screen | Reuse the existing HUD and board; show all five connection states, the player's seat and accessible status/failure descriptions; keep canonical board orientation. |
+| `phase.md` §§9–11 | Phase 9 covers this client's recovery and convergence; Phase 10 owns the other player's timeout/abandonment response, clocks, security and authorization; Phase 11 owns larger UI and rematch decisions. |
+| `game_spec.md` v2.0 §§4, 6, 7, 15 and 16 | Keep the engine's action/state JSON and scripted-game outcome. Legal perpendicular walls can share an anchor; the Phase 9 codec fix changes no rule. |
+| `memory.md` §§13m–13q | Preserve room lifecycle and asymmetric pre-start leave behavior. The code-room creator is Blue; a Quick Match's waiting player becomes host/Blue. Both entry flows start from the same shared initial snapshot. |
+| Domain, Firestore port and application code | Keep the domain repository interface as the boundary; widen the Firestore port only for metadata and cursor recovery, with the in-memory implementation modeling those capabilities. |
+
+The Phase 9 prompt's illustrative nested `boardConfig` object is **not** used:
+the existing room wire shape already stores `boardSize` and `wallsPerPlayer` as
+flat fields. `architecture.md` §11 now records that shape. `schemaVersion` was
+bumped from 1 to 2 for the additive match fields; readers continue accepting
+version 1. A started document with no decodable `boardState` is rejected as
+invalid remote data. `RoomStatus.finished` is separate from game status;
+`cancelled` remains its own unused value (Q-8.3), never a synonym for completion.
+
+### Q-8 carry-forward resolution
+
+- **Q-8.3 remains open:** `RoomStatus.cancelled` still has no producer. It was
+  not repurposed; finished games use `RoomStatus.finished`.
+- **Q-8.4 is resolved:** `watchWithMetadata` distinguishes cached/offline and
+  pending-write states, and the controller exposes all five design states.
+- **Q-8.6 is resolved:** the `/game` route opts into `GameScreen.ownsController`,
+  and `game_screen_disposal_test.dart` proves a route pop disposes its controller
+  while the borrowed-controller case remains caller-owned.
+
+### Snapshot and free-tier accounting (checked 2026-10-01)
+
+The compact UTF-8 JSON shape produced by `GameStateSerializer.toJson` measured
+**1,573 bytes** for a 9x9 state with 20 wall records and the normal 10-wall
+starting inventory. This serializer-shape measurement counts the exact fields
+and compact encoding; the synthetic wall list is not a legality fixture. It is
+payload size only, excluding Firestore document and index overhead. Each game
+also retains one small move document per ply; those
+append-only records dominate accumulated storage. No live Firestore storage
+measurement is available before Q-7.4 is closed.
+
+The Firestore Standard/Spark free quota was checked against the official
+[Firestore quota table](https://firebase.google.com/docs/firestore/quotas) and
+[billing guide](https://firebase.google.com/docs/firestore/pricing): 50,000
+document reads/day, 20,000 writes/day, 20,000 deletes/day and 1 GiB stored data
+(plus 10 GiB/month outbound transfer). Each applied action does two transaction
+document reads (match + that turn's move record), and each of the two clients
+receives one changed match document through its listener: approximately **4
+reads and 2 writes per action**. Start-up adds roughly five room writes (create,
+join, two ready changes, start), initial listener snapshots and room reads. A
+811-ply accounting case costs about 3,244 action reads plus start-up and 1,622
+action writes plus five room writes. At approximately 3,248 reads and 1,627
+writes, writes are the limiting quota: **12 full games/day** at this length
+(floor(20,000 / 1,627)); reads alone would allow about 15. This is a client-side
+estimate; transaction retries, reconnect listener re-reads, future security-rule
+lookups and recovery pages add reads. Recovery reads one document per move, only
+when verification fails. Storage includes indexes and metadata and has not been
+observed on a configured backend.
+
+For an 811-ply sizing case with a 9x9 board, 20 wall moves, 28-character
+anonymous uids and compact JSON records, the measured payload is 152,560 bytes
+for move documents plus 21,897 bytes of document paths and the 1,573-byte state
+payload: **176,030 raw bytes**. This excludes the parent room's other fields and
+Firestore's metadata/index overhead, so it is a lower bound, not an observed
+database storage size. The exact 811-ply maximum was measured in the reproducible
+201-game suite on 2026-10-01 at seed `20269982`; that random-game config has six
+walls per player. The 20-wall payload calculation is a conservative size case
+using the standard 9x9 inventory, not a claim that this exact seeded game placed
+20 walls. The exact longest legal game is not known. The spec's 431-ply oracle
+maximum is lower than the repository's observed random games and is therefore
+not used as a capacity bound.
+
+### Current quality-gate run (2026-10-01)
+
+- `dart format --set-exit-if-changed lib test` → `Formatted 121 files (0 changed)`.
+- `flutter analyze` → `No issues found! (ran in 75.7s)`.
+- `flutter test --coverage` → `1470: All tests passed!` (6m48s).
+- After adding seed values to random-game test names and failure messages,
+  `flutter test --no-pub --reporter compact test/data/random_full_game_test.dart`
+  → `201: All tests passed!` (32s); failures now print the exact replay seed.
+  The longest game measured by a temporary run-only counter was 811 plies at
+  seed `20269982`; the counter was removed after measurement.
+- `flutter build web --release` → `√ Built build\\web` (75.7s).
+- Spec checker → `OK: spec is consistent with the reference engine.`
+- Generated vectors and checked-in fixture both measured 1,229,568 bytes and
+  SHA-256 `6f1e3c0542f876d841d31ec2738d2798d3ad437ef176f3cbea1a63ea5394ba96`;
+  byte-identical.
+- Mojibake scanner → `scanned 145 tracked text files ... RESULT: 0 files with mojibake`.
+- `coverage/lcov.info`: `online_game_controller.dart` 161/193 (83.4%);
+  `firestore_match_repository.dart` 134/146 (91.8%);
+  `in_memory_firestore_client.dart` 108/109 (99.1%);
+  `online_game_screen.dart` 132/152 (86.8%); `cloud_firestore_client.dart`
+  1/48 (2.1%). Its real Firestore metadata listener, transaction adapter and
+  document-id cursor are unverified without a Firebase SDK/emulator. The zero-hit
+  declarative files are `match_setup.dart`, `app_colors.dart`, `app_radii.dart`,
+  `app_spacing.dart`, `app_typography.dart` and `app_info.dart`.

@@ -984,13 +984,34 @@ third player.
 - Oracle fixture: 1,229,568 bytes, SHA-256 `6f1e3c05…`, unchanged.
 - `game_spec.md` and `rules.md`: unmodified.
 
+### Reverification (2026-10-01)
+
+The Phase 9 gates were rerun from the current checkout: format check reported
+`Formatted 121 files (0 changed)`; `flutter analyze` reported no issues;
+`flutter test --coverage` passed all 1,470 tests; and the release web build
+succeeded. The spec checker passed, generated oracle bytes were identical to the
+fixture (1,229,568 bytes, SHA-256
+`6f1e3c0542f876d841d31ec2738d2798d3ad437ef176f3cbea1a63ea5394ba96`), and the
+encoding scan found no mojibake in 145 tracked text files. The 201 seeded random
+match tests were rerun after their failure output was updated to include each
+replay seed; all 201 passed. The longest seeded run was 811 plies (seed
+`20269982`, measured with a run-only counter that was removed afterwards).
+Coverage for the sync controller, repository,
+in-memory Firestore client and online screen was 83.4%, 91.8%, 99.1% and 86.8%
+respectively. `cloud_firestore_client.dart` was 1/48 lines (2.1%); its live
+Firestore metadata, transaction and cursor behavior remains unverified until
+Firebase/emulator setup. See the current output and full gap list in
+`memory.md` §13q.
+
 #### Blocker — Q-7.4 (owner action)
 
 **The exit criterion "two players can complete a match across devices" is not
-verified and cannot be verified from here.** There is no `firebase_options.dart`,
-`google-services.json`, `GoogleService-Info.plist`, `.firebaserc` or
-`firebase.json`; the owner has not completed Firebase Console setup. Every claim
-above comes from two independent client stacks over one
+verified yet.** The owner reports enabling Anonymous Authentication and testing
+Firebase Realtime Database. However, this app's online sync uses Cloud
+Firestore, and no `firebase_options.dart`, `google-services.json`,
+`GoogleService-Info.plist`, `.firebaserc` or `firebase.json` is present in the
+project. The Realtime Database test does not exercise the app's Firestore path.
+Every claim above comes from two independent client stacks over one
 `InMemoryFirestoreClient`, which models transactions, conflicts, offline
 failure, listeners and cache metadata but is not Firestore.
 

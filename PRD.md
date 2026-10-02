@@ -365,7 +365,7 @@ The MVP is complete when:
 Potential future features:
 
 - Ranked online matches.
-- Matchmaking.
+- Ranked or skill-based matchmaking (beyond the current random Quick Match).
 - Leaderboards.
 - Player progression.
 - Cosmetics.
