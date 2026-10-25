@@ -17,7 +17,7 @@ A wall may never remove the last route to either player's goal.
 
 ## Status
 
-**Phases 0–9 are complete in code, with one owner-side caveat.** See
+**Phases 0–10 are complete in code, with one owner-side caveat.** See
 [`phase.md`](phase.md) for the full plan and the per-phase results.
 
 - **Phase 0 — Project Foundation.** Flutter project, platform targets, folder
@@ -77,27 +77,35 @@ A wall may never remove the last route to either player's goal.
   defects that random full-game testing exposed, and an owner acceptance script
   are in [`memory.md`](memory.md) §13q.
 
-  **The Phase 9 exit criterion - two players completing a match across real
-  devices - is not yet verified**, because Firebase Console setup (Q-7.4) is
-  still outstanding. Everything above is proven against an in-memory Firestore
-  double that models transactions, conflicts, offline failure, listeners and
-  cache metadata, but is not Firestore.
+  **The Phase 9 live verification was completed on 2026-10-26**: two real
+  browser sessions played against the live Firebase project
+  `wallforge-efdb3` — moves and a wall placement were recorded server-side
+  in `matches/{code}/moves` and rendered identically on both clients
+  (matches `6QH974` and `H3NQY2`; see [`memory.md`](memory.md) §13q). A
+  full match played to a winner across two devices has not been run yet.
+- **Phase 10 — Online Reliability and Security.** Multiplayer is now
+  hardened. [`firestore.rules`](firestore.rules) enforces match
+  authorization, turn ownership, version/turn progression and document
+  shape on every write, with the matchmaking queue covered as well; the
+  security model — including the demonstrated limit of Firestore-only
+  enforcement (the rules accept a pawn teleport and a board-sealing wall:
+  they check authorization and structure, not game legality) — is
+  documented in [`security_model.md`](security_model.md) and proven by 33
+  emulator tests in [`tool/rules_tests/`](tool/rules_tests/). A waiting
+  player now sees an opponent-disconnect notice after 120 seconds and can
+  claim the match as abandoned; a player can hold only one open room at a
+  time. Rematch is deferred to Phase 11 by recorded decision (Q-9.2).
 
-**Firebase still needs owner-side setup in the Console.** The app
-code is complete and tested, but this repository ships no Firebase client
-configuration on purpose: `.gitignore` excludes `google-services.json`,
-`GoogleService-Info.plist` and `firebase_options.dart` and says never to merge
-exceptions for them. Until those files are added locally, the app logs
-`Firebase unavailable` at startup and runs on local storage. The exact manual
-steps — registering the Android/iOS/Web apps, running `flutterfire configure`
-for project `wallforge-efdb3`, and creating the Firestore database — are in
-[`memory.md`](memory.md) §13o.
-
-**This was confirmed still outstanding during Phase 8**, so the online code is
-tested against an in-process Firestore double rather than a live backend. That
-means anonymous sign-in actually working, the `matches/{code}` document being
-readable, and realtime updates converging between two real devices are all
-still unverified.
+**Firebase still needs owner-side setup in the Console for Android/iOS.**
+The web app is registered and live-verified (above). Android and iOS
+client configuration is still absent: this repository ships no Firebase
+client configuration on purpose — `.gitignore` excludes
+`google-services.json`, `GoogleService-Info.plist` and
+`firebase_options.dart` and says never to merge exceptions for them.
+Until those files are added locally, the app logs `Firebase unavailable`
+at startup on those platforms and runs on local storage. The exact manual
+steps — registering the apps and running `flutterfire configure` for
+project `wallforge-efdb3` — are in [`memory.md`](memory.md) §13o.
 
 **Online Play now works without configuration.** A bug found after Phase 8
 shipped made tapping "Online Play" silently do nothing, because
@@ -151,6 +159,8 @@ Read these before contributing. They are the source of truth.
 | [`design.md`](design.md) | Visual design system |
 | [`memory.md`](memory.md) | Project memory / current status |
 | [`game_spec.md`](game_spec.md) | Frozen game specification (Phase 1) |
+| [`security_model.md`](security_model.md) | Online security model: what the Firestore rules enforce, the demonstrated limits, and the deliberate exceptions (Phase 10) |
+| [`firestore.rules`](firestore.rules) | Firestore Security Rules — the online authorization boundary (Phase 10) |
 
 > The Google Stitch design output is **not** a project dependency and must not
 > be treated as the visual source of truth. See [`memory.md`](memory.md) §4.

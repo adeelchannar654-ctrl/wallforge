@@ -1112,6 +1112,82 @@ If stronger authoritative validation is required later, reassess backend archite
 
 The online mode has documented security boundaries and robust failure handling.
 
+### Result — Phase 10 (2026-10-26)
+
+**Firestore rules.** New `firestore.rules` implements every item on
+`architecture.md` §12's list plus PRD §9's minimum checks: authentication,
+match membership, turn ownership, monotonic version/turn progression,
+type/shape validation of every write, identity immutability, the
+finished-match lock, and a `moves/{turn}` log that is immutable except for
+the identical retry by its own player. Matchmaking and queue ownership are
+covered (§8.1), including other-player reaping of stale queue entries. The
+model, the deliberate read exceptions (single-document `get` as the join
+capability; the listable queue), and the limits are documented in
+`security_model.md`. The emulator suite in `tool/rules_tests/` — **33
+tests, all passing** against the real Firestore emulator — covers an allow
+case and at least one deny case per rule.
+
+**The Firestore-only limit, demonstrated.** Two tests write game-illegal
+states that the rules *accept*, by design and now by measurement: a pawn
+teleport (8,4)→(5,4), and a wall barrier that seals the board (five
+horizontal walls across one row). Rules verify structure, authorization
+and cross-field coherence; they cannot re-run pathfinding or per-wall
+legality. The compensation is unchanged from Phase 9: every client
+re-validates every snapshot against the engine before adopting it. The
+honest caveat stands in `security_model.md`: a malicious client can still
+write a game-illegal state that honest clients will refuse to adopt. Only
+a trusted backend (Cloud Functions, billing) closes that; this phase
+deliberately does not add one.
+
+**Timeout and abandonment (Q-9.3 resolved).** No source specified an
+opponent-timeout duration; Phase 10 sets **120 seconds** of inactivity
+(the stored `updatedAt` not advancing while it is the opponent's turn) as
+the named constant `opponentInactivityThreshold`, enforced identically by
+the client and the rules. The waiting player sees a disconnect notice and
+may claim the match: a transaction writes the new terminal status
+`abandoned` plus `abandonedById` (chosen over reusing `cancelled`, which
+is pre-start, or `finished`, which means played to a conclusion). The
+claim/move race is safe in both orders — a move that lands first flips
+the turn and the claim is refused; a claim that lands first ends the
+match and the move is refused as match-over. Documented limit: the
+threshold is measured against a client-written timestamp, so a skewed
+device clock shifts the effective wait.
+
+**Abuse-resistant rooms, v1.** A player may hold **one open code room** at
+a time, guarded client-side by a `playerRooms/{uid}` pointer document
+(set on create/join, cleared on start/leave, believed only after
+re-reading the room it names). Rules cannot enforce this (they cannot run
+queries); that limit is recorded in `security_model.md`. Quick Match is
+bounded structurally instead (one queue entry per player per board
+partition). There is still no server-side cleanup of abandoned pre-start
+rooms on the Spark plan; the mitigations are host-delete on leave and the
+60-second queue reaping.
+
+**Rematch (Q-9.2): deferred to Phase 11.** A rematch is a new room with
+fresh seats and a two-player consent flow whose UI lives on the result
+screen — Phase 11's territory per this plan and `design.md` §21. Phase 10
+records the decision and the reasoning rather than half-building it; the
+security model needs nothing rematch-specific beyond Phase 10's room
+rules when it lands.
+
+**Also in this phase.** The online screen's narrow layout now scrolls
+when the content cannot fit: the *waiting* player's view (disconnect
+notice + claim action) overflowed at phone widths — a defect that
+predates Phase 10 (the waiting view was already the tall one; Phase 9's
+layout tests only ever pumped the mover's view). Three Phase 8 assertions
+in `room_lifecycle_test.dart` were updated to count the new
+`playerRooms/{uid}` pointer document, which is additive by design.
+
+**Verification.** `dart format --set-exit-if-changed lib test` → 125
+files, 0 changed. `flutter analyze` → no issues. `flutter test` → 1,502
+tests, 1,493 passed; the 9 failures are the same golden-image tests that
+fail identically on the pristine Phase 9 tree in this environment (no
+rendering code changed). `flutter build web --release` → succeeds. Spec
+checker → OK (80 catalogue rows, 65 rule IDs, 65 in matrix). Oracle
+fixture byte-identical (1,229,568 bytes, SHA-256 `6f1e3c05…`). Rules
+suite → 33/33 on the Firestore emulator. `game_spec.md` and `rules.md`
+unmodified. Full record: `memory.md` §13r.
+
 ---
 
 # Phase 11 — Full UI/UX

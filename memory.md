@@ -2984,3 +2984,177 @@ not used as a capacity bound.
   document-id cursor are unverified without a Firebase SDK/emulator. The zero-hit
   declarative files are `match_setup.dart`, `app_colors.dart`, `app_radii.dart`,
   `app_spacing.dart`, `app_typography.dart` and `app_info.dart`.
+
+## 13r. Phase 10 — Online Reliability and Security (2026-10-26)
+
+### Phase 10 source ledger
+
+| Source | What it fixed for Phase 10 |
+|---|---|
+| `architecture.md` §12 | The eight enforcement items the rules must implement; the "Important limitation" paragraph Phase 10 had to demonstrate, now backed by two named emulator tests. |
+| `architecture.md` §11 (as corrected in Phase 9) + `Room.toJson` / `MatchMove.toJson` | The real document shapes the rules validate. All Firestore writes are full-document `set`s; move submission is one transaction writing the room and the move record together; an identical retry writes nothing. |
+| PRD §9 | Monotonic turn/version and valid-shape checks; no opponent-timeout duration is specified anywhere — the 120 s threshold is Phase 10's reasoned default, recorded below. |
+| `phase.md` Phase 10 | Task list and exit criterion; Phase 11 owns the full UI (and therefore the rematch consent flow). |
+| `design.md` §21 | Result-screen/rematch placement — the second reason rematch is deferred whole rather than half-built. |
+| Q-9.2, Q-9.3 | The two decisions Phase 10 had to close: rematch (deferred, below) and opponent-side timeout (built, below). |
+
+### What was built
+
+**`firestore.rules`** (new, repository root; `firebase.json` gained only a
+rules pointer and emulator config — no credentials). Rules are written in
+the canonical full form, `match /databases/{database}/documents { … }`.
+Enforced, each with allow and deny coverage in the emulator suite:
+
+- `matches/{code}` create: two shapes only — the code room (creator is
+  host and Blue, Red seat empty) and the Quick Match room (both seats
+  filled, valid only inside the claim transaction: `getAfter` requires
+  both players' `matched` documents to land with the identical payload).
+- Updates are a single versioned step (`version` +1, `updatedAt`
+  non-decreasing, timestamps not more than 5 minutes in the future) and
+  exactly one transition kind: pre-start change (join/ready/leave, with
+  the status the seats derive), match start (host only, both seats ready,
+  `boardState` exactly `GameState.initial` for the config), a move write
+  (requester is the stored player-to-move; turn +1; the denormalised
+  copies — `turnNumber`, `currentPlayerId`, remaining walls, pawn
+  positions — must agree with the snapshot, including R-STATE-05 parity),
+  or an abandonment claim (below). An identical rewrite by a member is
+  allowed as the idempotent no-op. Identity fields (`hostId`, board
+  config, `createdAt`, seats' owners) never change; `schemaVersion` may
+  migrate 1→2 for legacy documents.
+- A finished or abandoned match accepts no further transitions.
+- `moves/{NNNNNN}`: created only by the player to move, in the same
+  transaction as the room write (id must equal the turn it records,
+  `resultingVersion` must be the room's next version); immutable
+  thereafter except the byte-identical retry by its own player; readable
+  only by the two players.
+- Delete: host only, and only before the match starts (the pre-start
+  leave path).
+- `matchmaking/{boardKey}`: `waiting/{uid}` is owner-written; deletable
+  by its owner, by the claiming opponent (proven via `getAfter` on the
+  matched pair), or by anyone signed in when the entry is stale
+  (> 60 s) or malformed — Phase 8.1's reaping design. `matched/{uid}` is
+  readable only by its owner and written only inside the claim
+  transaction.
+- `users/{uid}/{document=**}` and `playerRooms/{uid}`: owner-only.
+
+**The demonstrated limit (prompt §3).** The suite's LIMIT test contains
+two writes the rules ACCEPT: Blue's pawn teleports (8,4)→(5,4) in an
+otherwise fully valid move write, and Blue seals the board with five
+horizontal walls across row 4 (anchors' columns 0, 2, 4, 6, 7,
+`remainingWalls.blue` = 5). Rules check structure, authorization and
+arithmetic coherence; legality — adjacency, per-wall placement rules,
+path preservation (R-PATH-01) — would require re-implementing the engine
+in the rules language. Compensation, unchanged from Phase 9: clients
+verify snapshots against the engine before adopting them, so an honest
+client never *plays* an illegal state. The residual risk is stated
+plainly in `security_model.md`: a malicious client can write a state the
+opponent's client will refuse, wedging that match. Closing it needs a
+trusted backend (Cloud Functions) and therefore billing; Phase 10 does
+not add one, and the exit criterion does not require it.
+
+**Timeout and abandonment (Q-9.3, resolved).** Threshold:
+`opponentInactivityThreshold` = 120 s in
+`lib/domain/repositories/match.dart`, mirrored in the rules as
+120 000 ms between the stored `updatedAt` and the server's
+`request.time`. `OpponentPresence` is derived in
+`OnlineGameController` (a 5 s periodic re-check; listeners only fire on
+document changes, and a stalled opponent produces none). The waiting
+player sees "Your opponent seems to have disconnected" with a
+confirm-then-claim action; `FirestoreMatchRepository.claimAbandonment`
+runs the checks inside a transaction and writes status `abandoned` +
+`abandonedById` + `version` +1. `winnerId` stays null: abandonment is
+not a played result (new `RoomStatus.abandoned`, deliberately distinct
+from `cancelled` and `finished`). Race handling is symmetric: whichever
+of the move and the claim commits first wins, and the loser is refused
+with a typed reason (`AbandonmentFailureReason` / the move path's
+`matchFinished`). Documented limit: `updatedAt` is written by the acting
+player's device clock, so clock skew shifts the effective wait.
+
+**Abuse resistance, v1.** One open code room per player, guarded by the
+`playerRooms/{uid}` pointer (`openRoomCode`, nullable; set on
+create/join, cleared on start/leave; trusted only after re-reading the
+room it names, so a stale pointer heals itself). Rules cannot enforce
+the one-room limit (they cannot query), so the boundary is the per-room
+rules; the pointer is a client-side guard and `security_model.md` says
+so. Quick Match is not pointer-guarded (that would break the claim
+transaction's atomicity); it is bounded structurally. No server-side
+sweep of stale pre-start rooms exists on Spark.
+
+**Rematch (Q-9.2, resolved by deferral).** Deferred to Phase 11 with the
+reasoning recorded in `phase.md`'s Phase 10 Result: rematch is a new
+room with fresh seats plus a two-player consent flow, and both the
+result screen and the consent UI are Phase 11 work (`design.md` §21).
+Nothing in the Phase 10 rules blocks it when it lands.
+
+### Open-question ledger after Phase 10
+
+- **Q-8.3 closed.** `RoomStatus.cancelled` is retained with no persisted
+  producer, deliberately: host leave deletes the document (Phase 8's
+  recorded behaviour), and `cancelled` remains the value `leave()`
+  returns for that case. It was not repurposed for abandonment; Phase 10
+  added `abandoned` instead.
+- **Q-9.2 closed** (deferred to Phase 11, above). **Q-9.3 closed**
+  (built, above). **Q-9.5** (match document is the room document) needed
+  no split in Phase 10 either; the rules validate the combined shape.
+  **Q-8.12 unchanged**: `matched` documents are still never deleted.
+- **Q-7.x carried forward:** Q-7.3/Q-7.5 remain as last recorded; Q-7.4
+  was closed by the 2026-10-26 live verification (Phase 9 record).
+- **New (Phase 10 finding) — the storage port's per-user paths are not
+  Firestore document paths.** The port names documents
+  `users/{uid}/settings` (and `statistics`, `unfinishedMatch`): an odd
+  segment count, which the real Firestore SDK rejects as a document
+  reference (the in-memory double accepts any string, so Phase 7's tests
+  could not see this). The Firestore-backed settings/statistics/
+  unfinished-match repositories have therefore never been able to write
+  to a real backend; the app defaults to local storage, so nothing user-
+  visible depends on it yet. The rules already guard the whole
+  `users/{uid}` subtree, so whichever layout replaces it (a document at
+  `users/{uid}` or documents inside the named subcollections) needs no
+  rules change. Fixing the layout belongs with the phase that first
+  enables the Firestore-backed repositories for real.
+
+### Test-harness findings (Phase 10)
+
+- The rules suite caught one of its own tests being vacuous:
+  `staleStartedRoom` ignored its overrides argument, so the first
+  abandonment-claim test passed as an idempotent rewrite and the
+  "too early" case seeded a stale room. Fixed; the claim tests now
+  exercise the real transitions (and a boundary probe confirmed the
+  rules deny claims at 0–119 s of inactivity and allow them at ≥ 121 s
+  against the emulator's server clock).
+- Two emulator environment quirks in the sandbox, both recorded in
+  `security_model.md`: the emulator JVM needs
+  `-Djava.net.preferIPv4Stack=true` (its internal loopback channels fail
+  on IPv6-preferred hosts), and that build evaluates rule paths as
+  absolute paths — one reason the rules use the canonical
+  `/databases/{database}/documents` wrapper form.
+- Widget tests dispose controllers in the test body, not in
+  `addTearDown`: `OnlineGameController`'s presence timer is periodic, and
+  the test binding's pending-timer check runs before tear-down
+  callbacks. Relatedly, a test must not call `connect()` twice on one
+  controller: the second call awaits the first subscription's
+  cancellation, which never completes in a fake-async zone while the
+  watch stream is idle. (In the app each controller is connected exactly
+  once; noted here as a sharp edge for Phase 11 test work.)
+- Three `room_lifecycle_test.dart` assertions now count only
+  `matches/`-prefixed documents and assert the pointer document's value:
+  the Phase 10 pointer is a legitimate second document in the store.
+
+### Current quality-gate run (2026-10-26, Phase 10)
+
+- `dart format --set-exit-if-changed lib test` → `Formatted 125 files (0 changed)`.
+- `flutter analyze` → `No issues found!`
+- `flutter test` → 1,502 tests: **1,493 passed, 9 failed** — the 9 are
+  the known environmental golden-image failures, identical on the
+  pristine Phase 9 tree in this VM; Phase 10 changed no rendering code.
+  28 of the 1,502 are new Phase 10 tests (abandonment 10, open-room
+  limit 7, opponent presence 6, presence UI 5).
+- `flutter build web --release` → succeeds.
+- Spec checker → `OK: spec is consistent with the reference engine`
+  (80 catalogue rows, 65 rule IDs, 65 in matrix).
+- Oracle fixture → 1,229,568 bytes, SHA-256
+  `6f1e3c0542f876d841d31ec2738d2798d3ad437ef176f3cbea1a63ea5394ba96`,
+  byte-identical.
+- Rules suite (`tool/rules_tests/`, Firestore emulator) → **33 tests,
+  33 passed, 0 failed.**
+- `game_spec.md` and `rules.md`: unmodified.
