@@ -1,0 +1,510 @@
+// Wallforge — Firestore Security Rules (Phase 10).
+//
+// Every rule below traces to `architecture.md` §12's list, quoted at the point
+// of enforcement, plus `PRD.md` §9's minimum checks (authenticated identity,
+// match membership, turn ownership, valid state shape, monotonic turn/version,
+// allowed participant fields). The limits of what rules can enforce are
+// demonstrated by test and documented in `security_model.md` — rules are the
+// authorization boundary, not a game-rules engine (`rules.md` §3.6).
+//
+// Document shapes are the ones the code actually writes
+// (`architecture.md` §11 "as implemented", `Room.toJson`,
+// `MatchMove.toJson`): all writes are full-document sets, timestamps are
+// client-written epoch milliseconds (ints), and `version` advances by exactly
+// one per shared-state-changing write.
+rules_version = '2';
+
+service cloud.firestore {
+  // ------------------------------------------------------------------ helpers
+
+  function signedIn() {
+    return request.auth != null;
+  }
+
+  function uid() {
+    return request.auth.uid;
+  }
+
+  // A seat map exactly as `Room._seatToJson` writes it.
+  function validSeat(s) {
+    return s is map
+      && s.keys().hasOnly(['playerId', 'ready'])
+      && s.keys().hasAll(['playerId', 'ready'])
+      && (s.playerId == null || s.playerId is string)
+      && s.ready is bool;
+  }
+
+  function seatedUid(d, side) {
+    return side == 'blue' ? d.blue.playerId : d.red.playerId;
+  }
+
+  function isMember(d) {
+    return d.blue.playerId == uid() || d.red.playerId == uid();
+  }
+
+  // The exact top-level field set `Room.toJson` writes. `abandonedById` is
+  // Phase 10's one additive field; older writers omit it, so it is allowed
+  // but not required.
+  function validRoomShape(d, code) {
+    return d.keys().hasOnly([
+        'code', 'status', 'boardSize', 'wallsPerPlayer', 'hostId',
+        'blue', 'red', 'createdAt', 'updatedAt', 'version', 'schemaVersion',
+        'boardState', 'turnNumber', 'currentPlayerId', 'winnerId',
+        'abandonedById',
+      ])
+      && d.keys().hasAll([
+        'code', 'status', 'boardSize', 'wallsPerPlayer', 'hostId',
+        'blue', 'red', 'createdAt', 'updatedAt', 'version', 'schemaVersion',
+        'boardState', 'turnNumber', 'currentPlayerId', 'winnerId',
+      ])
+      && d.code == code
+      && d.schemaVersion == 2
+      && d.status in ['waiting', 'ready', 'started', 'finished', 'cancelled', 'abandoned']
+      && d.hostId is string && d.hostId.size() > 0
+      && (d.hostId == d.blue.playerId || d.hostId == d.red.playerId)
+      && validSeat(d.blue) && validSeat(d.red)
+      // `BoardConfig.check`: size odd and >= 5, wallsPerPlayer >= 0.
+      && d.boardSize is int && d.boardSize >= 5 && d.boardSize % 2 == 1
+      && d.wallsPerPlayer is int && d.wallsPerPlayer >= 0
+      && d.createdAt is int && d.updatedAt is int
+      && d.version is int && d.version >= 1
+      && d.turnNumber is int && d.turnNumber >= 0
+      && (d.boardState == null || d.boardState is map)
+      && (d.currentPlayerId == null
+          || d.currentPlayerId == d.blue.playerId
+          || d.currentPlayerId == d.red.playerId)
+      && (d.winnerId == null
+          || d.winnerId == d.blue.playerId
+          || d.winnerId == d.red.playerId)
+      && (!('abandonedById' in d)
+          || d.abandonedById == null
+          || d.abandonedById == d.blue.playerId
+          || d.abandonedById == d.red.playerId);
+  }
+
+  // Structural checks on a stored `GameState` snapshot (serializer shape).
+  // Rules can check shape, ranges, cross-field consistency and the state
+  // invariants that are arithmetic (R-STATE-01 distinct pawns, R-STATE-05
+  // turn parity). They cannot check per-wall legality or path preservation —
+  // see `security_model.md` for the demonstrated gap.
+  function validBoardState(bs, d) {
+    return bs is map
+      && bs.keys().hasOnly([
+        'schemaVersion', 'boardConfig', 'players', 'currentPlayer',
+        'pawnPositions', 'walls', 'remainingWalls', 'turnNumber', 'status',
+        'winner',
+      ])
+      && bs.keys().hasAll([
+        'schemaVersion', 'boardConfig', 'players', 'currentPlayer',
+        'pawnPositions', 'walls', 'remainingWalls', 'turnNumber', 'status',
+        'winner',
+      ])
+      && bs.schemaVersion is int
+      && bs.boardConfig.size == d.boardSize
+      && bs.boardConfig.wallsPerPlayer == d.wallsPerPlayer
+      && bs.players == ['blue', 'red']
+      && bs.currentPlayer in ['blue', 'red']
+      && bs.turnNumber == d.turnNumber
+      && bs.status in ['inProgress', 'finished']
+      && (bs.winner == null || bs.winner in ['blue', 'red'])
+      && ((bs.status == 'finished') == (bs.winner != null))
+      // R-STATE-05: currentPlayer is Blue on even turns, Red on odd turns.
+      && ((bs.turnNumber % 2 == 0 && bs.currentPlayer == 'blue')
+          || (bs.turnNumber % 2 == 1 && bs.currentPlayer == 'red'))
+      // R-STATE-01: the pawns never share a cell.
+      && (bs.pawnPositions.blue.row != bs.pawnPositions.red.row
+          || bs.pawnPositions.blue.column != bs.pawnPositions.red.column)
+      && bs.pawnPositions.blue.row is int
+      && bs.pawnPositions.blue.row >= 0 && bs.pawnPositions.blue.row < d.boardSize
+      && bs.pawnPositions.blue.column is int
+      && bs.pawnPositions.blue.column >= 0 && bs.pawnPositions.blue.column < d.boardSize
+      && bs.pawnPositions.red.row is int
+      && bs.pawnPositions.red.row >= 0 && bs.pawnPositions.red.row < d.boardSize
+      && bs.pawnPositions.red.column is int
+      && bs.pawnPositions.red.column >= 0 && bs.pawnPositions.red.column < d.boardSize
+      && bs.remainingWalls.blue is int
+      && bs.remainingWalls.blue >= 0 && bs.remainingWalls.blue <= d.wallsPerPlayer
+      && bs.remainingWalls.red is int
+      && bs.remainingWalls.red >= 0 && bs.remainingWalls.red <= d.wallsPerPlayer
+      && bs.walls is list;
+  }
+
+  // The one board state a match may start from (`GameState.initial`).
+  function isInitialBoardState(bs, d) {
+    return validBoardState(bs, d)
+      && bs.turnNumber == 0
+      && bs.status == 'inProgress'
+      && bs.winner == null
+      && bs.currentPlayer == 'blue'
+      && bs.walls.size() == 0
+      && bs.remainingWalls.blue == d.wallsPerPlayer
+      && bs.remainingWalls.red == d.wallsPerPlayer
+      && bs.pawnPositions.blue.row == d.boardSize - 1
+      && bs.pawnPositions.blue.column == (d.boardSize - 1) / 2
+      && bs.pawnPositions.red.row == 0
+      && bs.pawnPositions.red.column == (d.boardSize - 1) / 2;
+  }
+
+  // Client-written millisecond timestamps get a sanity band against the
+  // server clock: never far in the future. (Rules cannot do better — the
+  // schema stores client ints, not server timestamps; see security_model.md.)
+  function notFromTheFuture(ms) {
+    return ms <= request.time.toMillis() + 300000;
+  }
+
+  function boardKeyOf(d) {
+    return 's' + string(d.boardSize) + 'w' + string(d.wallsPerPlayer);
+  }
+
+  // ------------------------------------------------------------------ matches
+
+  // The canonical root match (the `firebase init` template form): every
+  // collection below hangs off the database's documents root. Written out in
+  // full rather than relying on the shorthand, so the paths the rules govern
+  // are exactly the paths the backend uses.
+  match /databases/{database}/documents {
+
+    match /matches/{code} {
+      function before() { return resource.data; }
+      function after() { return request.resource.data; }
+
+      // §12: "User must be authenticated where required" and "must belong to
+      // the match". A single-document read is the one deliberate exception: the
+      // Phase 8 join flow and the create collision check must read a room
+      // before the reader is a member, and there is no Cloud Function to broker
+      // it on the Spark plan. The room code is the capability; listing the
+      // collection (scanning for codes) is denied to everyone, and every
+      // write below is membership-gated. Documented in security_model.md.
+      allow get: if signedIn();
+      allow list: if false;
+
+      // --- creation -----------------------------------------------------------
+      // A code room: the creator is host and Blue, Red empty, version seeded
+      // at 1, no match state yet.
+      allow create: if signedIn()
+        && validRoomShape(after(), code)
+        && after().status == 'waiting'
+        && after().version == 1
+        && after().boardState == null
+        && after().turnNumber == 0
+        && after().currentPlayerId == null
+        && after().winnerId == null
+        && (!('abandonedById' in after()) || after().abandonedById == null)
+        && after().blue.ready == false && after().red.ready == false
+        && after().createdAt == after().updatedAt
+        && notFromTheFuture(after().createdAt)
+        && after().red.playerId == null
+        && after().blue.playerId == uid()
+        && after().hostId == uid();
+
+      // A quick-match room, created inside the Phase 8.1 claim transaction with
+      // both seats already filled (the waiting player is host and Blue; the
+      // claimer is Red). Valid only as part of that transaction: both players'
+      // matched documents must land with the identical payload.
+      allow create: if signedIn()
+        && validRoomShape(after(), code)
+        && after().status == 'waiting'
+        && after().version == 1
+        && after().boardState == null
+        && after().turnNumber == 0
+        && after().currentPlayerId == null
+        && after().winnerId == null
+        && (!('abandonedById' in after()) || after().abandonedById == null)
+        && after().blue.ready == false && after().red.ready == false
+        && after().createdAt == after().updatedAt
+        && notFromTheFuture(after().createdAt)
+        && after().blue.playerId != null
+        && after().red.playerId == uid()
+        && after().hostId == after().blue.playerId
+        && getAfter(/databases/$(database)/documents/matchmaking/$(boardKeyOf(after()))/matched/$(after().blue.playerId)).data == after()
+        && getAfter(/databases/$(database)/documents/matchmaking/$(boardKeyOf(after()))/matched/$(after().red.playerId)).data == after();
+
+      // --- updates ------------------------------------------------------------
+      // Identity fields never change in any transition (§12: "A user cannot
+      // change the opponent's identity" — nor their own seat's owner, the host,
+      // the code, or the agreed board).
+      function identityStable() {
+        return after().hostId == before().hostId
+          && after().boardSize == before().boardSize
+          && after().wallsPerPlayer == before().wallsPerPlayer
+          && after().createdAt == before().createdAt
+          && before().schemaVersion in [1, 2];
+      }
+
+      function versionBump() {
+        return after().version == before().get('version', 1) + 1
+          && after().updatedAt >= before().get('updatedAt', 0)
+          && notFromTheFuture(after().updatedAt);
+      }
+
+      function seatsUnchanged() {
+        return after().blue == before().blue && after().red == before().red;
+      }
+
+      function derivedStatus() {
+        return (after().blue.playerId != null && after().red.playerId != null
+                && after().blue.ready && after().red.ready)
+          ? 'ready' : 'waiting';
+      }
+
+      // Pre-start seat/ready changes: join (fill one empty seat with yourself),
+      // ready toggles (your own seat only), guest leave (vacate your own seat).
+      // The stored status must be the one the seats derive.
+      function preStartChange() {
+        return before().status in ['waiting', 'ready']
+          && after().status == derivedStatus()
+          && after().boardState == null
+          && after().turnNumber == 0
+          && after().currentPlayerId == null
+          && after().winnerId == null
+          && (!('abandonedById' in after()) || after().abandonedById == null)
+          && (
+            // A member edits only their own seat.
+            (isMember(before())
+              && (after().blue == before().blue
+                  || (before().blue.playerId == uid()
+                      && (after().blue.playerId == uid()
+                          || (after().blue.playerId == null && after().blue.ready == false))))
+              && (after().red == before().red
+                  || (before().red.playerId == uid()
+                      && (after().red.playerId == uid()
+                          || (after().red.playerId == null && after().red.ready == false))))
+              && (after().blue != before().blue || after().red != before().red))
+            // A non-member may only take one empty seat, unready.
+            || (!isMember(before())
+              && ((before().blue.playerId == null
+                    && after().blue.playerId == uid() && after().blue.ready == false
+                    && after().red == before().red)
+                  || (before().red.playerId == null
+                    && after().red.playerId == uid() && after().red.ready == false
+                    && after().blue == before().blue)))
+          );
+      }
+
+      // Start: host only, both players ready, and the seeded snapshot must be
+      // exactly the initial state for the agreed board.
+      function startMatch() {
+        return before().status in ['waiting', 'ready']
+          && after().status == 'started'
+          && uid() == before().hostId
+          && before().blue.playerId != null && before().red.playerId != null
+          && before().blue.ready && before().red.ready
+          && seatsUnchanged()
+          && isInitialBoardState(after().boardState, after())
+          && after().turnNumber == 0
+          && after().currentPlayerId == after().blue.playerId
+          && after().winnerId == null;
+      }
+
+      // A move: §12 "Only the current participant may advance the turn" and
+      // "Turn/version progression is constrained" — exactly one turn, exactly
+      // one version, by the player the document says is to move, into a
+      // structurally valid state whose denormalised fields agree with it.
+      // A finished match matches no transition, so it accepts no further
+      // move writes (§12: "A completed match cannot accept normal moves").
+      function moveWrite() {
+        return before().status == 'started'
+          && after().status in ['started', 'finished']
+          && uid() == before().get('currentPlayerId', null)
+          && seatsUnchanged()
+          && after().turnNumber == before().get('turnNumber', 0) + 1
+          && validBoardState(after().boardState, after())
+          && (!('abandonedById' in after())
+              || after().abandonedById == before().get('abandonedById', null))
+          && (
+            (after().status == 'started'
+              && after().boardState.status == 'inProgress'
+              && after().winnerId == null
+              && after().currentPlayerId == seatedUid(after(), after().boardState.currentPlayer))
+            || (after().status == 'finished'
+              && after().boardState.status == 'finished'
+              && after().currentPlayerId == null
+              && after().winnerId == seatedUid(after(), after().boardState.winner))
+          );
+      }
+
+      // Abandonment claim (Phase 10): a member who is NOT the player to move
+      // may end a started match once the document has genuinely not advanced
+      // for the inactivity threshold. The threshold is checked against the
+      // server clock; `updatedAt` itself is a client-written int, which is a
+      // documented limit (security_model.md). Only the status, the claimant,
+      // the timestamp and the version may change — the board is frozen as it
+      // stood, and no winner is declared (the engine alone declares winners).
+      function abandonmentClaim() {
+        return before().status == 'started'
+          && after().status == 'abandoned'
+          && isMember(before())
+          && uid() != before().get('currentPlayerId', null)
+          && request.time.toMillis() - before().get('updatedAt', 0) >= 120000
+          && after().abandonedById == uid()
+          && after().boardState == before().get('boardState', null)
+          && after().turnNumber == before().get('turnNumber', 0)
+          && after().currentPlayerId == before().get('currentPlayerId', null)
+          && after().winnerId == before().get('winnerId', null)
+          && seatsUnchanged();
+      }
+
+      allow update: if signedIn()
+        && validRoomShape(after(), code)
+        && identityStable()
+        && (
+          // Idempotent no-op rewrite (the repository re-writes an unchanged
+          // document on a redundant ready call); members only, nothing moves.
+          (after() == before() && isMember(before()))
+          || (versionBump() && (preStartChange() || startMatch() || moveWrite() || abandonmentClaim()))
+        );
+
+      // Deletion is the host leaving a room that never started (Phase 8's
+      // leave path: it frees the code and the storage). Started, finished and
+      // abandoned matches are records and cannot be deleted by a player.
+      allow delete: if signedIn()
+        && uid() == before().hostId
+        && before().status in ['waiting', 'ready'];
+
+      // ------------------------------------------------------------- move log
+      match /moves/{turnId} {
+        function parent() {
+          return get(/databases/$(database)/documents/matches/$(code)).data;
+        }
+
+        // The log is for the two seated players only (recovery and audit).
+        allow get, list: if signedIn() && isMember(parent());
+
+        // A move record may be created only by the player whose turn the
+        // stored document says it is, for exactly that turn, producing
+        // exactly the next version (§12: participant-only actions, monotonic
+        // progression). The id is the zero-padded turn number.
+        allow create: if signedIn()
+          && parent().status == 'started'
+          && parent().get('currentPlayerId', null) == uid()
+          && request.resource.data.keys().hasOnly([
+              'turnNumber', 'playerId', 'action', 'notation', 'createdAt',
+              'resultingVersion',
+            ])
+          && request.resource.data.keys().hasAll([
+              'turnNumber', 'playerId', 'action', 'notation', 'createdAt',
+              'resultingVersion',
+            ])
+          && request.resource.data.playerId == uid()
+          && request.resource.data.turnNumber == parent().get('turnNumber', 0)
+          && turnId.matches('^[0-9]{6}$')
+          && int(turnId) == request.resource.data.turnNumber
+          && request.resource.data.resultingVersion == parent().get('version', 1) + 1
+          && request.resource.data.notation is string
+          && request.resource.data.createdAt is int
+          && notFromTheFuture(request.resource.data.createdAt)
+          && request.resource.data.action is map
+          && (
+            (request.resource.data.action.type == 'move'
+              && request.resource.data.action.keys().hasOnly(['type', 'destination'])
+              && request.resource.data.action.destination.row is int
+              && request.resource.data.action.destination.column is int)
+            || (request.resource.data.action.type == 'wall'
+              && request.resource.data.action.keys().hasOnly(['type', 'orientation', 'anchor'])
+              && request.resource.data.action.orientation in ['H', 'V']
+              && request.resource.data.action.anchor.row is int
+              && request.resource.data.action.anchor.column is int)
+          );
+
+        // Idempotent retry: Phase 9's lost-acknowledgement path may re-present
+        // a move record. Rewriting it with EXACTLY the same content is allowed
+        // for its own player; changing any field is not (immutability).
+        allow update: if signedIn()
+          && resource.data.playerId == uid()
+          && request.resource.data == resource.data;
+
+        allow delete: if false;
+      }
+    }
+
+    // ------------------------------------------------------------ matchmaking
+
+    match /matchmaking/{boardKey} {
+      match /waiting/{waitingUid} {
+        // The queue is discoverable by design (Phase 8.1 pairs by scanning it);
+        // entries carry only a uid and a timestamp.
+        allow get, list: if signedIn();
+
+        // Your own entry only, exactly the shape the repository writes.
+        allow create, update: if signedIn()
+          && uid() == waitingUid
+          && request.resource.data.keys().hasOnly(['uid', 'queuedAt'])
+          && request.resource.data.keys().hasAll(['uid', 'queuedAt'])
+          && request.resource.data.uid == uid()
+          && request.resource.data.queuedAt is int
+          && notFromTheFuture(request.resource.data.queuedAt);
+
+        // Leaving the queue.
+        allow delete: if signedIn() && uid() == waitingUid;
+
+        // Reaping an abandoned or malformed entry (Phase 8.1: older than the
+        // 60-second staleness window, or unreadable). Only staleness justifies
+        // deleting another player's entry outside a claim.
+        allow delete: if signedIn()
+          && (!(resource.data.get('queuedAt', null) is int)
+              || request.time.toMillis() - resource.data.get('queuedAt', 0) >= 60000);
+
+        // The claim transaction consumes the candidate's entry while writing
+        // that player's matched document naming a room with the claimer in it.
+        allow delete: if signedIn()
+          && (getAfter(/databases/$(database)/documents/matchmaking/$(boardKey)/matched/$(waitingUid)).data.blue.playerId == uid()
+              || getAfter(/databases/$(database)/documents/matchmaking/$(boardKey)/matched/$(waitingUid)).data.red.playerId == uid());
+      }
+
+      match /matched/{matchedUid} {
+        // A single read is how a claim checks "is this player already
+        // matched", so authenticated get is allowed; the payload is a room
+        // document whose code is itself a shared secret. Listing is denied.
+        allow get: if signedIn();
+        allow list: if false;
+
+        // Written only inside the claim transaction, as the identical payload
+        // of a room that seats both the writer and this document's player.
+        allow create, update: if signedIn()
+          && validRoomShape(request.resource.data, request.resource.data.code)
+          && request.resource.data.status == 'waiting'
+          && request.resource.data.version == 1
+          && request.resource.data.boardState == null
+          && request.resource.data.turnNumber == 0
+          && request.resource.data.currentPlayerId == null
+          && request.resource.data.winnerId == null
+          && request.resource.data.blue.playerId != null
+          && request.resource.data.red.playerId != null
+          && (request.resource.data.blue.playerId == matchedUid
+              || request.resource.data.red.playerId == matchedUid)
+          && (request.resource.data.blue.playerId == uid()
+              || request.resource.data.red.playerId == uid())
+          && getAfter(/databases/$(database)/documents/matches/$(request.resource.data.code)).data == request.resource.data;
+
+        // Matched documents are never deleted by clients (Phase 8.1: cancel
+        // deliberately leaves them; they are overwritten on a later pairing).
+        allow delete: if false;
+      }
+    }
+
+    // ------------------------------------------------------ per-player private
+
+    // Phase 6/7 persistence: settings, statistics and the unfinished match are
+    // the owning player's documents and nobody else's.
+    match /users/{userId}/{document=**} {
+      allow read, write: if signedIn() && uid() == userId;
+    }
+
+    // Phase 10's open-room pointer: the client-side guard against one player
+    // holding several open rooms at once. Owner-only; rules cannot verify the
+    // pointer tells the truth (a query would be needed), which is recorded as
+    // a limit in security_model.md — the per-room rules above are the boundary.
+    match /playerRooms/{playerUid} {
+      allow get: if signedIn() && uid() == playerUid;
+      allow create, update: if signedIn()
+        && uid() == playerUid
+        && request.resource.data.keys().hasOnly(['openRoomCode', 'updatedAt'])
+        && request.resource.data.keys().hasAll(['openRoomCode', 'updatedAt'])
+        && (request.resource.data.openRoomCode == null
+            || request.resource.data.openRoomCode is string)
+        && request.resource.data.updatedAt is int
+        && notFromTheFuture(request.resource.data.updatedAt);
+      allow delete: if signedIn() && uid() == playerUid;
+    }
+  }
+}
