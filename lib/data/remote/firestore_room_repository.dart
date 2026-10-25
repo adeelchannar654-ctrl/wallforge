@@ -31,6 +31,7 @@ class FirestoreRoomRepository implements RoomRepository {
     required this.userId,
     RoomCodeGenerator? codeGenerator,
     this.collection = 'matches',
+    this.playerRoomsCollection = 'playerRooms',
     this.maxCodeAttempts = 5,
     DateTime Function()? clock,
   }) : codeGenerator = codeGenerator ?? RandomRoomCodeGenerator(),
@@ -48,6 +49,13 @@ class FirestoreRoomRepository implements RoomRepository {
 
   /// Top-level collection name, per `architecture.md` §11.
   final String collection;
+
+  /// Where the Phase 10 open-room pointers live: `playerRooms/{uid}` holds
+  /// the code of the one room the player currently has open, if any. It is a
+  /// client-side guard (Security Rules cannot query for "rooms this player
+  /// has open"), and `security_model.md` states plainly what it cannot
+  /// guarantee against a modified client.
+  final String playerRoomsCollection;
 
   /// How many codes to try before giving up on a collision-free room.
   final int maxCodeAttempts;
@@ -71,6 +79,20 @@ class FirestoreRoomRepository implements RoomRepository {
       return RoomResult.failure(
         RoomFailureReason.invalidRoomDocument,
         message: config.failure?.message,
+      );
+    }
+
+    // Phase 10 abuse limit: one open room per player. Without it a single
+    // account could fill the code space with waiting rooms nobody will ever
+    // join; with it, the cost of a room a player never uses is bounded by
+    // the rooms they are actually in.
+    final blocking = await _blockingOpenRoom(uid);
+    if (blocking != null) {
+      return RoomResult.failure(
+        RoomFailureReason.alreadyHasOpenRoom,
+        message:
+            'You already have an open room (${blocking.code}). '
+            'Leave it before creating another.',
       );
     }
 
@@ -107,6 +129,7 @@ class FirestoreRoomRepository implements RoomRepository {
 
       final confirmed = Room.fromJson(await _read(path));
       if (confirmed != null && confirmed.hostId == uid) {
+        await _setOpenRoomPointer(uid, confirmed.code);
         return RoomResult.success(confirmed);
       }
       // Lost a race with another creator, or the write did not land. Try again.
@@ -142,7 +165,22 @@ class FirestoreRoomRepository implements RoomRepository {
 
     // Re-joining a room you are already in is a no-op, not an error: the lobby
     // re-reads on reconnect and must not punish a returning player.
-    if (room.isMember(uid)) return RoomResult.success(room);
+    if (room.isMember(uid)) {
+      await _setOpenRoomPointer(uid, room.code);
+      return RoomResult.success(room);
+    }
+
+    // The create-side abuse limit applies to joining too: one open room per
+    // player, however they got into it.
+    final blocking = await _blockingOpenRoom(uid, exceptCode: room.code);
+    if (blocking != null) {
+      return RoomResult.failure(
+        RoomFailureReason.alreadyHasOpenRoom,
+        message:
+            'You already have an open room (${blocking.code}). '
+            'Leave it before joining another.',
+      );
+    }
 
     switch (room.status) {
       case RoomStatus.cancelled:
@@ -152,7 +190,9 @@ class FirestoreRoomRepository implements RoomRepository {
         );
       case RoomStatus.started:
       case RoomStatus.finished:
-        // A finished match cannot be joined either; same reason, same message.
+      case RoomStatus.abandoned:
+        // A finished or abandoned match cannot be joined either; same
+        // reason, same message.
         return const RoomResult.failure(
           RoomFailureReason.roomAlreadyStarted,
           message: 'That match has already started.',
@@ -171,7 +211,9 @@ class FirestoreRoomRepository implements RoomRepository {
     final seated = room.red.isEmpty
         ? room.copyWith(red: RoomSeat(playerId: uid))
         : room.copyWith(blue: RoomSeat(playerId: uid));
-    return _persistSeated(room, seated);
+    final result = await _persistSeated(room, seated);
+    if (result is RoomSuccess) await _setOpenRoomPointer(uid, room.code);
+    return result;
   }
 
   @override
@@ -247,6 +289,10 @@ class FirestoreRoomRepository implements RoomRepository {
       version: room.version + 1,
     );
     if (!await _write(path, started.toJson())) return _networkFailure;
+    // A started room is no longer "open", so the host's pointer clears. (The
+    // guest's pointer goes stale instead and self-heals on their next
+    // create/join, which re-reads the room it names before believing it.)
+    await _setOpenRoomPointer(uid, null);
     final confirmed = Room.fromJson(await _read(path));
     return RoomResult.success(confirmed ?? started);
   }
@@ -267,10 +313,13 @@ class FirestoreRoomRepository implements RoomRepository {
     }
     if (!room.isMember(uid)) return _notAMember;
     if (room.status == RoomStatus.started ||
-        room.status == RoomStatus.finished) {
-      // Leaving after the start is a disconnect. That belongs to Phase 10
-      // (`phase.md`: "reconnection", "timeout/disconnect UX"), so it is reported
-      // plainly rather than half-implemented here.
+        room.status == RoomStatus.finished ||
+        room.status == RoomStatus.abandoned) {
+      // Leaving after the start is a disconnect. Phase 10 added the
+      // abandonment claim for the *waiting* player (see
+      // `FirestoreMatchRepository.claimAbandonment`); the player who is
+      // leaving a live match still just closes it, so this stays a plain
+      // refusal rather than a half-implemented forfeit.
       //
       // A *finished* room is included for a different reason, and it matters:
       // without it the host branch below deletes the document, so a completed
@@ -291,11 +340,14 @@ class FirestoreRoomRepository implements RoomRepository {
     //   the seat is simply reopened for the next player.
     if (room.isHost(uid)) {
       if (!await _delete(path)) return _networkFailure;
+      await _setOpenRoomPointer(uid, null);
       return RoomResult.success(room.copyWith(status: RoomStatus.cancelled));
     }
 
     final reopened = room.withSeat(room.sideFor(uid)!, RoomSeat.empty);
-    return _persistSeated(room, _withDerivedStatus(reopened));
+    final result = await _persistSeated(room, _withDerivedStatus(reopened));
+    if (result is RoomSuccess) await _setOpenRoomPointer(uid, null);
+    return result;
   }
 
   @override
@@ -346,6 +398,46 @@ class FirestoreRoomRepository implements RoomRepository {
 
   Future<Room?> _loadRoomOrNull(String path) async =>
       Room.fromJson(await _read(path));
+
+  // --- Phase 10: the open-room pointer ---------------------------------------
+  //
+  // `playerRooms/{uid}` names the one room this player has open. Create and
+  // join consult it; start and leave clear it. The pointer is *advisory*: it
+  // is believed only after the room it names has been re-read and is still
+  // open, so a stale pointer (a room that started, finished or was deleted
+  // behind this client's back) heals itself instead of locking the player
+  // out. A pointer write that fails is swallowed like every other transport
+  // failure here — the guard degrades, the game does not.
+
+  /// The room currently blocking [uid] from opening another, or null.
+  Future<Room?> _blockingOpenRoom(String uid, {String? exceptCode}) async {
+    final pointer = await _read('$playerRoomsCollection/$uid');
+    final openCode = pointer?['openRoomCode'];
+    if (openCode is! String || openCode.isEmpty || openCode == exceptCode) {
+      return null;
+    }
+    final room = await load(openCode);
+    if (room == null) return null;
+    if (room.status != RoomStatus.waiting && room.status != RoomStatus.ready) {
+      return null;
+    }
+    // A room the player is no longer seated in cannot be theirs to leave, so
+    // it does not block either (e.g. they were the guest and the host's room
+    // moved on without them).
+    return room.isMember(uid) ? room : null;
+  }
+
+  /// Points [uid]'s open-room pointer at [code], or clears it when null.
+  Future<void> _setOpenRoomPointer(String uid, String? code) async {
+    try {
+      await client.write('$playerRoomsCollection/$uid', <String, dynamic>{
+        'openRoomCode': code,
+        'updatedAt': _nowMs,
+      });
+    } on Object {
+      // Best-effort by design; see the section comment above.
+    }
+  }
 
   // --- Transport, total like every other Phase 6/7 repository -----------------
 

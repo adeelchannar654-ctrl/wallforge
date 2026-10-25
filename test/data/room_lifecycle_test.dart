@@ -70,7 +70,14 @@ void main() {
   group('create', () {
     test('writes one document at matches/{code}', () async {
       final code = await createRoom(host);
-      expect(store.documents.keys, <String>['matches/$code']);
+      // Phase 10: creating also writes the host's open-room pointer
+      // (playerRooms/{uid}) for the one-open-room limit. The room itself
+      // remains exactly one document under matches/.
+      expect(
+        store.documents.keys.where((k) => k.startsWith('matches/')),
+        <String>['matches/$code'],
+      );
+      expect(store.documents['playerRooms/uid-host']!['openRoomCode'], code);
       expect(code.length, RoomCode.length);
       expect(RoomCode.isValid(code), isTrue);
       // Phase 9 added the match state fields, so the written version is now 2.
@@ -173,7 +180,12 @@ void main() {
       final a = await createRoom(host);
       final b = await createRoom(guest);
       expect(a, isNot(b));
-      expect(store.documents.keys.length, 2);
+      // Phase 10: each creator also has a playerRooms pointer document;
+      // count room documents only.
+      expect(
+        store.documents.keys.where((k) => k.startsWith('matches/')).length,
+        2,
+      );
     });
 
     test('retries a colliding code instead of overwriting', () async {
@@ -425,8 +437,14 @@ void main() {
       await host.rooms.leave(code);
       final third = _Client('uid-third', store);
       final result = await third.rooms.create(config: const BoardConfig());
-      // A different code, but the point is the store is not accumulating.
-      expect(store.documents.length, 1);
+      // A different code, but the point is the store is not accumulating
+      // rooms. (Phase 10 pointer documents remain, with the departed
+      // host's pointer cleared to null rather than naming the dead room.)
+      expect(
+        store.documents.keys.where((k) => k.startsWith('matches/')).length,
+        1,
+      );
+      expect(store.documents['playerRooms/uid-host']!['openRoomCode'], isNull);
       expect((result as RoomSuccess).room.hostId, 'uid-third');
       expect(code, isNotEmpty);
     });
