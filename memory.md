@@ -2796,6 +2796,97 @@ resolved by the Phase 9 metadata-backed connection states; Q-8.6 is resolved by
 route-owned `GameScreen` disposal. Other Q-8.x remain as recorded in §13p.
 Q-6.1 … Q-6.4, Q-5.1, Q-4.1 … Q-4.10, Q-2.1 remain open and unaffected.
 
+### Online board interaction correction (2026-10-12)
+
+The owner reported that two browser sessions could join and start the same live
+match, but both boards stayed stationary. The presentation root cause was
+confirmed against the pre-fix source: `OnlineGameScreen`'s `BoardView` call at
+`lib/presentation/screens/online/online_game_screen.dart:256-268` ended after
+`activeGlow`, without `onCellTap` or `onWallSlotTap`. The local equivalent wires
+both at `lib/presentation/screens/game/game_screen.dart:148-153`. In
+`lib/presentation/board/board_view.dart:67,91-97`, the gesture detector is only
+installed when a callback exists, so the callback-free online board could not
+report taps. `GameInteraction.tapCell` and `tapWallSlot` check
+`isInputEnabled` (`lib/app/application/game_interaction.dart:175-197`), while the
+online controller supplies the online turn/connectivity gate at
+`lib/app/application/online/online_game_controller.dart:174-181`; the screen
+doesn't need a second copy of that check.
+
+The online screen now wires the two callbacks at
+`lib/presentation/screens/online/online_game_screen.dart:269-274`, only in their
+matching modes, as the local screen does. `BoardView` has no
+`onWallSlotHover` API in this checkout;
+neither the local screen nor its current board construction wires hover, so no
+hover or board-renderer API was added for this presentation fix.
+
+The prior online-screen widget tests checked turn banners, connection status,
+semantics and layout, but never tapped the rendered board. The focused widget
+coverage now taps a legal cell and verifies the pawn and turn change, taps a wall
+slot and confirms it through the screen controls, and taps while Blue is out of
+turn to verify the state stays unchanged (`test/presentation/screens/online/online_game_screen_test.dart:143-249`). The full online-screen widget file
+passed all 15 tests; the complete suite passed all 1,473 tests. `dart format
+--set-exit-if-changed lib test` reported 122 files, 0 changed; `flutter analyze`
+reported no issues; the release web build succeeded. The spec checker reported
+80 catalog rows, 65 rule IDs and 65 in the matrix; generated oracle output was
+byte-identical to the 1,229,568-byte fixture. `game_spec.md`, `rules.md`, and
+domain, sync and controller code were not changed. This verifies input through
+the widget tree against the in-memory Firestore double; it does not substitute
+for repeating the owner's two-session live Firebase test. Phase 9 remains open
+until the owner confirms both clients can move and place walls with turns
+converging live.
+
+### Online board live verification (2026-10-26)
+
+At the owner's instruction, the fix was re-verified on this working copy and
+the missing live check was performed against the live Firebase project
+`wallforge-efdb3`, using the release web build of this exact checkout in two
+independent browser sessions.
+
+One further presentation gap was found and fixed first: the online screen's
+mobile/narrow layout had no mode toggle and no Confirm/Cancel actions at all —
+the 2026-10-12 wiring existed only in the wide layout path, so on a phone-width
+viewport a player could select a wall slot but never confirm it. The narrow
+layout now builds the same mode toggle and action row as the wide layout
+(`_buildModeToggle`/`_buildActions` in
+`lib/presentation/screens/online/online_game_screen.dart`); the `BoardView`
+callbacks cited above now sit at lines 278–284. A phone-width (390×844)
+wall-placement tap test was added to the online-screen widget file, which now
+passes 16/16.
+
+Gates re-run 2026-10-25 on this copy: `dart format --set-exit-if-changed lib
+test` reported 122 files, 0 changed; `flutter analyze` reported no issues; the
+spec checker reported the spec consistent with the reference engine; generated
+oracle output was byte-identical to the 1,229,568-byte fixture. The full suite
+ran 1,474 tests: 1,465 passed and 9 failed, all 9 being golden-pixel
+comparisons that fail identically on the pristine upstream tree in the Linux
+verification environment (the reference images were generated on the owner's
+Windows machine), so they are environmental, not regressions.
+
+Live results (screenshots from both clients plus the server-side match
+documents agree):
+
+- Match `6QH974`: Blue's pawn move e1→e2 was submitted from the board tap,
+  recorded as `moves/000000` (notation `M 7,4`), the stored `boardState`
+  advanced to turn 1 with Red to move, and Red's client rendered the move with
+  the turn banners correct on both sides. Red's answering move was interrupted
+  by a transport drop in the test environment; the client showed its
+  reconnecting state and held the move, which was never written. The match was
+  abandoned as a test artifact.
+- Match `H3NQY2`: a complete four-action sequence was played live — Blue wall
+  (horizontal, anchor row 7, column 3), Red move e9→e8, Blue move e1→f1, Red
+  wall (horizontal, anchor row 1, column 3) — recorded in order as
+  `moves/000000`–`000003`. The final stored state reads turn 4, Blue to move,
+  9 walls remaining per player, status in progress; both clients rendered both
+  walls and both pawn positions identically, and Blue's offered legal targets
+  after its own wall correctly excluded the walled-off cell.
+
+Early live attempts on 2026-10-25/26 that appeared to show rooms expiring were
+invalidated by an error in the test harness (automated taps landing on the
+room screen's Leave control), not by the app; the sequence above is the valid
+run. With this, the Phase 9 live criterion — both clients can move and place
+walls with turns converging live — is met for web. A full-length match played
+to a winner live has still not been done.
+
 ### Phase 9 source ledger
 
 | Source | Decision applied |

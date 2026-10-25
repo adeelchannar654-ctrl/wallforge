@@ -999,27 +999,88 @@ replay seed; all 201 passed. The longest seeded run was 811 plies (seed
 Coverage for the sync controller, repository,
 in-memory Firestore client and online screen was 83.4%, 91.8%, 99.1% and 86.8%
 respectively. `cloud_firestore_client.dart` was 1/48 lines (2.1%); its live
-Firestore metadata, transaction and cursor behavior remains unverified until
-Firebase/emulator setup. See the current output and full gap list in
-`memory.md` §13q.
+Firestore metadata, transaction and cursor behavior had no live verification at
+that 2026-10-01 checkpoint. See the web smoke check below for the current
+partial verification and `memory.md` §13q for the full gap list.
 
-#### Blocker — Q-7.4 (owner action)
+### Web Firebase smoke check (2026-10-11)
 
-**The exit criterion "two players can complete a match across devices" is not
-verified yet.** The owner reports enabling Anonymous Authentication and testing
-Firebase Realtime Database. However, this app's online sync uses Cloud
-Firestore, and no `firebase_options.dart`, `google-services.json`,
-`GoogleService-Info.plist`, `.firebaserc` or `firebase.json` is present in the
-project. The Realtime Database test does not exercise the app's Firestore path.
-Every claim above comes from two independent client stacks over one
-`InMemoryFirestoreClient`, which models transactions, conflicts, offline
-failure, listeners and cache metadata but is not Firestore.
+FlutterFire registered a web app for `wallforge-efdb3` and generated
+`lib/firebase_options.dart` plus `firebase.json`. `main()` now passes those
+options on web only; Android and iOS initialization remain unchanged. The
+project's default Cloud Firestore database is present. The web release build
+succeeded, `flutter analyze` reported no issues, and the focused bootstrap and
+anonymous-auth tests passed (21 tests).
 
-Also unverified, and only checkable against live Firebase or the emulator:
+A live browser session reached `CONNECTED`, completed anonymous sign-in, and
+created a room whose waiting state was displayed through the room listener.
+This verifies a single client's Auth, Firestore room writes and ordinary room
+listener against the project. It does not exercise match transactions,
+`watchWithMetadata`, or the move-history cursor. A second isolated web session
+failed anonymous sign-in with `network-request-failed`, so two-client
+convergence and a complete match were not verified. The code coverage report
+remains 1/48 lines (2.1%) for `cloud_firestore_client.dart`.
 
-- `CloudFirestoreClient.watchWithMetadata`, its query cursor (`startAfter` on
-  the document id), and its transaction adapter.
-- Listener convergence and per-document read cost against real quotas.
+### Online board input fix (2026-10-12)
+
+The owner subsequently tested two browser ports, joined both players to one room,
+and started the game. Both reached the board, but neither could move or place a
+wall. The current `OnlineGameScreen` `BoardView` call omitted its cell and wall
+tap callbacks, unlike `GameScreen`; without callbacks `BoardView` installs no
+tap detector. The screen now wires `tapCell` in MOVE mode and `tapWallSlot` in
+WALL mode. `GameInteraction` already refuses input unless its online controller
+says the player can act. `BoardView` exposes no wall-hover callback in this
+checkout, so this fix adds no hover API.
+
+The screen tests now use real board taps to check a successful pawn move and
+turn advance, wall-slot selection plus confirmation, and an out-of-turn tap
+that leaves state unchanged. The online-screen test file passed all 15 tests;
+the complete Flutter suite passed all 1,473 tests. Formatting checked 122 files
+with no changes, `flutter analyze` found no issues, the release web build
+succeeded, and the spec checker passed (80 rows, 65 rule IDs, 65 in matrix).
+Generated oracle output remained byte-identical to the 1,229,568-byte fixture.
+`game_spec.md`, `rules.md`, and domain, sync and controller code were unchanged.
+These tests use the in-memory Firestore client. The owner has not yet repeated
+the live two-session move-and-wall check against the patched web app, so Phase 9's
+across-devices exit criterion remains unmet.
+
+#### Live verification (2026-10-26)
+
+The missing live check was performed on 2026-10-26 against the live Firebase
+project `wallforge-efdb3`, using the release web build of this checkout in two
+independent browser sessions. One more presentation gap was fixed first: the
+online screen's mobile/narrow layout had no mode toggle and no Confirm/Cancel
+actions, so a wall could be selected on a phone-width viewport but never
+confirmed; the narrow layout now builds the same controls as the wide layout,
+and a phone-width wall-placement tap test was added (online-screen widget file
+now 16/16; full suite 1,474 tests with 1,465 passing and 9 golden-pixel
+failures that reproduce identically on the pristine upstream tree in the Linux
+verification environment — environmental, not regressions). Format, analyze,
+spec-checker and oracle gates all passed as recorded above.
+
+In live match `6QH974`, Blue's board tap moved its pawn e1→e2; the move was
+recorded server-side (`moves/000000`), the stored state advanced to Red's turn,
+and Red's client rendered the move with correct turn banners on both sides.
+In live match `H3NQY2`, a four-action sequence completed with turns converging
+on both clients and in the stored documents: Blue wall, Red move e9→e8, Blue
+move e1→f1, Red wall (`moves/000000`–`000003`; final state turn 4, Blue to
+move, 9 walls per player remaining). Both players can therefore move and place
+walls live with turns converging — the Phase 9 across-devices acceptance is
+met for web. A full-length match played to a winner live has not been done.
+
+#### Blocker — Q-7.4 (two-client acceptance)
+
+**The two-client move-and-wall acceptance is verified live for web as of
+2026-10-26 (see above).** What remains open under Q-7.4: Android and iOS
+Firebase app configuration is still absent, so acceptance is web-only; and no
+full-length match to a winner has been completed live.
+
+Still unverified, and only checkable against live Firebase or the emulator:
+
+- Per-document read cost of the real match adapter,
+  `CloudFirestoreClient.watchWithMetadata` and its query cursor against real
+  quotas (basic two-client listener convergence itself was demonstrated in
+  the 2026-10-26 live matches).
 - Firestore Security Rules and match authorization (Phase 10).
 
 ---

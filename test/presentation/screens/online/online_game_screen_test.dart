@@ -6,6 +6,7 @@ import 'package:wallforge/data/remote/firestore_match_repository.dart';
 import 'package:wallforge/data/remote/firestore_room_repository.dart';
 import 'package:wallforge/data/remote/in_memory_firestore_client.dart';
 import 'package:wallforge/domain/wallforge_domain.dart';
+import 'package:wallforge/presentation/board/board.dart';
 import 'package:wallforge/presentation/screens/online/online_game_screen.dart';
 
 class _StubAuth implements AuthGateway {
@@ -80,6 +81,19 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Future<void> tapBoard(WidgetTester tester, Offset localPosition) async {
+    final gestureFinder = find.descendant(
+      of: find.byType(BoardView),
+      matching: find.byType(GestureDetector),
+    );
+    await tester.tapAt(tester.getTopLeft(gestureFinder) + localPosition);
+    await tester.pump();
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    await tester.pumpAndSettle();
+  }
+
   group('both seats of one room', () {
     testWidgets('Blue is told it is their turn', (tester) async {
       final seats = await startedMatch();
@@ -124,6 +138,160 @@ void main() {
         isEmpty,
         reason: 'no move targets when it is not your turn',
       );
+    });
+
+    testWidgets('tapping a legal board cell submits and applies a move', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1024, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final seats = await startedMatch();
+      addTearDown(seats.blue.dispose);
+      addTearDown(seats.red.dispose);
+      await pump(tester, seats.blue);
+
+      const destination = Cell(row: 7, column: 4);
+      final geometry = BoardGeometry(
+        boardSize: seats.blue.state.boardConfig.size,
+        areaSize: tester
+            .getSize(
+              find.descendant(
+                of: find.byType(BoardView),
+                matching: find.byType(CustomPaint),
+              ),
+            )
+            .width,
+      );
+      expect(seats.blue.isMyTurn, isTrue);
+      expect(seats.blue.isInteractionBlocked, isFalse);
+      expect(
+        tester.widget<BoardView>(find.byType(BoardView)).onCellTap,
+        isNotNull,
+      );
+      await tapBoard(tester, geometry.cellCenterFromModel(destination));
+
+      expect(seats.blue.state.pawnPosition(PlayerId.blue), destination);
+      expect(seats.blue.state.turnNumber, 1);
+    });
+
+    testWidgets('tapping and confirming a wall slot places the wall', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1024, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final seats = await startedMatch();
+      addTearDown(seats.blue.dispose);
+      addTearDown(seats.red.dispose);
+      await pump(tester, seats.blue);
+      await tester.tap(find.text('WALL'));
+      await tester.pumpAndSettle();
+
+      final canvasFinder = find.descendant(
+        of: find.byType(BoardView),
+        matching: find.byType(CustomPaint),
+      );
+      const anchor = Cell(row: 3, column: 3);
+      final geometry = BoardGeometry(
+        boardSize: seats.blue.state.boardConfig.size,
+        areaSize: tester.getSize(canvasFinder).width,
+      );
+      await tapBoard(
+        tester,
+        geometry.wallRect(anchor.row, anchor.column, WallOrientation.h).center,
+      );
+
+      expect(seats.blue.pendingWall, isNotNull);
+      expect(find.text('PLACE WALL'), findsOneWidget);
+      await tester.tap(find.text('PLACE WALL'));
+      await tester.pump();
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+      await tester.pumpAndSettle();
+
+      expect(
+        seats.blue.state.wallsRemaining(PlayerId.blue),
+        seats.blue.state.boardConfig.wallsPerPlayer - 1,
+      );
+      expect(seats.blue.state.turnNumber, 1);
+    });
+
+    testWidgets('wall placement works at a phone-width layout', (tester) async {
+      // Below the 768px breakpoint the screen uses its narrow layout, which
+      // must still offer the WALL toggle and the PLACE WALL action —
+      // otherwise a phone-width player can move but can never place a wall.
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final seats = await startedMatch();
+      addTearDown(seats.blue.dispose);
+      addTearDown(seats.red.dispose);
+      await pump(tester, seats.blue);
+
+      expect(find.text('WALL'), findsOneWidget);
+      await tester.tap(find.text('WALL'));
+      await tester.pumpAndSettle();
+
+      final canvasFinder = find.descendant(
+        of: find.byType(BoardView),
+        matching: find.byType(CustomPaint),
+      );
+      const anchor = Cell(row: 3, column: 3);
+      final geometry = BoardGeometry(
+        boardSize: seats.blue.state.boardConfig.size,
+        areaSize: tester.getSize(canvasFinder).width,
+      );
+      await tapBoard(
+        tester,
+        geometry.wallRect(anchor.row, anchor.column, WallOrientation.h).center,
+      );
+
+      expect(seats.blue.pendingWall, isNotNull);
+      expect(find.text('PLACE WALL'), findsOneWidget);
+      await tester.tap(find.text('PLACE WALL'));
+      await tester.pump();
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+      await tester.pumpAndSettle();
+
+      expect(
+        seats.blue.state.wallsRemaining(PlayerId.blue),
+        seats.blue.state.boardConfig.wallsPerPlayer - 1,
+      );
+      expect(seats.blue.state.turnNumber, 1);
+    });
+
+    testWidgets('a real board tap is ignored when it is not your turn', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1024, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final seats = await startedMatch();
+      addTearDown(seats.blue.dispose);
+      addTearDown(seats.red.dispose);
+      await seats.blue.submit(const GameAction.move(Cell(row: 7, column: 4)));
+      await pump(tester, seats.blue);
+
+      final before = seats.blue.state;
+      final geometry = BoardGeometry(
+        boardSize: before.boardConfig.size,
+        areaSize: tester
+            .getSize(
+              find.descendant(
+                of: find.byType(BoardView),
+                matching: find.byType(CustomPaint),
+              ),
+            )
+            .width,
+      );
+      await tapBoard(tester, geometry.cellCenter(6, 4));
+
+      expect(seats.blue.isMyTurn, isFalse);
+      expect(seats.blue.state, before);
     });
 
     testWidgets('the room code is shown so players can agree they are in the '

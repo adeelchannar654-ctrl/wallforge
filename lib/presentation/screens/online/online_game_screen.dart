@@ -67,6 +67,15 @@ class OnlineGameScreen extends StatelessWidget {
                   _buildStrip(PlayerId.blue),
                   _buildBanner(),
                   Expanded(child: _buildBoardArea()),
+                  // The mode toggle and wall actions must exist on narrow
+                  // layouts too: without them a phone-width player could
+                  // move (the default mode) but never switch to WALL mode
+                  // or confirm a staged wall. The local game screen's
+                  // mobile layout includes both for the same reason.
+                  _buildModeToggle(),
+                  const SizedBox(height: AppSpacing.sm),
+                  _buildActions(),
+                  const SizedBox(height: AppSpacing.sm),
                   _buildBanner(),
                   _buildStrip(PlayerId.red),
                 ],
@@ -265,6 +274,12 @@ class OnlineGameScreen extends StatelessWidget {
                       ),
                 activeGlow: controller.isMyTurn
                     ? controller.currentPlayer
+                    : null,
+                onCellTap: controller.mode == InteractionMode.move
+                    ? controller.tapCell
+                    : null,
+                onWallSlotTap: controller.mode == InteractionMode.wall
+                    ? controller.tapWallSlot
                     : null,
               ),
             ),
