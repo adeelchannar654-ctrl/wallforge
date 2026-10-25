@@ -41,6 +41,18 @@ enum RoomStatus {
   /// different questions. Set only by the transaction that applies a game-ending
   /// action, and terminal — no action is accepted afterwards.
   finished,
+
+  /// A started match ended because the player to move stayed away and the
+  /// waiting player claimed it as abandoned (Phase 10).
+  ///
+  /// Deliberately distinct from both neighbours: [cancelled] is a room given
+  /// up *before* the start, and [finished] is a match *played* to a
+  /// conclusion. Collapsing any pair would lose a fact the record keeps.
+  /// Set only by `FirestoreMatchRepository.claimAbandonment`, with the
+  /// claimant recorded in [Room.abandonedById]. Terminal: no action, join or
+  /// ready change is accepted afterwards, and no winner is declared — the
+  /// engine alone declares winners (`rules.md` §3.6).
+  abandoned,
 }
 
 /// One seat in a room.
@@ -105,6 +117,7 @@ class Room {
     this.turnNumber = 0,
     this.currentPlayerId,
     this.winnerId,
+    this.abandonedById,
   });
 
   /// The shareable room code, also the document id.
@@ -169,6 +182,15 @@ class Room {
   /// [GameState.winner]; a disagreement here is treated as corruption.
   final String? winnerId;
 
+  /// The uid that claimed this match as abandoned, or null.
+  ///
+  /// Phase 10. Written only by the abandonment-claim transaction, in the same
+  /// write that moves the room to [RoomStatus.abandoned]. It names the
+  /// *claimant* — the player who waited — never a winner: an abandoned match
+  /// has no winner, and putting the claimant in [winnerId] would manufacture
+  /// an outcome the engine never produced.
+  final String? abandonedById;
+
   /// The seat for [side].
   RoomSeat seatFor(PlayerId side) => side == PlayerId.blue ? blue : red;
 
@@ -231,6 +253,7 @@ class Room {
     turnNumber: turnNumber,
     currentPlayerId: currentPlayerId,
     winnerId: winnerId,
+    abandonedById: abandonedById,
   );
 
   /// A copy with the given fields replaced.
@@ -257,6 +280,7 @@ class Room {
     int? turnNumber,
     Object? currentPlayerId = _keep,
     Object? winnerId = _keep,
+    Object? abandonedById = _keep,
   }) => Room(
     code: code,
     status: status ?? this.status,
@@ -273,6 +297,9 @@ class Room {
         ? this.currentPlayerId
         : currentPlayerId as String?,
     winnerId: identical(winnerId, _keep) ? this.winnerId : winnerId as String?,
+    abandonedById: identical(abandonedById, _keep)
+        ? this.abandonedById
+        : abandonedById as String?,
   );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -295,6 +322,9 @@ class Room {
     'turnNumber': turnNumber,
     'currentPlayerId': currentPlayerId,
     'winnerId': winnerId,
+    // Phase 10. Null unless the match was claimed as abandoned; additive, so
+    // a reader on an older build simply ignores it.
+    'abandonedById': abandonedById,
   };
 
   static Map<String, dynamic> _seatToJson(RoomSeat seat) => <String, dynamic>{
@@ -345,6 +375,7 @@ class Room {
     // rather than version rigidity.
     final rawTurnNumber = json['turnNumber'];
     final rawWinner = json['winnerId'];
+    final rawAbandonedBy = json['abandonedById'];
     final rawCurrent = json['currentPlayerId'];
     final rawBoard = json['boardState'];
     GameState? boardState;
@@ -377,6 +408,9 @@ class Room {
           : null,
       winnerId: (rawWinner is String && rawWinner.isNotEmpty)
           ? rawWinner
+          : null,
+      abandonedById: (rawAbandonedBy is String && rawAbandonedBy.isNotEmpty)
+          ? rawAbandonedBy
           : null,
     );
   }
@@ -428,7 +462,8 @@ class Room {
           boardState == other.boardState &&
           turnNumber == other.turnNumber &&
           currentPlayerId == other.currentPlayerId &&
-          winnerId == other.winnerId;
+          winnerId == other.winnerId &&
+          abandonedById == other.abandonedById;
 
   @override
   int get hashCode => Object.hash(
@@ -445,6 +480,7 @@ class Room {
     turnNumber,
     currentPlayerId,
     winnerId,
+    abandonedById,
   );
 
   @override
@@ -547,6 +583,15 @@ enum RoomFailureReason {
 
   /// The room document could not be understood.
   invalidRoomDocument,
+
+  /// The caller already has a room open (Phase 10's abuse limit).
+  ///
+  /// One player, one open room: creating or joining a second room while a
+  /// first is still waiting for its match to start is refused. Enforced
+  /// client-side through the `playerRooms/{uid}` pointer document — see
+  /// `FirestoreRoomRepository` and `security_model.md` for what that can and
+  /// cannot guarantee.
+  alreadyHasOpenRoom,
 
   /// A code could not be generated without colliding. See
   /// `FirestoreRoomRepository.create`.

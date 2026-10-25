@@ -263,6 +263,109 @@ class MatchSyncFailure {
   String toString() => 'MatchSyncFailure(${reason.name}: $message)';
 }
 
+/// How long the player to move may stay silent before the waiting player
+/// may treat the match as abandoned (Phase 10).
+///
+/// No source document specifies a duration — `design.md` §19 lists connection
+/// states but no timeout — so this is a reasoned default, recorded in
+/// `memory.md`'s Phase 10 ledger: long enough that a player thinking about a
+/// hard position is never rushed, short enough that a player whose opponent
+/// closed the app is not stranded indefinitely. It is a named constant, not
+/// a magic number, and `firestore.rules` enforces the same 120 seconds
+/// server-side against the stored `updatedAt`; the two must move together.
+const Duration opponentInactivityThreshold = Duration(seconds: 120);
+
+/// Why an abandonment claim was refused.
+///
+/// Mirrors [MatchSyncFailureReason]'s discipline (`rules.md` §7): every
+/// expected refusal is a value, because the waiting player's options differ
+/// per reason — wait longer, or stop trying because the match is over.
+enum AbandonmentFailureReason {
+  /// No uid resolved, so there is nobody to claim for.
+  notAuthenticated,
+
+  /// The caller is not seated in this match.
+  notAMember,
+
+  /// No match document exists at that code.
+  roomNotFound,
+
+  /// The room exists but its match has not started.
+  matchNotStarted,
+
+  /// The match is already over — played to a finish, or already claimed.
+  matchAlreadyOver,
+
+  /// It is the caller's own turn: the player who may be gone is the
+  /// opponent, and the claim belongs to whoever is waiting on them.
+  notOpponentTurn,
+
+  /// The stored document advanced too recently: the opponent is, as far as
+  /// the shared record shows, still playing. Also the outcome when the
+  /// opponent's move lands first in a claim race — the transaction re-reads
+  /// the document and finds it fresh.
+  opponentStillActive,
+
+  /// The transport failed or Firebase is unreachable.
+  networkUnavailable,
+}
+
+/// A refused abandonment claim.
+class AbandonmentFailure {
+  /// Creates a claim failure.
+  const AbandonmentFailure(this.reason, {this.message});
+
+  /// Machine-readable reason.
+  final AbandonmentFailureReason reason;
+
+  /// Human-readable explanation, safe to show a player.
+  final String? message;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AbandonmentFailure &&
+          reason == other.reason &&
+          message == other.message;
+
+  @override
+  int get hashCode => Object.hash(reason, message);
+
+  @override
+  String toString() => 'AbandonmentFailure(${reason.name}: $message)';
+}
+
+/// The outcome of an abandonment claim.
+sealed class AbandonmentResult {
+  const AbandonmentResult._();
+
+  /// The claim landed: the match is now [RoomStatus.abandoned].
+  const factory AbandonmentResult.claimed(Room room) = AbandonmentClaimed;
+
+  /// The claim was refused for this reason.
+  const factory AbandonmentResult.rejected(AbandonmentFailure failure) =
+      AbandonmentRejected;
+}
+
+/// A claim that landed.
+class AbandonmentClaimed extends AbandonmentResult {
+  const AbandonmentClaimed(this.room) : super._();
+
+  /// The match document after the claim.
+  final Room room;
+}
+
+/// A claim that was refused.
+class AbandonmentRejected extends AbandonmentResult {
+  const AbandonmentRejected(this.failure) : super._();
+
+  /// Why the claim was refused.
+  final AbandonmentFailure failure;
+
+  /// The machine-readable reason.
+  AbandonmentFailureReason get reason => failure.reason;
+}
+
 /// The outcome of submitting an action.
 sealed class MoveSubmission {
   const MoveSubmission._();
@@ -349,6 +452,18 @@ abstract interface class MatchRepository {
   /// Never used in steady state. A full replay costs one read per move and
   /// happens only after a snapshot failed verification.
   Future<List<MatchMove>> readMoves({required String code, int limit});
+
+  /// Claims the match as abandoned (Phase 10).
+  ///
+  /// Available only to the player who is *waiting*: the document must say it
+  /// is the opponent's turn, and the document must not have advanced for
+  /// [opponentInactivityThreshold]. The claim is one transaction on the
+  /// match document, so it serialises against the opponent's move: if the
+  /// move lands first, the re-read document is fresh and the claim is
+  /// refused with [AbandonmentFailureReason.opponentStillActive]; if the
+  /// claim lands first, the move is refused because the room is no longer
+  /// [RoomStatus.started]. There is no interleaving in which both land.
+  Future<AbandonmentResult> claimAbandonment({required String code});
 
   /// There is deliberately no "start" method here. Starting a match belongs to
   /// `RoomRepository.start`, the Phase 8 host-only operation, and Phase 9 taught

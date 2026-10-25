@@ -47,6 +47,27 @@ enum OnlineSyncState {
   syncError,
 }
 
+/// What the *opponent's* presence looks like from this client (Phase 10).
+///
+/// Separate from [OnlineConnectionState] on purpose: that enum is about this
+/// client's own network path (Phase 9). This one is about the other player —
+/// derived from the shared document standing still while it is their turn,
+/// which is the only presence signal a serverless design has. The document
+/// advancing is proof of life; it not advancing past
+/// [opponentInactivityThreshold] is treated as the opponent having gone.
+enum OpponentPresence {
+  /// No judgement applies: the match has not started, is over, or it is
+  /// this client's turn (the player who might be gone is us).
+  notApplicable,
+
+  /// It is the opponent's turn and the document advanced recently.
+  active,
+
+  /// It is the opponent's turn and the document has not advanced for the
+  /// whole inactivity threshold: the opponent appears to have disconnected.
+  stalled,
+}
+
 /// The verdict on an incoming shared document.
 enum _Verdict {
   /// Identical to what is already shown — the echo of this client's own move.
@@ -79,11 +100,13 @@ enum _Verdict {
 ///
 /// ## Phase 9 / Phase 10 boundary
 ///
-/// This controller covers *this* client: preserving its state, showing
-/// "Reconnecting", and converging without double-applying. What the **opponent**
-/// sees, turn clocks, forfeit and abandonment are Phase 10, as is Security Rules
-/// (`architecture.md` §12). The limits of the client-side checks below are stated
-/// in the record rather than presented as a security boundary.
+/// Phase 9 covered *this* client: preserving its state, showing
+/// "Reconnecting", and converging without double-applying. Phase 10 adds the
+/// other half: what this client concludes about the **opponent** —
+/// [OpponentPresence] and the abandonment claim — with Security Rules
+/// (`firestore.rules`) as the server-side boundary. The limits of the
+/// client-side checks below are stated in `security_model.md` rather than
+/// presented as a security boundary.
 class OnlineGameController extends ChangeNotifier with GameInteraction {
   OnlineGameController({
     required this.rooms,
@@ -91,7 +114,10 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
     required this.uid,
     required this.code,
     GameState? initialState,
+    DateTime Function()? clock,
+    this.opponentTimeout = opponentInactivityThreshold,
   }) : _state = initialState ?? GameState.initial(),
+       _clock = clock ?? DateTime.now,
        _room = Room.fromJson(<String, dynamic>{}) ?? _emptyRoom;
 
   static const AppLogger _log = AppLogger('online_game');
@@ -108,6 +134,14 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
   /// The match code.
   final String code;
 
+  /// How long the opponent may stay silent before [opponentPresence] calls
+  /// them stalled. Injectable so tests do not wait in real time; defaults to
+  /// the shared [opponentInactivityThreshold] the claim and the Security
+  /// Rules also use.
+  final Duration opponentTimeout;
+
+  final DateTime Function() _clock;
+
   GameState _state;
   Room _room;
   StreamSubscription<SharedMatchDocument>? _subscription;
@@ -118,6 +152,10 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
   bool _submitting = false;
   bool _disposed = false;
   bool _recovering = false;
+  bool _claiming = false;
+  AbandonmentFailure? _claimFailure;
+  OpponentPresence _lastPresence = OpponentPresence.notApplicable;
+  Timer? _presenceTimer;
 
   /// An action held because it could not be sent — the offline case.
   ({int turn, GameAction action})? _pending;
@@ -151,6 +189,45 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
   /// Whether the match is over.
   bool get isFinished => _state.status == GameStatus.finished;
 
+  /// Whether the match ended by an abandonment claim (Phase 10) rather than
+  /// by play. Terminal, like [isFinished], but with no winner.
+  bool get isAbandoned => _room.status == RoomStatus.abandoned;
+
+  /// Whether this client is the one who claimed the match as abandoned.
+  bool get claimedByMe => _room.abandonedById == uid;
+
+  /// The opponent's presence, judged from the shared document.
+  ///
+  /// The signal is deliberately the same one the claim itself is judged by —
+  /// the stored `updatedAt` standing still while it is the opponent's turn —
+  /// so the banner never promises a claim the repository would refuse. The
+  /// timestamp is written by the *opponent's* client, so a badly skewed
+  /// opponent clock can stretch or shrink the wait; `security_model.md`
+  /// records that limit rather than hiding it.
+  OpponentPresence get opponentPresence {
+    if (_room.status != RoomStatus.started || isFinished) {
+      return OpponentPresence.notApplicable;
+    }
+    final current = _room.currentPlayerId;
+    if (current == null || current == uid || opponentId == null) {
+      return OpponentPresence.notApplicable;
+    }
+    final idleMs = _clock().millisecondsSinceEpoch - _room.updatedAtMs;
+    return idleMs >= opponentTimeout.inMilliseconds
+        ? OpponentPresence.stalled
+        : OpponentPresence.active;
+  }
+
+  /// Whether the abandonment claim is available right now.
+  bool get canClaimAbandonment =>
+      opponentPresence == OpponentPresence.stalled && !_claiming;
+
+  /// Whether a claim is in flight.
+  bool get isClaiming => _claiming;
+
+  /// The last refused claim, or null.
+  AbandonmentFailure? get claimFailure => _claimFailure;
+
   /// The winner, from the engine. Never from the document.
   PlayerId? get winner => _state.winner;
 
@@ -172,15 +249,18 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
 
   @override
   bool get isInteractionBlocked =>
-      // Not this client's turn, a submit in flight, not verified, or offline.
+      // Not this client's turn, a submit in flight, not verified, offline —
+      // or the match was claimed as abandoned under us.
       !isMyTurn ||
       _submitting ||
+      isAbandoned ||
       _sync != OnlineSyncState.inSync ||
       _connection == OnlineConnectionState.reconnecting ||
       _connection == OnlineConnectionState.disconnected;
 
   /// Why input is refused, for the UI to explain rather than just grey out.
   String? get inputBlockedReason {
+    if (isAbandoned) return 'This match was abandoned.';
     if (isFinished) return 'This match is over.';
     if (_sync == OnlineSyncState.syncError) {
       return 'The shared match could not be read safely.';
@@ -225,6 +305,20 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
     _setConnection(OnlineConnectionState.connecting);
     await _subscription?.cancel();
     if (_disposed) return;
+    // Presence is a function of time passing, not only of documents
+    // arriving: a stalled opponent produces no snapshot to react to. The
+    // timer only re-evaluates the derived presence and notifies when it
+    // flips; the five-second cadence is display polish, not a game rule,
+    // and it writes nothing (`rules.md` §5: no periodic writes).
+    _presenceTimer?.cancel();
+    _presenceTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (_disposed) return;
+      final presence = opponentPresence;
+      if (presence != _lastPresence) {
+        _lastPresence = presence;
+        notifyListeners();
+      }
+    });
     _subscription = matches
         .watchMatch(code: code)
         .listen(
@@ -339,10 +433,17 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
       _failSync('The shared match could not be read.');
       return;
     }
-    if (room.status != RoomStatus.started &&
-        _room.status != RoomStatus.started) {
-      // Still in the lobby: adopt the room, keep the board untouched.
+    if (room.boardState == null &&
+        _room.status != RoomStatus.started &&
+        _room.status != RoomStatus.finished &&
+        _room.status != RoomStatus.abandoned) {
+      // Still in the lobby: adopt the room, keep the board untouched. The
+      // gate is the absence of a snapshot rather than the status alone, so
+      // a first document that already ended the match (finished, or claimed
+      // as abandoned while this client was away) still flows through
+      // verification below and lands as the terminal state it is.
       _room = room;
+      _lastPresence = opponentPresence;
       notifyListeners();
       return;
     }
@@ -358,6 +459,7 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
     final verdict = _verify(room, document);
     if (verdict == _Verdict.echo) {
       _room = room;
+      _lastPresence = opponentPresence;
       // An echo can still be the answer to a held action: if the move we were
       // holding landed while we were away, the very document that looks
       // unchanged from our stale local view is the proof. Resolving here is what
@@ -374,6 +476,7 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
     // --- adopt ---
     _room = room;
     _state = room.boardState!;
+    _lastPresence = opponentPresence;
     _lastSyncFailure = null;
     _statusMessage = null;
     if (_sync != OnlineSyncState.inSync) {
@@ -555,9 +658,40 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
     notifyListeners();
   }
 
+  /// Claims the match as abandoned: the opponent has been silent past the
+  /// threshold on their own turn.
+  ///
+  /// The repository's transaction is the authority — this method only
+  /// refuses early when the presence signal says the claim cannot apply, so
+  /// a button shown by mistake cannot produce a spurious write attempt.
+  /// The outcome arrives through the listener like every other match fact;
+  /// a refused claim (the race case: the opponent moved first) is kept as
+  /// [claimFailure] for the UI to state plainly.
+  Future<void> claimAbandonment() async {
+    if (_claiming || opponentPresence != OpponentPresence.stalled) return;
+    _claiming = true;
+    _claimFailure = null;
+    notifyListeners();
+    final result = await matches.claimAbandonment(code: code);
+    if (_disposed) return;
+    _claiming = false;
+    switch (result) {
+      case AbandonmentClaimed():
+        // The listener will deliver the abandoned document; re-read once so
+        // the terminal state shows even if the snapshot is slow.
+        await resync();
+      case AbandonmentRejected(:final failure):
+        _claimFailure = failure;
+        _log.log('abandonment claim refused: ${failure.reason.name}');
+    }
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     _disposed = true;
+    _presenceTimer?.cancel();
+    _presenceTimer = null;
     unawaited(_subscription?.cancel());
     _subscription = null;
     super.dispose();

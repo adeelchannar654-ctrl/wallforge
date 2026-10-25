@@ -97,20 +97,18 @@ void main() {
   group('both seats of one room', () {
     testWidgets('Blue is told it is their turn', (tester) async {
       final seats = await startedMatch();
-      addTearDown(seats.blue.dispose);
-      addTearDown(seats.red.dispose);
       await pump(tester, seats.blue);
 
       expect(find.text('YOUR TURN'), findsOneWidget);
       expect(find.text("OPPONENT'S TURN"), findsNothing);
       expect(find.text('BLUE'), findsOneWidget);
       expect(find.text('YOU'), findsOneWidget);
+      seats.blue.dispose();
+      seats.red.dispose();
     });
 
     testWidgets('Red is told to wait, with the reason stated', (tester) async {
       final seats = await startedMatch();
-      addTearDown(seats.blue.dispose);
-      addTearDown(seats.red.dispose);
       await pump(tester, seats.red);
 
       expect(find.text('YOUR TURN'), findsNothing);
@@ -122,12 +120,12 @@ void main() {
       );
       expect(find.text('RED'), findsOneWidget);
       expect(find.text('YOU'), findsOneWidget);
+      seats.blue.dispose();
+      seats.red.dispose();
     });
 
     testWidgets('input is offered only on your own turn', (tester) async {
       final seats = await startedMatch();
-      addTearDown(seats.blue.dispose);
-      addTearDown(seats.red.dispose);
 
       await pump(tester, seats.blue);
       expect(seats.blue.legalMoveTargets, isNotEmpty);
@@ -138,6 +136,8 @@ void main() {
         isEmpty,
         reason: 'no move targets when it is not your turn',
       );
+      seats.blue.dispose();
+      seats.red.dispose();
     });
 
     testWidgets('tapping a legal board cell submits and applies a move', (
@@ -147,8 +147,6 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final seats = await startedMatch();
-      addTearDown(seats.blue.dispose);
-      addTearDown(seats.red.dispose);
       await pump(tester, seats.blue);
 
       const destination = Cell(row: 7, column: 4);
@@ -173,6 +171,8 @@ void main() {
 
       expect(seats.blue.state.pawnPosition(PlayerId.blue), destination);
       expect(seats.blue.state.turnNumber, 1);
+      seats.blue.dispose();
+      seats.red.dispose();
     });
 
     testWidgets('tapping and confirming a wall slot places the wall', (
@@ -182,8 +182,6 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final seats = await startedMatch();
-      addTearDown(seats.blue.dispose);
-      addTearDown(seats.red.dispose);
       await pump(tester, seats.blue);
       await tester.tap(find.text('WALL'));
       await tester.pumpAndSettle();
@@ -216,6 +214,8 @@ void main() {
         seats.blue.state.boardConfig.wallsPerPlayer - 1,
       );
       expect(seats.blue.state.turnNumber, 1);
+      seats.blue.dispose();
+      seats.red.dispose();
     });
 
     testWidgets('wall placement works at a phone-width layout', (tester) async {
@@ -226,8 +226,6 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final seats = await startedMatch();
-      addTearDown(seats.blue.dispose);
-      addTearDown(seats.red.dispose);
       await pump(tester, seats.blue);
 
       expect(find.text('WALL'), findsOneWidget);
@@ -262,6 +260,8 @@ void main() {
         seats.blue.state.boardConfig.wallsPerPlayer - 1,
       );
       expect(seats.blue.state.turnNumber, 1);
+      seats.blue.dispose();
+      seats.red.dispose();
     });
 
     testWidgets('a real board tap is ignored when it is not your turn', (
@@ -271,8 +271,6 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final seats = await startedMatch();
-      addTearDown(seats.blue.dispose);
-      addTearDown(seats.red.dispose);
       await seats.blue.submit(const GameAction.move(Cell(row: 7, column: 4)));
       await pump(tester, seats.blue);
 
@@ -292,44 +290,46 @@ void main() {
 
       expect(seats.blue.isMyTurn, isFalse);
       expect(seats.blue.state, before);
+      seats.blue.dispose();
+      seats.red.dispose();
     });
 
     testWidgets('the room code is shown so players can agree they are in the '
         'same match', (tester) async {
       final seats = await startedMatch();
-      addTearDown(seats.blue.dispose);
-      addTearDown(seats.red.dispose);
       await pump(tester, seats.blue);
       expect(find.text(seats.code), findsOneWidget);
+      seats.blue.dispose();
+      seats.red.dispose();
     });
   });
 
   group('connection chip', () {
     testWidgets('CONNECTED once the match is live', (tester) async {
       final seats = await startedMatch();
-      addTearDown(seats.blue.dispose);
       await pump(tester, seats.blue);
       expect(find.text('CONNECTED'), findsOneWidget);
+      seats.blue.dispose();
     });
 
     testWidgets('RECONNECTING when the snapshot is cached', (tester) async {
       final seats = await startedMatch();
-      addTearDown(seats.blue.dispose);
       await pump(tester, seats.blue);
       store.goOffline();
       await tester.pumpAndSettle();
       expect(find.text('RECONNECTING'), findsOneWidget);
+      seats.blue.dispose();
     });
 
     testWidgets('the state is exposed to assistive technology', (tester) async {
       final seats = await startedMatch();
-      addTearDown(seats.blue.dispose);
       await pump(tester, seats.blue);
       expect(
         find.bySemanticsLabel(RegExp('Connection')),
         findsOneWidget,
         reason: 'the state must not be conveyed by colour alone',
       );
+      seats.blue.dispose();
     });
   });
 
@@ -345,9 +345,9 @@ void main() {
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.reset);
         final seats = await startedMatch();
-        addTearDown(seats.blue.dispose);
         await pump(tester, seats.blue);
         expect(tester.takeException(), isNull);
+        seats.blue.dispose();
       });
     }
   });

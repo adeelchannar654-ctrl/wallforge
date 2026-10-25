@@ -23,6 +23,11 @@ import '../../board/board.dart';
 ///
 /// Accessibility follows `design.md` §26: the turn, the connection state and any
 /// failure are exposed as semantics labels and never carried by colour alone.
+
+/// The narrow layout's minimum content height; see the use site in
+/// [OnlineGameScreen._build] for what composes it and why it exists.
+const double _narrowMinHeight = 680;
+
 class OnlineGameScreen extends StatelessWidget {
   const OnlineGameScreen({
     super.key,
@@ -58,27 +63,53 @@ class OnlineGameScreen extends StatelessWidget {
             ? Row(
                 children: [
                   SizedBox(width: 280, child: _buildRail(PlayerId.blue)),
-                  Expanded(child: _buildCenter()),
+                  Expanded(child: _buildCenter(context)),
                   SizedBox(width: 280, child: _buildRail(PlayerId.red)),
                 ],
               )
-            : Column(
-                children: [
-                  _buildStrip(PlayerId.blue),
-                  _buildBanner(),
-                  Expanded(child: _buildBoardArea()),
-                  // The mode toggle and wall actions must exist on narrow
-                  // layouts too: without them a phone-width player could
-                  // move (the default mode) but never switch to WALL mode
-                  // or confirm a staged wall. The local game screen's
-                  // mobile layout includes both for the same reason.
-                  _buildModeToggle(),
-                  const SizedBox(height: AppSpacing.sm),
-                  _buildActions(),
-                  const SizedBox(height: AppSpacing.sm),
-                  _buildBanner(),
-                  _buildStrip(PlayerId.red),
-                ],
+            : LayoutBuilder(
+                builder: (context, constraints) => SingleChildScrollView(
+                  child: SizedBox(
+                    // The narrow column has a real minimum height: two
+                    // player strips, two banners, the toggle and actions,
+                    // and the board at its 240px floor — about 680px in
+                    // the tallest state (the waiting player, whose banner
+                    // carries the reason text, plus Phase 10's presence
+                    // notice). A viewport shorter than that — 320x568 is
+                    // in the project's layout test set — cannot hold it,
+                    // and a plain Column overflows there (the waiting
+                    // player's view already did, before Phase 10; the
+                    // layout tests only ever rendered the mover's). So
+                    // below the minimum the column scrolls instead; at or
+                    // above it, this is exactly the previous layout.
+                    height: constraints.maxHeight < _narrowMinHeight
+                        ? _narrowMinHeight
+                        : constraints.maxHeight,
+                    child: Column(
+                      children: [
+                        _buildStrip(PlayerId.blue),
+                        _buildBanner(context),
+                        Expanded(child: _buildBoardArea()),
+                        // The mode toggle and wall actions must exist on
+                        // narrow layouts too: without them a phone-width
+                        // player could move (the default mode) but never
+                        // switch to WALL mode or confirm a staged wall.
+                        // The local game screen's mobile layout includes
+                        // both for the same reason.
+                        _buildModeToggle(),
+                        const SizedBox(height: AppSpacing.sm),
+                        _buildActions(),
+                        const SizedBox(height: AppSpacing.sm),
+                        // The banner is built twice on the narrow layout
+                        // (above the board and below the actions); the
+                        // presence notice rides only on the first, to keep
+                        // the minimum height above as low as it is.
+                        _buildBanner(context, presenceNotice: false),
+                        _buildStrip(PlayerId.red),
+                      ],
+                    ),
+                  ),
+                ),
               ),
       ),
     );
@@ -166,14 +197,17 @@ class OnlineGameScreen extends StatelessWidget {
 
   // --- Turn banner -----------------------------------------------------------
 
-  Widget _buildBanner() {
+  Widget _buildBanner(BuildContext context, {bool presenceNotice = true}) {
     final finished = controller.isFinished;
-    final label = finished
+    final abandoned = controller.isAbandoned;
+    final label = abandoned
+        ? 'MATCH ABANDONED'
+        : finished
         ? '${controller.winner?.name.toUpperCase() ?? 'DRAW'} WINS!'
         : controller.isMyTurn
         ? 'YOUR TURN'
         : "OPPONENT'S TURN";
-    final colour = finished
+    final colour = finished && !abandoned
         ? AppColors.tertiary
         : controller.currentPlayer == PlayerId.blue
         ? AppColors.primaryContainer
@@ -224,17 +258,108 @@ class OnlineGameScreen extends StatelessWidget {
                 style: AppTypography.bodyBase.copyWith(color: AppColors.error),
               ),
             ),
+          if (presenceNotice) _buildOpponentNotice(context),
         ],
       ),
     );
   }
 
+  // --- Opponent presence (Phase 10) ------------------------------------------
+  //
+  // Distinct from the connection chip in the app bar: the chip is about
+  // *this* client's network (Phase 9); this is about the *opponent* having
+  // gone quiet on their own turn, judged from the shared document standing
+  // still. Conflating the two would tell a player with a perfect connection
+  // that they are the ones who dropped.
+
+  Widget _buildOpponentNotice(BuildContext context) {
+    if (controller.isAbandoned) {
+      return Padding(
+        padding: const EdgeInsets.only(top: AppSpacing.xs),
+        child: Semantics(
+          liveRegion: true,
+          label: 'Match abandoned',
+          child: Text(
+            controller.claimedByMe
+                ? 'You claimed this match as abandoned. '
+                      'Your opponent did not return.'
+                : 'Your opponent claimed this match as abandoned.',
+            textAlign: TextAlign.center,
+            style: AppTypography.bodyBase.copyWith(
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ),
+      );
+    }
+    if (controller.opponentPresence != OpponentPresence.stalled) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.xs),
+      child: Column(
+        children: [
+          Semantics(
+            liveRegion: true,
+            label: 'Opponent seems to have disconnected',
+            child: Text(
+              'Your opponent seems to have disconnected.',
+              textAlign: TextAlign.center,
+              style: AppTypography.bodyBase.copyWith(color: AppColors.error),
+            ),
+          ),
+          TextButton(
+            onPressed: controller.canClaimAbandonment
+                ? () => _confirmClaim(context)
+                : null,
+            child: Text(
+              controller.isClaiming ? 'CLAIMING…' : 'CLAIM MATCH AS ABANDONED',
+            ),
+          ),
+          if (controller.claimFailure != null)
+            Text(
+              controller.claimFailure!.message ??
+                  'The claim could not be made.',
+              textAlign: TextAlign.center,
+              style: AppTypography.bodyBase.copyWith(color: AppColors.error),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmClaim(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Claim match as abandoned?'),
+        content: const Text(
+          'Your opponent has not moved for over two minutes. Claiming ends '
+          'the match now, with no winner.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('KEEP WAITING'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('CLAIM'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await controller.claimAbandonment();
+    }
+  }
+
   // --- Board -----------------------------------------------------------------
 
-  Widget _buildCenter() => Column(
+  Widget _buildCenter(BuildContext context) => Column(
     children: [
       const SizedBox(height: AppSpacing.lg),
-      _buildBanner(),
+      _buildBanner(context),
       const SizedBox(height: AppSpacing.md),
       Expanded(child: _buildBoardArea()),
       const SizedBox(height: AppSpacing.md),

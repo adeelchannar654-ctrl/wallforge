@@ -145,6 +145,12 @@ class FirestoreMatchRepository implements MatchRepository {
         if (room.status == RoomStatus.finished) {
           return _reject(MatchSyncFailureReason.matchFinished);
         }
+        if (room.status == RoomStatus.abandoned) {
+          // Claimed by the waiting player (Phase 10). From the mover's side
+          // this is the claim race lost: the match is over, exactly as if it
+          // had been played out.
+          return _reject(MatchSyncFailureReason.matchFinished);
+        }
         if (room.status != RoomStatus.started) {
           return _reject(MatchSyncFailureReason.roomNotStarted);
         }
@@ -246,6 +252,96 @@ class FirestoreMatchRepository implements MatchRepository {
       return _reject(MatchSyncFailureReason.networkUnavailable);
     }
   }
+
+  @override
+  Future<AbandonmentResult> claimAbandonment({required String code}) async {
+    final uid = await userId();
+    if (uid == null || uid.isEmpty) {
+      return const AbandonmentResult.rejected(
+        AbandonmentFailure(
+          AbandonmentFailureReason.notAuthenticated,
+          message: 'Sign in to play online.',
+        ),
+      );
+    }
+
+    final matchPath = _matchPath(code);
+    try {
+      return await client.runTransaction<AbandonmentResult>((txn) async {
+        final rawRoom = await txn.get(matchPath);
+        if (rawRoom == null) {
+          return _claimReject(AbandonmentFailureReason.roomNotFound);
+        }
+        final room = Room.fromJson(rawRoom);
+        if (room == null) {
+          return _claimReject(AbandonmentFailureReason.roomNotFound);
+        }
+        if (!room.isMember(uid)) {
+          return _claimReject(AbandonmentFailureReason.notAMember);
+        }
+        if (room.status == RoomStatus.finished ||
+            room.status == RoomStatus.abandoned) {
+          return _claimReject(AbandonmentFailureReason.matchAlreadyOver);
+        }
+        if (room.status != RoomStatus.started) {
+          return _claimReject(AbandonmentFailureReason.matchNotStarted);
+        }
+        // The claim belongs to the player who is *waiting*. If the document
+        // says it is our turn, the player who may have gone is us.
+        if (room.currentPlayerId == null) {
+          return _claimReject(AbandonmentFailureReason.matchAlreadyOver);
+        }
+        if (room.currentPlayerId == uid) {
+          return _claimReject(AbandonmentFailureReason.notOpponentTurn);
+        }
+        // The race with the opponent's return is decided here, by the
+        // transaction: a move that commits first advances `updatedAtMs`, and
+        // Firestore re-runs this callback against the fresh document, so the
+        // claim then reads a live match and refuses. A claim that commits
+        // first makes the opponent's own transaction re-read a room that is
+        // no longer `started`, and the move is refused instead. Both orders
+        // are defined; there is no interleaving where both writes land.
+        if (_nowMs - room.updatedAtMs <
+            opponentInactivityThreshold.inMilliseconds) {
+          return _claimReject(AbandonmentFailureReason.opponentStillActive);
+        }
+
+        final claimed = room.copyWith(
+          status: RoomStatus.abandoned,
+          abandonedById: uid,
+          updatedAtMs: _nowMs,
+          version: room.version + 1,
+        );
+        txn.set(matchPath, claimed.toJson());
+        return AbandonmentResult.claimed(claimed);
+      });
+    } on Object {
+      return _claimReject(AbandonmentFailureReason.networkUnavailable);
+    }
+  }
+
+  static AbandonmentResult _claimReject(AbandonmentFailureReason reason) =>
+      AbandonmentResult.rejected(
+        AbandonmentFailure(reason, message: claimMessageFor(reason)),
+      );
+
+  /// Player-facing wording for each refused claim (`rules.md` §7).
+  static String claimMessageFor(AbandonmentFailureReason reason) =>
+      switch (reason) {
+        AbandonmentFailureReason.notAuthenticated => 'Sign in to play online.',
+        AbandonmentFailureReason.notAMember => 'You are not in this match.',
+        AbandonmentFailureReason.roomNotFound =>
+          'That match is no longer available.',
+        AbandonmentFailureReason.matchNotStarted =>
+          'The match has not started yet.',
+        AbandonmentFailureReason.matchAlreadyOver =>
+          'This match is already over.',
+        AbandonmentFailureReason.notOpponentTurn => 'It is your turn to move.',
+        AbandonmentFailureReason.opponentStillActive =>
+          'Your opponent is still playing.',
+        AbandonmentFailureReason.networkUnavailable =>
+          'Could not reach the server. Check your connection.',
+      };
 
   @override
   Future<List<MatchMove>> readMoves({
