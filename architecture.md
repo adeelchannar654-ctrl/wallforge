@@ -455,9 +455,21 @@ Firestore Security Rules should enforce what is practical within rules, includin
 - A user cannot change the opponent's identity.
 - A completed match cannot accept normal moves.
 
+### Status (Phase 10)
+
+This section is no longer a design intention. Every item in the list above
+is implemented in `firestore.rules` and covered — an allow case and at
+least one deny case each — by the emulator-based test suite in
+`tool/rules_tests/` (33 tests, all passing). Phase 10 also added the
+abandonment-claim rule (a stalled match may be ended by the waiting
+player once the inactivity threshold has genuinely passed) and the
+matchmaking/queue ownership rules Phase 8.1's design required. The full
+model — what is enforced, the deliberate read exceptions, and the limits
+below — is documented in `security_model.md`.
+
 ### Important limitation
 
-Firestore Security Rules are not a replacement for a full authoritative game server. Complex pathfinding and all game-rule calculations should not be assumed to be safely enforceable in Security Rules.
+Firestore Security Rules are not a replacement for a full authoritative game server. Complex pathfinding and all game-rule calculations should not be assumed to be safely enforceable in Security Rules. Phase 10 demonstrated this empirically rather than leaving it as a caveat: the rules test suite contains a structurally valid, correctly authorised, correctly versioned write that teleports a pawn, and one that seals a player's path with walls — the rules accept both, because the legality check is the engine's, not theirs. See `security_model.md` ("The demonstrated limit of Firestore-only enforcement").
 
 The first Spark-plan version therefore prioritizes a consistent shared game engine, constrained writes, immutable/traceable moves where practical, and strong client-side validation.
 
