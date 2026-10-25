@@ -71,3 +71,6 @@ key.properties
 .env
 .env.*
 !.env.example
+
+# Phase 10 rules-test harness (tool/rules_tests) dependencies
+tool/rules_tests/node_modules/
