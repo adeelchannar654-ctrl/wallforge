@@ -1216,6 +1216,54 @@ Complete all product screens.
 
 Every major user journey can be completed without dead ends.
 
+### Result — Phase 11 (2026-10-26)
+
+**Complete.** All thirteen screens exist, are routed through the
+centralised `AppRouter`, and are walked end to end by
+`test/presentation/navigation_test.dart` (splash → Home → Modes → AI
+difficulty → game, Modes → local game, Modes → online lobby, Profile,
+Settings, Tutorial) with no dead ends; every screen also renders without
+overflow at 320×568, 390×844, 768×1024 and 1440×900.
+
+- **Q-5.2 resolved:** a dedicated AI difficulty screen (design.md §20
+  wording verbatim) starting games through the existing `MatchSetup`
+  pathway.
+- **Q-9.1 closed as decided here:** no board flip; canonical
+  orientation plus the `YOU` seat marking (text + outline, never colour
+  alone) stands. Reasoning in `memory.md` §13s.
+- **Q-9.2 resolved:** online rematch is a new room with fresh seats and
+  explicit two-player consent (propose = queue entry under the finished
+  match's config key; accept = the standard claim transaction), built
+  without changing `firestore.rules`; a new emulator test proves the
+  claim shape after a finished match (rules suite now 34/34).
+- **Q-8.5 resolved:** the lobby keeps its §19 contents and takes the
+  shared Phase 11 card/button kit.
+- **Settings honesty boundary:** Gameplay is real (Confirm wall
+  placement round-trips through the persisted store; Movement
+  assistance is a real shortest-route board display and the phase's one
+  persisted schema addition, `AppSettings.movementAssistance`); Audio
+  and Haptics render visibly inert, labelled Phase 12; Accessibility
+  likewise, labelled Phase 13.
+- **Nothing fabricated:** the Stitch mocks' ranked/ELO/event/telemetry
+  content was excluded throughout (ledger in `memory.md` §13s);
+  Profile shows exactly the recorded `MatchStatistics` and says online
+  matches are not recorded.
+- Three defects found by the phase's own tests and fixed in-phase: the
+  matchmaking matched-document liveness reading (a finished pairing
+  blocked all future pairing on that board), a `BoardView` size clamp
+  that threw below a 280 cap, and the splash replacing the top route
+  when built underneath a deep initial route.
+- The `BoardPreviewScreen` developer entry is retired; its tests were
+  rewritten against the real screens.
+
+Gates (2026-10-26): `dart format --set-exit-if-changed` — 139 files,
+0 changed. `flutter analyze` — no issues. `flutter test` — 1,571
+tests, 1,562 passed; the 9 failures are the known golden-image set,
+re-determined environmental this phase (the identical 9 fail on the
+pristine Phase 10 tree in this VM). `flutter build web --release` —
+succeeded. Spec checker — OK. Engine oracle — byte-identical
+(1,229,568 bytes). Rules emulator — 34/34. Mojibake scan — clean.
+
 ---
 
 # Phase 12 — Audio, Haptics and Animation

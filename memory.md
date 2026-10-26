@@ -3158,3 +3158,118 @@ Nothing in the Phase 10 rules blocks it when it lands.
 - Rules suite (`tool/rules_tests/`, Firestore emulator) → **33 tests,
   33 passed, 0 failed.**
 - `game_spec.md` and `rules.md`: unmodified.
+
+## 13s. Phase 11 Record — Full UI/UX (completed 2026-10-26)
+
+Authorized 2026-10-26 with the owner's full Phase 11 prompt. Scope: every
+screen in `phase.md` Phase 11 (Splash, Home, Game modes, Local, AI
+difficulty, Online lobby, Create match, Join match, Main game, Result,
+Tutorial, Profile, Settings), real navigation with no dead ends, the
+shared Result screen, the online rematch consent flow (Q-9.2), and the
+retirement of the `BoardPreviewScreen` dev tool as the app entry point.
+Out of scope: audio/haptics systems (Phase 12), accessibility
+infrastructure (Phase 13) — those Settings groups are built visibly
+inert — and any change to the engine, `game_spec.md`, Firestore rules,
+or move-sync logic.
+
+### Source ledger (§0 — every screen cites its source)
+
+| Screen / element | Source |
+|---|---|
+| Splash | Stitch `splash_screen` (emblem, wordmark, tagline layout). Its telemetry (`60 FPS`, `ONLINE ARENA`, `SHADERS: CACHED`, fake load percentages, hard-coded `V1.4.0`) is fabricated mock data and is excluded per the prompt. No version string is shown (no `package_info` dependency exists, and `rules.md` §3.3 bars adding one for a label; the real version lives in `pubspec.yaml`: 1.0.0+1). |
+| Logo mark | Stitch `wallforge_strategic_logo` SVG (shield tile, crossed cyan/crimson wall bars, two pawns), redrawn as a Flutter widget (`WallforgeLogo`) from the app tokens; also used on Home. |
+| Home | `design.md` §17 (logo, tagline, Play, mode options, profile/settings access, small board visual) + Stitch `home_launcher` layout only. The mock's ranked ladder, ELO, streak counter, "Cyber Citadel" event, Academy, Daily Tactic, recent-activity row and stats ribbon are fabricated and excluded. Real data only: a resume card when `UnfinishedMatchRepository` holds a match, and a statistics summary when `MatchStatistics.matchesPlayed > 0`. |
+| Game Modes | `design.md` §18 — verified by direct read: three modes with exact one-line descriptions (Local "Two players on one device.", Vs AI "Single player against AI.", Online "Remote two-player match."), each mode needing icon/title/description/action; §18 contains NO pickers. The board-size and wall-count pickers come from the Stitch `game_setup_modes` mock, legitimised by the prompt §2 (the app already supports configurable `BoardConfig`); the chosen config is carried forward in memory to the mode's next screen and is not persisted as a setting. The mock's Chronometer (turn clock) and "Fair Path Integrity" toggle are not features and are excluded. |
+| Local | `phase.md` list + §18 flow: Modes (Local selected, config chosen) → Start Local Match → the existing local `GameScreen`. There is no separate local-setup source anywhere; recorded as the mapping for the phase list's "Local" entry. |
+| AI difficulty | `design.md` §20 (Easy/Medium/Hard/Expert, `AiDifficulty`'s own descriptions verbatim, AI is always Red, "AI is thinking…" with input disabled while it thinks, never "perfect AI" claims). No Stitch screen exists. Resolves Q-5.2. Starts via the existing `MatchSetup` route argument — no second AI pathway. |
+| Online lobby / Create / Join | `design.md` §19 (contents only: create match, join match, room code, opponent status, connection state; states named Connecting/Waiting/Connected/Reconnecting/Disconnected; no layout, no Quick Match mention — Quick Match is a shipped Phase 8.1 feature kept as-is). No Stitch screen. Decision: one lobby screen with three distinct cards (Create / Join / Quick Match) rather than split routes — §19 mandates contents, not routes; create and join share one live controller and room stream, and splitting them across routes would duplicate that lifecycle. `architecture.md` §18's `/online/create` and `/online/join` paths are registered as aliases that open the lobby focused on the matching section, so no §18 path is a dead route. |
+| Main game | Existing `GameScreen` / `OnlineGameScreen` + `BoardView` (Phases 3/4/9/10), layout per `design.md` §16. Not rebuilt; navigation into and out of them is what this phase adds. |
+| Result | `design.md` §21 — verified by direct read: it names elements only (winner: victory heading, player piece, statistics, Rematch, Home; loser: "Match complete.", statistics, Rematch, Home; no humiliating language) and specifies NO exact strings and NO statistic fields. Chosen and recorded: the heading follows the app's existing result-overlay convention (`BLUE WINS!` / `RED WINS!`; the side that did not win in AI/online play is headed "Match complete."); the player piece is the winner's pawn disc with its B/R letter (§26 pattern); statistics are `Turns played` (actions played from the finished state), `Walls used — Blue` and `Walls used — Red` (configured walls − remaining walls) — all derived from the real finished `GameState`, never invented. One shared screen for local, AI and online endings. |
+| Tutorial | `design.md` §22 — verified by direct read: real board, one concept at a time, an *example* sequence (Goal → Move → Wall → Block → Race), skip and revisit allowed; NO step copy, progress or first-run rule exists in any source. `PRD.md` §6.7's teach list (Goal, Movement, Wall placement, Limited wall inventory, Winning) covers the same ground. Chosen and recorded: five steps following the §22 example (Goal, Move, Wall, Block, Race — with the limited wall inventory taught inside the Wall step, per PRD §6.7), all step copy written for this phase, each step's board a real `GameState` driven by the real engine through `LocalGameController`, and the Move/Wall steps advance only when the learner performs the action. Completion or skipping writes the Phase 6 reserved flag `AppSettings.tutorialCompleted` (its recorded meaning from this phase: the first-run offer has been resolved; replay stays available from Home and Settings regardless). First run: the tutorial does not auto-start; Home shows the tutorial card prominently until the flag is set (no source mandates auto-start; the prompt §4 offer is met by the prominent card). |
+| Profile | `design.md` §15 card use "Profile statistics" only — no Profile section exists in `design.md`. Data is exactly what `MatchStatistics` stores (played / wins / losses / win rate, `byDifficulty` buckets with pass-and-play under `local`, `byBoardSize` buckets); online matches are not recorded in that repository and the screen says so rather than implying coverage. Anonymous uid shown when signed in (PRD §10 non-goals: no named accounts, ranking or avatars). |
+| Settings | `design.md` §23 — verified by direct read: five groups in order (Gameplay, Audio, Haptics, Accessibility, Account); item names only, no control types, defaults or definitions anywhere in the section. Gameplay: Confirm wall placement = the real persisted Phase 6 setting (same source as the game HUD toggle); Movement assistance has NO definition in §23 — scoped by this phase, per the prompt §3's own example, as shortest-path highlighting while Move is selected, and implemented for real (see the schema note below). Audio (Music/Effects/Volume), Haptics (Haptic feedback) and Accessibility (Reduced motion/Color assistance/High contrast/UI scale) are Phase 12/13 features: rendered as disabled rows labelled as not yet available, so nothing looks functional while doing nothing. Account: account information = the real anonymous-auth state; Sign out is real, via the Phase 8 auth gateway. There is no Data/reset group in §23 and none was built. |
+| Navigation | `architecture.md` §18 route list, plus `/` (the splash) as the entry and `/online/game` for the online match screen (the §18 list names `/game` only; the online screen needs its own route because its arguments are a room and a seat, not a `MatchSetup`). Centralised in `AppRouter`; no widget-instance pushes. |
+| Board orientation (Q-9.1 revisited) | **Kept: no flip.** Phase 11 re-examined the Phase 9 default as the prompt required. Reasons: the canonical orientation plus the `YOU` seat marking (text + outline, not colour alone, §26) already answers "which side is mine"; the Result screen, seat rows and HUD all key off the canonical orientation (Q-9.6's knock-on list); and no playtest complaint exists. Reversal cost remains one board-orientation transform. Q-9.1 is closed as decided-in-Phase-11, not merely inherited. |
+| Online rematch (Q-9.2) | New room, fresh seats, explicit two-player consent, built on the existing matchmaking claim pattern. The finished room document is locked by the Phase 10 rules (no transition matches it), so consent is signalled through the shipped matchmaking namespace, which the rules deliberately make generic over `{boardKey}`: a proposal is a waiting entry under the finished match's own config key `s{size}w{walls}`; the opponent's result screen watches that queue for the finished opponent's uid and offers Accept/Decline; Accept runs the standard claim transaction (proposer = host/Blue as waiter, acceptor = Red; both `matched` docs + the new room in one transaction), and both clients enter the new room's existing ready/start flow — the ready handshake is the second consent. Decline = no claim (or navigate Home); a proposal lapses with the queue's 60 s staleness window or when the proposer cancels. Known limit, recorded honestly: a proposal entry is indistinguishable in shape from an ordinary queue entry, and a third player's Quick Match claim could consume it first; the proposer's client detects that outcome (the matched room's other seat is not the finished opponent) and leaves that room, ending the proposal. `firestore.rules` is unchanged; emulator tests were added proving the claim shape works for this use. |
+| Movement assistance (schema note) | `AppSettings` gains one field, `movementAssistance` (bool, default false) — the single persisted-schema extension of this phase, recorded per the prompt §5 rule: §23 lists the row with no definition, the prompt §3 sanctions defining a small real feature (its example is this one), and a non-persisted toggle would reset silently. Scoped as: while Move is selected, the current player's shortest route to their goal row — computed on the engine's own wall graph (`BlockedEdges` BFS, pawns ignored, exactly the `Pathfinder` semantics) — is drawn on the board in the local, AI and online game screens. |
+
+### Route map (as built)
+
+```text
+/                   SplashScreen — entry; replaces itself with /home
+/home               HomeScreen
+/modes              GameModesScreen (config chosen here, passed along)
+/local              (alias → /modes with Local preselected; §18 path kept live)
+/ai                 AiDifficultyScreen (config passed from /modes)
+/online             OnlineLobbyScreen (Create / Join / Quick Match cards)
+/online/create      (alias → /online focused on the Create card)
+/online/join        (alias → /online focused on the Join card)
+/online/game        OnlineGameScreen (room + seat arguments)
+/game               GameScreen (local / AI, MatchSetup arguments)
+/result             ResultScreen (shared: local, AI, online)
+/tutorial           TutorialScreen
+/profile            ProfileScreen
+/settings           SettingsScreen
+```
+
+Every screen above has a route back to `/home` (directly, or via its
+parent in the map) and the navigation test walks this map.
+
+### Completion record (2026-10-26)
+
+All thirteen screens are built and routed as the ledger above records.
+Two wording corrections to the ledger, from what the build actually does:
+the tutorial's interactive steps do not auto-advance — performing the
+action *completes* the step and enables NEXT (a disabled NEXT plus a
+"Make the move / Place a wall to continue." hint is what an unfinished
+interactive step shows); and the Wall step opens already in wall mode, so
+its copy teaches staging a wall in a slot and confirming it (there is no
+WALL toggle inside the tutorial).
+
+Three defects were found by this phase's own tests and fixed in-phase:
+
+1. **Matched-document liveness read the wrong document.**
+   `FirestoreMatchmakingRepository` decided whether a pairing was still
+   live from the *matched* document — a snapshot written at pairing time
+   whose embedded status still says `waiting` after the match has ended.
+   Left as it was, no player could ever pair twice on the same board
+   configuration: not for a rematch, and not for a second Quick Match.
+   Liveness is now read from the room document itself, both in the
+   repository's shortcuts and inside the claim transaction, and
+   `watchForMatch` follows the named room document so it falls silent
+   when the room finishes. Covered by
+   `test/data/rematch_matchmaking_test.dart`.
+2. **`BoardView` threw for a small `maxSize`.** Its size clamp assumed
+   `maxSize >= 280`; Home's small board visual (176) made `clamp` throw
+   an `ArgumentError`. The 280 floor now applies only when the cap
+   allows it. Rendering at every previously used size is unchanged.
+3. **The splash could hijack the top route.** A deep initial route
+   builds `/` underneath the target screen; the buried splash's timer
+   later fired `pushReplacementNamed('/home')` against whatever route
+   was on top. The splash now hands over only when its own route
+   `isCurrent`.
+
+Also in-phase: Profile's by-difficulty rows now show the `AiDifficulty`
+label ("Vs AI — Hard") instead of the raw stored key.
+
+`firestore.rules` is unchanged. One emulator test was added
+(34/34): a rematch claim after a finished match — both matched
+documents overwritten, both queue entries consumed, new room created —
+succeeds under the shipped rules.
+
+Gates (2026-10-26): format 139 files 0 changed; analyze — no issues;
+full suite 1,571 tests — 1,562 passed, 9 golden-image failures
+re-determined environmental (the identical 9 fail on the pristine
+Phase 10 tree, worktree-verified this phase); web release build OK;
+spec checker OK; oracle byte-identical (1,229,568 bytes, SHA-256
+6f1e3c05…); rules emulator 34/34; mojibake scan clean.
+
+Open Questions disposition: Q-5.2 closed (dedicated AI difficulty
+screen, §20 wording verbatim); Q-9.1 closed as decided in this phase
+(no flip; reasoning in the ledger); Q-9.2 closed (rematch consent flow
+built as recorded); Q-8.5 closed (lobby contents per §19, visuals
+aligned to the shared Phase 11 card/button kit). Q-6.1 (a finished
+local match's "play again") is answered in practice by the Result
+screen's Rematch for local and AI play. No new Open Questions were
+raised by this phase. Phase 12 was not started.
+

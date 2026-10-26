@@ -17,7 +17,7 @@ A wall may never remove the last route to either player's goal.
 
 ## Status
 
-**Phases 0–10 are complete in code, with one owner-side caveat.** See
+**Phases 0–11 are complete in code, with one owner-side caveat.** See
 [`phase.md`](phase.md) for the full plan and the per-phase results.
 
 - **Phase 0 — Project Foundation.** Flutter project, platform targets, folder
@@ -94,7 +94,23 @@ A wall may never remove the last route to either player's goal.
   emulator tests in [`tool/rules_tests/`](tool/rules_tests/). A waiting
   player now sees an opponent-disconnect notice after 120 seconds and can
   claim the match as abandoned; a player can hold only one open room at a
-  time. Rematch is deferred to Phase 11 by recorded decision (Q-9.2).
+  time. Rematch was deferred to Phase 11 by recorded decision (Q-9.2) and
+  shipped there (below).
+- **Phase 11 — Full UI/UX.** Every product screen now exists and is
+  reachable without dead ends: Splash, Home, Game Modes, a dedicated AI
+  difficulty screen (Q-5.2), the online lobby (Create / Join / Quick
+  Match), the shared Result screen, a five-step Tutorial played on the
+  real board and engine, Profile (the device's recorded statistics —
+  online matches are not recorded and the screen says so), and Settings.
+  Settings is honest about what exists: gameplay options (confirm wall
+  placement, the new movement-assistance route display) are real and
+  persisted; the Audio/Haptics groups are visibly inert until Phase 12
+  and the Accessibility group until Phase 13. The online rematch
+  (Q-9.2) is a new room with fresh seats and explicit consent from both
+  players, built on the shipped matchmaking claim; a rules-emulator test
+  proves the claim shape for this use (34 rules tests in total). The
+  developer board-preview screen that used to be the app's entry point
+  is retired.
 
 **Firebase still needs owner-side setup in the Console for Android/iOS.**
 The web app is registered and live-verified (above). Android and iOS
