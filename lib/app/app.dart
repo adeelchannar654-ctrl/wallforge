@@ -17,7 +17,7 @@ class WallforgeApp extends StatelessWidget {
       title: AppInfo.appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
-      initialRoute: AppRoutes.home,
+      initialRoute: AppRoutes.root,
       onGenerateRoute: AppRouter.onGenerateRoute,
     );
   }
