@@ -1,22 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wallforge/app/router/app_router.dart';
 import 'package:wallforge/app/theme/app_theme.dart';
-import 'package:wallforge/presentation/screens/board_preview/board_preview_screen.dart';
+import 'package:wallforge/presentation/screens/home/home_screen.dart';
+import 'package:wallforge/presentation/screens/modes/game_modes_screen.dart';
 import 'package:wallforge/presentation/screens/online/online_lobby_screen.dart';
 
-/// Tapping "ONLINE PLAY" must actually go somewhere.
+/// Going online from Home must actually go somewhere.
 ///
-/// This is the owner-reported symptom: on a build with no Firebase
-/// configuration, the `/online` route constructed `OnlineLobbyFactory.firebase()`
-/// during route building, which constructed `FirebaseAuthGateway()`, which threw
-/// `[core/no-app]` from its constructor's initializer list. The exception escaped
-/// before any screen was built, so the app silently did nothing.
+/// This is the owner-reported symptom from Phase 8: on a build with no
+/// Firebase configuration, the `/online` route constructed
+/// `OnlineLobbyFactory.firebase()` during route building, which constructed
+/// `FirebaseAuthGateway()`, which threw `[core/no-app]` from its
+/// constructor's initializer list. The exception escaped before any screen was
+/// built, so the app silently did nothing.
 ///
-/// These tests drive the **real** router with the **real** factory and the
-/// **real** gateway, with no injected fakes, because every layer of that path was
-/// previously untested.
+/// Phase 11 changed the path — Home → Game Modes (Online selected) → lobby —
+/// but not the guarantee, so these tests still drive the **real** router with
+/// the **real** factory and the **real** gateway, with no injected fakes,
+/// because every layer of that path was previously untested.
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+  });
+
   Future<void> openEntry(WidgetTester tester) async {
     await tester.pumpWidget(
       const MaterialApp(
@@ -27,29 +35,34 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Future<void> tapOnlinePlay(WidgetTester tester) async {
-    final button = find.text('ONLINE PLAY');
-    await tester.ensureVisible(button);
-    await tester.tap(button);
+  Future<void> tapThroughToLobby(WidgetTester tester) async {
+    final mode = find.text('Online Match');
+    await tester.ensureVisible(mode);
+    await tester.tap(mode);
+    await tester.pumpAndSettle();
+    expect(find.byType(GameModesScreen), findsOneWidget);
+    final open = find.text('OPEN ONLINE LOBBY');
+    await tester.ensureVisible(open);
+    await tester.tap(open);
     await tester.pumpAndSettle();
   }
 
   testWidgets('the entry screen offers online play', (tester) async {
     await openEntry(tester);
-    expect(find.byType(BoardPreviewScreen), findsOneWidget);
-    final button = find.text('ONLINE PLAY');
-    await tester.ensureVisible(button);
-    expect(button, findsOneWidget);
+    expect(find.byType(HomeScreen), findsOneWidget);
+    final mode = find.text('Online Match');
+    await tester.ensureVisible(mode);
+    expect(mode, findsOneWidget);
   });
 
-  testWidgets('tapping it navigates to the lobby', (tester) async {
+  testWidgets('tapping through navigates to the lobby', (tester) async {
     await openEntry(tester);
-    await tapOnlinePlay(tester);
+    await tapThroughToLobby(tester);
 
     expect(
       find.byType(OnlineLobbyScreen),
       findsOneWidget,
-      reason: 'the tap must push the lobby rather than failing silently',
+      reason: 'the taps must push the lobby rather than failing silently',
     );
   });
 
@@ -58,7 +71,7 @@ void main() {
     'screen and not a crash',
     (tester) async {
       await openEntry(tester);
-      await tapOnlinePlay(tester);
+      await tapThroughToLobby(tester);
 
       // The lobby is on screen and has rendered its entry choices...
       expect(find.byType(OnlineLobbyScreen), findsOneWidget);
@@ -76,16 +89,16 @@ void main() {
     tester,
   ) async {
     await openEntry(tester);
-    await tapOnlinePlay(tester);
+    await tapThroughToLobby(tester);
 
     // "Online play needs a connection" would be wrong and misleading here: the
     // commonest cause is a build with no Firebase configuration.
     expect(find.textContaining('needs a connection'), findsNothing);
   });
 
-  testWidgets('back returns to the entry screen', (tester) async {
+  testWidgets('back from the lobby returns to Game Modes', (tester) async {
     await openEntry(tester);
-    await tapOnlinePlay(tester);
+    await tapThroughToLobby(tester);
     expect(find.byType(OnlineLobbyScreen), findsOneWidget);
 
     // Brought into view explicitly: the lobby grows as features are added, and
@@ -96,14 +109,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(OnlineLobbyScreen), findsNothing);
-    expect(find.byType(BoardPreviewScreen), findsOneWidget);
+    expect(find.byType(GameModesScreen), findsOneWidget);
   });
 
   testWidgets('leaving the lobby does not leak a ChangeNotifier', (
     tester,
   ) async {
     await openEntry(tester);
-    await tapOnlinePlay(tester);
+    await tapThroughToLobby(tester);
     // Brought into view explicitly: the lobby grows as features are added, and
     // an 800x600 test viewport no longer reaches the bottom on its own.
     final back = find.text('BACK');

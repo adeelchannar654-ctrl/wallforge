@@ -615,6 +615,39 @@ test('quick match: the claim transaction writes room, matched pair, consumes que
   );
 });
 
+test('rematch (phase 11): a claim after a finished match overwrites the old pairing', async () => {
+  // The finished match: its room is locked history, and both matched
+  // documents still name it — matched documents are never deleted.
+  const finished = roomDoc({
+    code: 'OLD999',
+    status: 'finished',
+    red: { playerId: 'bob', ready: true },
+    winnerId: 'alice',
+    version: 40,
+  });
+  await seed('matches/OLD999', finished);
+  await seed(`matchmaking/${BOARD_KEY}/matched/alice`, finished);
+  await seed(`matchmaking/${BOARD_KEY}/matched/bob`, finished);
+  // Alice proposes (a plain queue entry, exactly like Quick Match's), and
+  // Bob accepts with the standard claim transaction: both queue entries
+  // consumed, a NEW room created, and both matched documents overwritten
+  // in the same commit. Fresh seats: the proposer hosts as Blue.
+  await seed(`matchmaking/${BOARD_KEY}/waiting/alice`, { uid: 'alice', queuedAt: NOW });
+  const payload = roomDoc({
+    code: 'RMT456',
+    red: { playerId: 'bob', ready: false },
+  });
+  await assertSucceeds(
+    runTransaction(bob, async (txn) => {
+      txn.delete(waitingRef(bob, 'alice'));
+      txn.delete(waitingRef(bob, 'bob'));
+      txn.set(doc(bob, 'matches/RMT456'), payload);
+      txn.set(matchedRef(bob, 'alice'), payload);
+      txn.set(matchedRef(bob, 'bob'), payload);
+    }),
+  );
+});
+
 test('quick match: a matched document without its room is denied', async () => {
   const payload = roomDoc({
     code: 'QCK123',

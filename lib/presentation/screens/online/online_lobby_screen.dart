@@ -2,12 +2,18 @@ import 'package:flutter/material.dart';
 
 import '../../../app/application/online/online_game_controller.dart';
 import '../../../app/application/online/online_lobby_controller.dart';
+import '../../../app/application/online/rematch_controller.dart';
+import '../../../app/router/app_router.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_radii.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
+import '../../../data/local/shared_preferences_settings_repository.dart';
 import '../../../domain/wallforge_domain.dart';
-import 'online_game_screen.dart';
+import '../../widgets/app_chrome.dart';
+
+/// Which lobby section a route alias asked to bring into view.
+enum OnlineLobbyFocus { none, create, join }
 
 /// Online lobby: choose create or join, then the shared room.
 ///
@@ -18,11 +24,19 @@ import 'online_game_screen.dart';
 /// for a lobby, so — following the pattern Phase 5 set for the AI selector and
 /// Phase 4 for placement feedback — this reuses the existing tokens and component
 /// shapes rather than inventing a new visual language. Tracked as Q-8.5.
+///
+/// Phase 11 (Q-8.5's resolution): the screen's cards and primary buttons now
+/// come from the shared Phase 11 kit (`AppCard`, the app-wide button shapes),
+/// so the lobby reads as the same product as Home, Modes and Settings. Its
+/// structure, labels and behaviour are unchanged — this was a visual
+/// alignment, not a redesign.
 class OnlineLobbyScreen extends StatefulWidget {
   const OnlineLobbyScreen({
     super.key,
     required this.controller,
     this.ownsController = false,
+    this.focus = OnlineLobbyFocus.none,
+    this.adoptRoom,
   });
 
   /// The lobby to render.
@@ -35,12 +49,21 @@ class OnlineLobbyScreen extends StatefulWidget {
   /// the flag the controller's room subscription would outlive the screen.
   final bool ownsController;
 
+  /// The section the `/online/create` or `/online/join` alias asked for.
+  final OnlineLobbyFocus focus;
+
+  /// A room this player is already seated in (a completed rematch claim),
+  /// for the controller to adopt once the screen is up.
+  final Room? adoptRoom;
+
   @override
   State<OnlineLobbyScreen> createState() => _OnlineLobbyScreenState();
 }
 
 class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
   final TextEditingController _codeField = TextEditingController();
+  final GlobalKey _createKey = GlobalKey();
+  final GlobalKey _joinKey = GlobalKey();
   String? _joinError;
 
   @override
@@ -57,6 +80,23 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
         widget.controller.uid == null) {
       widget.controller.signIn();
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final adopt = widget.adoptRoom;
+      if (adopt != null) {
+        widget.controller.adoptRoom(adopt);
+        return;
+      }
+      final target = switch (widget.focus) {
+        OnlineLobbyFocus.create => _createKey,
+        OnlineLobbyFocus.join => _joinKey,
+        OnlineLobbyFocus.none => null,
+      };
+      final targetContext = target?.currentContext;
+      if (targetContext != null) {
+        Scrollable.ensureVisible(targetContext);
+      }
+    });
   }
 
   @override
@@ -177,6 +217,7 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
         ),
       if (controller.hasMatchmaking) const SizedBox(height: AppSpacing.md),
       _card(
+        key: _createKey,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
@@ -199,6 +240,7 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
       ),
       const SizedBox(height: AppSpacing.md),
       _card(
+        key: _joinKey,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
@@ -266,22 +308,40 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
     OnlineLobbyController controller,
     Room room,
   ) async {
+    final settings = await const SharedPreferencesSettingsRepository().load();
     final match = OnlineGameController(
       rooms: controller.roomsRepository!,
       matches: controller.matchRepository!,
       uid: controller.uid!,
       code: room.code,
+      movementAssistance: settings.movementAssistance,
     );
+    // The rematch negotiation for this match (Phase 11, Q-9.2): built here,
+    // where the lobby's repositories and both players' ids are known, and
+    // handed to the game screen alongside the match controller.
+    final opponentId = room.opponentOf(controller.uid!);
+    final rematch = controller.matchmaking != null && opponentId != null
+        ? RematchController(
+            matchmaking: controller.matchmaking!,
+            rooms: controller.roomsRepository!,
+            myUid: controller.uid!,
+            opponentUid: opponentId,
+            config: room.boardConfig,
+            finishedCode: room.code,
+            finishedCreatedAtMs: room.createdAtMs,
+          )
+        : null;
     await match.connect();
     if (!context.mounted) {
       match.dispose();
+      rematch?.dispose();
       return;
     }
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) =>
-            OnlineGameScreen(controller: match, ownsController: true),
-      ),
+    // The named route (architecture.md §18: no widget-instance pushes);
+    // the game screen disposes both controllers with the route.
+    await Navigator.of(context).pushNamed(
+      AppRoutes.onlineGame,
+      arguments: OnlineGameRouteArgs(controller: match, rematch: rematch),
     );
   }
 
@@ -505,40 +565,34 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
         ),
       );
 
-  Widget _card({required Widget child}) => Container(
-    padding: const EdgeInsets.all(AppSpacing.md),
-    decoration: BoxDecoration(
-      color: AppColors.surfaceContainer,
-      borderRadius: BorderRadius.circular(AppRadii.md),
-      border: Border.all(color: AppColors.outlineVariant),
-    ),
-    child: child,
-  );
+  /// The Phase 11 shared card (see the class doc): one card shape for the
+  /// whole app.
+  Widget _card({required Widget child, Key? key}) =>
+      AppCard(key: key, child: child);
 
   Widget _primaryButton({
     required String label,
     required VoidCallback? onPressed,
-  }) => TextButton(
-    onPressed: onPressed,
-    style: TextButton.styleFrom(
-      backgroundColor: AppColors.primaryContainer,
-      foregroundColor: AppColors.onPrimaryContainer,
-      disabledBackgroundColor: AppColors.surfaceContainerHighest,
-      disabledForegroundColor: AppColors.onSurfaceVariant,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.xl,
-        vertical: AppSpacing.md,
+  }) => SizedBox(
+    height: 52,
+    child: FilledButton(
+      onPressed: onPressed,
+      style: FilledButton.styleFrom(
+        backgroundColor: AppColors.primaryContainer,
+        foregroundColor: AppColors.onPrimaryContainer,
+        disabledBackgroundColor: AppColors.surfaceContainerHighest,
+        disabledForegroundColor: AppColors.onSurfaceVariant,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadii.md),
+        ),
       ),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadii.sm),
-      ),
-    ),
-    child: Text(
-      label,
-      style: AppTypography.labelCaps.copyWith(
-        color: onPressed == null
-            ? AppColors.onSurfaceVariant
-            : AppColors.onPrimaryContainer,
+      child: Text(
+        label,
+        style: AppTypography.labelCaps.copyWith(
+          color: onPressed == null
+              ? AppColors.onSurfaceVariant
+              : AppColors.onPrimaryContainer,
+        ),
       ),
     ),
   );

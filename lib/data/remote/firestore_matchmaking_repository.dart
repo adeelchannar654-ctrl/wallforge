@@ -141,8 +141,12 @@ class FirestoreMatchmakingRepository implements MatchmakingRepository {
     }
 
     // Already matched, e.g. a reconnect: report the existing room rather than
-    // queueing for a second one.
-    final already = await _matchedRoom(config, uid);
+    // queueing for a second one. Only a *live* room counts — a matched
+    // document naming a finished or abandoned room is a record of a pairing
+    // that is over, and `cancel`'s contract says a later findMatch
+    // overwrites it (Phase 11: this is also what makes a rematch claim
+    // possible after a Quick Match game).
+    final already = await _liveMatchedRoom(config, uid);
     if (already != null) return MatchmakingResult.matched(already);
 
     // Announce ourselves *and* then try to claim someone. Doing both — rather
@@ -158,7 +162,7 @@ class FirestoreMatchmakingRepository implements MatchmakingRepository {
     for (var attempt = 0; attempt < claimAttempts; attempt++) {
       // Re-check first: an earlier attempt may have been won by the other player
       // while this one was being retried.
-      final mine = await _matchedRoom(config, uid);
+      final mine = await _liveMatchedRoom(config, uid);
       if (mine != null) return MatchmakingResult.matched(mine);
 
       final candidates = await client.query(
@@ -176,7 +180,7 @@ class FirestoreMatchmakingRepository implements MatchmakingRepository {
     }
 
     // One last look: a claim we lost may still have matched us.
-    final settled = await _matchedRoom(config, uid);
+    final settled = await _liveMatchedRoom(config, uid);
     if (settled != null) return MatchmakingResult.matched(settled);
 
     // The deciding question is not "did I see a partner" but "am I actually
@@ -245,20 +249,44 @@ class FirestoreMatchmakingRepository implements MatchmakingRepository {
       return await client.runTransaction<Room?>((txn) async {
         // Every read happens before any write, as Firestore requires.
         //
-        // 1. Am I already matched? Reading this outside the transaction is
-        //    precisely the race being guarded against.
-        if (await txn.get(_matchedPath(config, uid)) != null) return null;
+        // 1. Am I already in a *live* match? Reading this outside the
+        //    transaction is precisely the race being guarded against. A
+        //    matched document naming a finished or abandoned room is the
+        //    record of a pairing that is over: it does not block the claim,
+        //    and the writes below overwrite it — the behaviour `cancel`
+        //    documents and the Phase 11 rematch depends on.
+        //
+        //    Liveness is read from the room document itself, never from the
+        //    matched document: the matched document is a snapshot taken when
+        //    the pairing was made, so its embedded status still says
+        //    `waiting` long after the match has finished.
+        final myMatched = await txn.get(_matchedPath(config, uid));
+        if (myMatched != null) {
+          final named = Room.fromJson(myMatched);
+          final liveDoc = named == null
+              ? null
+              : await txn.get('$roomCollection/${named.code}');
+          if (_isLive(Room.fromJson(liveDoc))) return null;
+        }
 
         // 2. Is the candidate still waiting? Gone means someone else won it.
         final stillWaiting = await txn.get(candidate.path);
         if (stillWaiting == null) return null;
         if (stillWaiting['uid'] != otherUid) return null; // entry was replaced
 
-        // 3. Is the candidate already in another match? A player who matched
-        //    earlier can still have a leftover queue entry — from an earlier
-        //    session, or written before their own claim succeeded. Claiming
-        //    such an entry would seat one player in two rooms.
-        if (await txn.get(_matchedPath(config, otherUid)) != null) return null;
+        // 3. Is the candidate already in another *live* match? A player who
+        //    matched earlier can still have a leftover queue entry — from an
+        //    earlier session, or written before their own claim succeeded.
+        //    Claiming such an entry would seat one player in two rooms. A
+        //    finished/abandoned pairing, as in step 1, does not block.
+        final theirMatched = await txn.get(_matchedPath(config, otherUid));
+        if (theirMatched != null) {
+          final named = Room.fromJson(theirMatched);
+          final liveDoc = named == null
+              ? null
+              : await txn.get('$roomCollection/${named.code}');
+          if (_isLive(Room.fromJson(liveDoc))) return null;
+        }
 
         // 4. Claim it: consume *both* queue entries and seat both players.
         //    Forgetting the claimer's own entry leaves it queued while seated,
@@ -301,6 +329,110 @@ class FirestoreMatchmakingRepository implements MatchmakingRepository {
   Future<Room?> _matchedRoom(BoardConfig config, String uid) async =>
       Room.fromJson(await _read(_matchedPath(config, uid)));
 
+  /// Whether a matched document's room is a pairing that can still be
+  /// played — created and not yet over. A finished or abandoned room named
+  /// by a matched document is history, not a live pairing.
+  static bool _isLive(Room? room) =>
+      room != null &&
+      (room.status == RoomStatus.waiting ||
+          room.status == RoomStatus.ready ||
+          room.status == RoomStatus.started);
+
+  /// The caller's matched room when it is still live, else null.
+  ///
+  /// The matched document only *names* the room — it is a snapshot from
+  /// pairing time — so the room document itself decides liveness, and is
+  /// what gets returned (its state is the current one).
+  Future<Room?> _liveMatchedRoom(BoardConfig config, String uid) async {
+    final named = await _matchedRoom(config, uid);
+    if (named == null) return null;
+    final live = Room.fromJson(await _read('$roomCollection/${named.code}'));
+    return _isLive(live) ? live : null;
+  }
+
+  @override
+  Future<void> joinQueue({required BoardConfig config}) async {
+    final uid = await userId();
+    if (uid == null || uid.isEmpty) return;
+    // The announce half of findMatch, without the claim attempts: a rematch
+    // proposal must not pair the proposer with a stranger who happens to be
+    // waiting (Phase 11, Q-9.2).
+    await _write(_waitingPath(config, uid), <String, dynamic>{
+      'uid': uid,
+      'queuedAt': _nowMs,
+    });
+  }
+
+  @override
+  Future<List<String>> waitingPlayerIds({required BoardConfig config}) async {
+    final uid = await userId();
+    if (uid == null || uid.isEmpty) return const <String>[];
+    final candidates = await client.query(
+      collectionPath: _waitingCollection(config),
+      orderBy: 'queuedAt',
+      limit: candidateLimit,
+    );
+    final fresh = await _reapStale(candidates, uid);
+    return fresh
+        .map((doc) => doc.data['uid'])
+        .whereType<String>()
+        .toList(growable: false);
+  }
+
+  @override
+  Future<MatchmakingResult> claimPlayer({
+    required BoardConfig config,
+    required String candidateUid,
+  }) async {
+    final uid = await userId();
+    if (uid == null || uid.isEmpty) {
+      return const MatchmakingResult.rejected(
+        MatchmakingFailure(
+          MatchmakingFailureReason.notAuthenticated,
+          'Sign in to play online.',
+        ),
+      );
+    }
+    // Already matched with this candidate (a double-tap, or both players
+    // proposed and the other side's claim landed first): report the
+    // existing live room. A matched document naming anyone else — or the
+    // *finished* match, the normal case after a Quick Match game — must
+    // not be mistaken for this pairing.
+    final already = await _liveMatchedRoom(config, uid);
+    if (already != null &&
+        (already.blue.playerId == candidateUid ||
+            already.red.playerId == candidateUid)) {
+      return MatchmakingResult.matched(already);
+    }
+
+    final entry = await _read(_waitingPath(config, candidateUid));
+    if (entry == null) {
+      return const MatchmakingResult.rejected(
+        MatchmakingFailure(
+          MatchmakingFailureReason.pairingFailed,
+          'That player is no longer waiting.',
+        ),
+      );
+    }
+    final room = await _claim(
+      config,
+      uid,
+      FirestoreDocument(path: _waitingPath(config, candidateUid), data: entry),
+    );
+    if (room != null) return MatchmakingResult.matched(room);
+
+    // The claim may have lost to the other side's simultaneous claim, which
+    // still seats both players: check before reporting failure.
+    final settled = await _liveMatchedRoom(config, uid);
+    if (settled != null) return MatchmakingResult.matched(settled);
+    return const MatchmakingResult.rejected(
+      MatchmakingFailure(
+        MatchmakingFailureReason.pairingFailed,
+        'Could not complete the pairing. Please try again.',
+      ),
+    );
+  }
+
   @override
   Future<void> cancel({required BoardConfig config}) async {
     final uid = await userId();
@@ -315,7 +447,48 @@ class FirestoreMatchmakingRepository implements MatchmakingRepository {
   Stream<Room?> watchForMatch({
     required BoardConfig config,
     required String uid,
-  }) => client.watch(_matchedPath(config, uid)).map(Room.fromJson);
+  }) {
+    // Two documents matter: the matched document *names* the room, and the
+    // room document carries its live state. Watching only the matched
+    // document would never notice the match ending — it is a snapshot from
+    // pairing time — so this follows the named room and reports it only
+    // while it is live (Phase 11: a finished or abandoned room reads as
+    // "no live match", never as a room to re-enter).
+    StreamSubscription<Map<String, dynamic>?>? matchedSub;
+    StreamSubscription<Map<String, dynamic>?>? roomSub;
+    String? followedCode;
+    late StreamController<Room?> controller;
+    // The controller lives exactly as long as its listener: onCancel
+    // tears down both subscriptions, and a single-subscription
+    // controller with no listener is garbage. Nothing else can close it.
+    // ignore: close_sinks
+    controller = StreamController<Room?>(
+      onListen: () {
+        matchedSub = client.watch(_matchedPath(config, uid)).listen((data) {
+          final named = Room.fromJson(data);
+          if (named == null) {
+            followedCode = null;
+            roomSub?.cancel();
+            roomSub = null;
+            controller.add(null);
+            return;
+          }
+          if (named.code == followedCode) return;
+          followedCode = named.code;
+          roomSub?.cancel();
+          roomSub = client.watch('$roomCollection/${named.code}').listen((doc) {
+            final room = Room.fromJson(doc);
+            controller.add(_isLive(room) ? room : null);
+          });
+        });
+      },
+      onCancel: () async {
+        await roomSub?.cancel();
+        await matchedSub?.cancel();
+      },
+    );
+    return controller.stream;
+  }
 
   // --- Transport, total like every other repository ---------------------------
 

@@ -384,6 +384,20 @@ class OnlineLobbyController extends ChangeNotifier {
     await _watchRoom(room.code);
   }
 
+  /// Enters a room this player is already seated in, created outside the
+  /// create/join/quick-match paths.
+  ///
+  /// Phase 11 (Q-9.2): after a rematch claim, both players hold a brand-new
+  /// room neither of them created through this lobby. Adopting it signs in
+  /// first (the room's seats are keyed by uid), then takes the ordinary
+  /// room path — the room watcher immediately replaces the passed snapshot
+  /// with the live document, so a slightly stale snapshot self-corrects.
+  Future<void> adoptRoom(Room room) async {
+    if (!_authState.isSignedIn) await signIn();
+    if (_disposed || !_authState.isSignedIn) return;
+    await _enterRoom(room);
+  }
+
   /// Subscribes to the room so the creator sees the opponent arrive.
   ///
   /// A single listener on a single document, per the free-tier reasoning in

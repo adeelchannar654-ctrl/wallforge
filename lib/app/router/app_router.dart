@@ -2,27 +2,102 @@ import 'package:flutter/material.dart';
 
 import '../../data/local/in_memory_repositories.dart';
 import '../../domain/models/board_config.dart';
+import '../../domain/repositories/room.dart';
 import '../../app/application/ai/ai_difficulty.dart';
 import '../../app/application/local_game_controller.dart';
+import '../../app/application/online/online_game_controller.dart';
 import '../../app/application/online/online_lobby_factory.dart';
+import '../../app/application/online/rematch_controller.dart';
 import '../../app/application/persistence_factory.dart';
 import '../../app/application/match_setup.dart';
-import '../../presentation/screens/board_preview/board_preview_screen.dart';
+import '../../presentation/screens/ai/ai_difficulty_screen.dart';
 import '../../presentation/screens/game/game_screen.dart';
+import '../../presentation/screens/home/home_screen.dart';
+import '../../presentation/screens/modes/game_modes_screen.dart';
+import '../../presentation/screens/online/online_game_screen.dart';
 import '../../presentation/screens/online/online_lobby_screen.dart';
+import '../../presentation/screens/profile/profile_screen.dart';
+import '../../presentation/screens/result/result_screen.dart';
+import '../../presentation/screens/settings/settings_screen.dart';
+import '../../presentation/screens/splash/splash_screen.dart';
+import '../../presentation/screens/tutorial/tutorial_screen.dart';
 
 /// Canonical route paths for the application (see `architecture.md` §18).
+///
+/// Phase 11 completed the §18 map. Two paths deserve a note:
+///
+/// * `/` is the splash entry; the §18 list's own `/home` is the home screen.
+/// * `/online/game` is a Phase 11 addition to the list (§18 names `/game`
+///   only): the online match screen's arguments are a live controller and
+///   a room, not a `MatchSetup`, so it cannot share the `/game` route.
+/// * `/online/create` and `/online/join` open the lobby focused on the
+///   matching section (see `memory.md` §13s for the one-lobby decision).
 class AppRoutes {
   const AppRoutes._();
 
-  /// Root of the application.
-  static const String home = '/';
+  /// Entry point: the splash screen, which replaces itself with [home].
+  static const String root = '/';
 
-  /// Local pass-and-play game.
-  static const String game = '/game';
+  /// The product home screen.
+  static const String home = '/home';
+
+  /// Game modes: pick a mode and a board configuration.
+  static const String modes = '/modes';
+
+  /// §18 alias: the modes screen with Local preselected.
+  static const String local = '/local';
+
+  /// AI difficulty picker (Phase 11, Q-5.2).
+  static const String ai = '/ai';
 
   /// Online room lobby (Phase 8).
   static const String online = '/online';
+
+  /// §18 alias: the lobby focused on its Create section.
+  static const String onlineCreate = '/online/create';
+
+  /// §18 alias: the lobby focused on its Join section.
+  static const String onlineJoin = '/online/join';
+
+  /// An online match in progress.
+  static const String onlineGame = '/online/game';
+
+  /// Local pass-and-play / vs-AI game.
+  static const String game = '/game';
+
+  /// The shared result screen.
+  static const String result = '/result';
+
+  /// The guided tutorial.
+  static const String tutorial = '/tutorial';
+
+  /// Profile: the player's real statistics.
+  static const String profile = '/profile';
+
+  /// Settings.
+  static const String settings = '/settings';
+}
+
+/// Arguments for the `/online/game` route: the match controller the lobby
+/// built and connected, plus its rematch negotiation.
+class OnlineGameRouteArgs {
+  const OnlineGameRouteArgs({required this.controller, this.rematch});
+
+  final OnlineGameController controller;
+  final RematchController? rematch;
+}
+
+/// Arguments for the `/result` route when it is addressed directly. (In the
+/// app's own flows the game screens present the same [ResultScreen] in
+/// place at match end, because their controllers own the rematch; the route
+/// exists so the screen is addressable like every other screen in §18.)
+class ResultRouteArgs {
+  const ResultRouteArgs({required this.data, required this.setup});
+
+  final MatchResultData data;
+
+  /// The match to restart on Rematch (local / AI modes).
+  final MatchSetup setup;
 }
 
 /// Builds the application's [Route] from a [RouteSettings].
@@ -31,40 +106,120 @@ class AppRouter {
 
   static Route<void> onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
+      case AppRoutes.root:
+        return _page(settings, const SplashScreen());
+      case AppRoutes.home:
+        return _page(settings, const HomeScreen());
+      case AppRoutes.modes:
+        return _page(
+          settings,
+          GameModesScreen(
+            initialMode: settings.arguments is GameMode
+                ? settings.arguments as GameMode
+                : GameMode.local,
+          ),
+        );
+      case AppRoutes.local:
+        return _page(settings, const GameModesScreen());
+      case AppRoutes.ai:
+        return _page(
+          settings,
+          AiDifficultyScreen(
+            config: settings.arguments is BoardConfig
+                ? settings.arguments as BoardConfig
+                : const BoardConfig(),
+          ),
+        );
       case AppRoutes.game:
         return MaterialPageRoute<void>(
           settings: settings,
-          // The route builds the controller, so the screen disposes it with the
-          // route (Q-8.6). Previously it leaked for the life of the process.
+          // The route builds the controller, so the screen disposes it with
+          // the route (Q-8.6). Previously it leaked for the life of the
+          // process.
           builder: (_) => GameScreen(
             controller: _controllerFor(settings),
             ownsController: true,
           ),
         );
       case AppRoutes.online:
-        final lobby = OnlineLobbyFactory.firebase(
-          boardConfig: _onlineBoardConfig(settings),
-        );
-        return MaterialPageRoute<void>(
-          settings: settings,
-          // The route built the controller, so the screen disposes it.
-          builder: (_) =>
-              OnlineLobbyScreen(controller: lobby, ownsController: true),
-        );
-      case AppRoutes.home:
+      case AppRoutes.onlineCreate:
+      case AppRoutes.onlineJoin:
+        return _onlineLobby(settings);
+      case AppRoutes.onlineGame:
+        final args = settings.arguments;
+        if (args is OnlineGameRouteArgs) {
+          return _page(
+            settings,
+            OnlineGameScreen(
+              controller: args.controller,
+              rematch: args.rematch,
+              ownsController: true,
+            ),
+          );
+        }
+        // No live controller: there is no match to show. Fall back to the
+        // lobby rather than crash on a deep link.
+        return _onlineLobby(settings);
+      case AppRoutes.result:
+        return _result(settings);
+      case AppRoutes.tutorial:
+        return _page(settings, const TutorialScreen());
+      case AppRoutes.profile:
+        return _page(settings, const ProfileScreen());
+      case AppRoutes.settings:
+        return _page(settings, const SettingsScreen());
       default:
-        return MaterialPageRoute<void>(
-          settings: settings,
-          builder: (_) => const BoardPreviewScreen(),
-        );
+        return _page(settings, const SplashScreen());
     }
   }
 
-  /// The board a created room will use. A [BoardConfig] argument is honoured;
-  /// anything else means the default 9x9.
-  static BoardConfig _onlineBoardConfig(RouteSettings settings) {
+  static MaterialPageRoute<void> _page(RouteSettings settings, Widget child) {
+    return MaterialPageRoute<void>(settings: settings, builder: (_) => child);
+  }
+
+  /// The online lobby, optionally adopting an already-seated room (a
+  /// rematch) or focused on one of its sections via the §18 alias routes.
+  static Route<void> _onlineLobby(RouteSettings settings) {
     final args = settings.arguments;
-    return args is BoardConfig ? args : const BoardConfig();
+    final lobby = OnlineLobbyFactory.firebase(
+      boardConfig: args is BoardConfig ? args : null,
+    );
+    final focus = switch (settings.name) {
+      AppRoutes.onlineCreate => OnlineLobbyFocus.create,
+      AppRoutes.onlineJoin => OnlineLobbyFocus.join,
+      _ => OnlineLobbyFocus.none,
+    };
+    return MaterialPageRoute<void>(
+      settings: settings,
+      // The route built the controller, so the screen disposes it.
+      builder: (_) => OnlineLobbyScreen(
+        controller: lobby,
+        ownsController: true,
+        focus: focus,
+        adoptRoom: args is Room ? args : null,
+      ),
+    );
+  }
+
+  static Route<void> _result(RouteSettings settings) {
+    final args = settings.arguments;
+    if (args is ResultRouteArgs) {
+      return MaterialPageRoute<void>(
+        settings: settings,
+        builder: (context) => Scaffold(
+          body: ResultScreen(
+            data: args.data,
+            onRematch: () => Navigator.of(context)
+                .pushReplacementNamed(AppRoutes.game, arguments: args.setup),
+            onHome: () =>
+                Navigator.of(context)
+                    .pushNamedAndRemoveUntil(AppRoutes.home, (_) => false),
+          ),
+        ),
+      );
+    }
+    // A result with no data has nothing truthful to show; go home.
+    return _page(settings, const HomeScreen());
   }
 
   /// Builds the controller for the game route.

@@ -127,6 +127,42 @@ abstract interface class MatchmakingRepository {
     required BoardConfig config,
     required String uid,
   });
+
+  /// Writes the caller's queue entry for [config] *without* attempting to
+  /// pair with anyone already waiting.
+  ///
+  /// Phase 11 (Q-9.2): this is a rematch proposal. `findMatch` pairs greedily
+  /// with whoever is waiting, which is the wrong semantics for a proposal
+  /// addressed to one specific player — the proposer must enter the queue
+  /// claimable by that player only, and pairing happens when the other
+  /// player explicitly accepts via [claimPlayer]. Best-effort and total,
+  /// like [cancel]: a transport failure simply leaves the caller unqueued.
+  Future<void> joinQueue({required BoardConfig config});
+
+  /// The uids currently holding fresh queue entries for [config], oldest
+  /// first.
+  ///
+  /// Phase 11 (Q-9.2): how a player learns that one specific other player —
+  /// the opponent from a just-finished match — is proposing a rematch.
+  /// Stale or malformed entries are reaped exactly as [findMatch] reaps
+  /// them, so a lapsed proposal disappears from this list on its own.
+  Future<List<String>> waitingPlayerIds({required BoardConfig config});
+
+  /// Pairs the caller with the specific waiting player [candidateUid] for
+  /// [config], through the same single claim transaction [findMatch] uses:
+  /// the waiting player becomes host in Blue, the caller takes Red, both
+  /// queue entries are consumed, and both `matched` documents land with the
+  /// new room in the same commit.
+  ///
+  /// Phase 11 (Q-9.2): this is the *accept* half of a rematch — an explicit
+  /// act by the second player, which is what makes the pairing consensual
+  /// rather than automatic. Returns [MatchRejected] with
+  /// [MatchmakingFailureReason.pairingFailed] when the candidate is no
+  /// longer waiting or the claim cannot commit.
+  Future<MatchmakingResult> claimPlayer({
+    required BoardConfig config,
+    required String candidateUid,
+  });
 }
 
 /// The path segment that partitions the queue by board configuration.
