@@ -45,6 +45,7 @@ class BoardPainter extends CustomPainter {
     required this.state,
     required this.geometry,
     this.legalMoveTargets = const {},
+    this.pathCells = const [],
     this.wallPreview,
     this.selectedCell,
     this.showCoordinates = true,
@@ -54,6 +55,11 @@ class BoardPainter extends CustomPainter {
   final GameState state;
   final BoardGeometry geometry;
   final Set<Cell> legalMoveTargets;
+
+  /// Movement-assistance route for the player to move (Phase 11): the cells
+  /// of their shortest route to the goal, drawn as a dotted trail. Empty in
+  /// every pre-Phase-11 use, so existing rendering is unchanged.
+  final List<Cell> pathCells;
   final WallPreview? wallPreview;
   final Cell? selectedCell;
   final bool showCoordinates;
@@ -67,6 +73,7 @@ class BoardPainter extends CustomPainter {
     _drawGoalStrips(canvas, size);
     if (showCoordinates) _drawCoordinates(canvas, size);
     _drawLegalMoveRings(canvas, size);
+    if (pathCells.isNotEmpty) _drawPathTrail(canvas, size);
     _drawConflictHalos(canvas);
     _drawWalls(canvas, size);
     _drawGhostWall(canvas, size);
@@ -260,6 +267,39 @@ class BoardPainter extends CustomPainter {
       final outerR = g.cellSize * 0.35;
       canvas.drawCircle(centre, outerR, ringPaint);
       canvas.drawCircle(centre, g.cellSize * 0.12, dotPaint);
+    }
+  }
+
+  /// The movement-assistance trail: a thin line from the pawn through each
+  /// route cell, with a dot on every cell, in the moving player's colour at
+  /// reduced opacity — visually quieter than the legal-move rings, and a
+  /// different shape (a connected trail, not rings), so the two meanings are
+  /// never carried by colour alone (`design.md` §26).
+  void _drawPathTrail(Canvas canvas, Size size) {
+    final g = geometry;
+    final p1 = state.currentPlayer == PlayerId.blue;
+    final color = p1 ? AppColors.primaryContainer : AppColors.secondary;
+    final start = g.cellCenterFromModel(
+      state.pawnPosition(state.currentPlayer),
+    );
+    final centres = <Offset>[
+      start,
+      for (final cell in pathCells) g.cellCenterFromModel(cell),
+    ];
+
+    final linePaint = Paint()
+      ..color = color.withValues(alpha: 0.35)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    final path = Path()..moveTo(centres.first.dx, centres.first.dy);
+    for (final centre in centres.skip(1)) {
+      path.lineTo(centre.dx, centre.dy);
+    }
+    canvas.drawPath(path, linePaint);
+
+    final dotPaint = Paint()..color = color.withValues(alpha: 0.55);
+    for (final centre in centres.skip(1)) {
+      canvas.drawCircle(centre, g.cellSize * 0.09, dotPaint);
     }
   }
 
@@ -504,6 +544,7 @@ class BoardPainter extends CustomPainter {
   bool shouldRepaint(BoardPainter oldDelegate) =>
       state != oldDelegate.state ||
       legalMoveTargets != oldDelegate.legalMoveTargets ||
+      pathCells != oldDelegate.pathCells ||
       wallPreview != oldDelegate.wallPreview ||
       selectedCell != oldDelegate.selectedCell ||
       showCoordinates != oldDelegate.showCoordinates ||

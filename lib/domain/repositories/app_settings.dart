@@ -10,6 +10,11 @@
 /// * [confirmWallPlacement] — the real `LocalGameController.toggleConfirmWallPlacement()`
 ///   toggle shown in the game HUD.
 /// * [aiDifficulty] — the difficulty chosen on the entry screen.
+/// * [tutorialCompleted] — set by the Phase 11 tutorial.
+/// * [movementAssistance] — the Phase 11 Settings feature: while Move is
+///   selected, the current player's shortest route to their goal is drawn
+///   on the board. Added in Phase 11 because `design.md` §23 lists the
+///   setting; it is a real, working feature, not a placeholder.
 ///
 /// No theme, sound, haptics or accessibility setting is included: none of those
 /// exist in the app yet, and inventing fields for them would be fabricating
@@ -19,6 +24,7 @@ class AppSettings {
     this.confirmWallPlacement = true,
     this.aiDifficulty = defaultAiDifficulty,
     this.tutorialCompleted = false,
+    this.movementAssistance = false,
   });
 
   /// Factory-wide defaults, used when nothing is stored or the stored value is
@@ -54,28 +60,38 @@ class AppSettings {
 
   /// Whether the tutorial has been completed.
   ///
-  /// **Reserved placeholder — nothing sets this yet.** There is no tutorial in
-  /// the app (`design.md` §22 tutorial UX is later UI work), so there is no
-  /// honest producer for this value. It is declared now so the persistence shape
-  /// is complete for when a tutorial lands, rather than being retro-fitted later
-  /// with a migration. It is not a fake feature: it is a field that is always
-  /// `false` today and is never read by any UI.
+  /// Declared in Phase 6 as a reserved field so the persistence shape was
+  /// complete when a tutorial landed; the Phase 11 tutorial is that producer.
+  /// It flips when the learner finishes the tutorial or skips it — its
+  /// product meaning is "the first-run tutorial offer has been resolved";
+  /// the tutorial stays replayable from Home and Settings either way.
   final bool tutorialCompleted;
+
+  /// Whether movement assistance is on: while Move is selected, the board
+  /// draws the current player's shortest route to their goal row.
+  ///
+  /// `design.md` §23 lists the setting without defining it; Phase 11 scoped
+  /// it to this behaviour (recorded in `memory.md` §13s). Defaults off, so
+  /// the board is unchanged until the player opts in.
+  final bool movementAssistance;
 
   AppSettings copyWith({
     bool? confirmWallPlacement,
     String? aiDifficulty,
     bool? tutorialCompleted,
+    bool? movementAssistance,
   }) => AppSettings(
     confirmWallPlacement: confirmWallPlacement ?? this.confirmWallPlacement,
     aiDifficulty: aiDifficulty ?? this.aiDifficulty,
     tutorialCompleted: tutorialCompleted ?? this.tutorialCompleted,
+    movementAssistance: movementAssistance ?? this.movementAssistance,
   );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'confirmWallPlacement': confirmWallPlacement,
     'aiDifficulty': aiDifficulty,
     'tutorialCompleted': tutorialCompleted,
+    'movementAssistance': movementAssistance,
   };
 
   /// Rebuilds settings from [json], substituting defaults for anything missing
@@ -86,6 +102,7 @@ class AppSettings {
     final rawConfirm = json['confirmWallPlacement'];
     final rawDifficulty = json['aiDifficulty'];
     final rawTutorial = json['tutorialCompleted'];
+    final rawAssistance = json['movementAssistance'];
     final difficultyIsKnown =
         rawDifficulty is String && knownAiDifficulties.contains(rawDifficulty);
     return AppSettings(
@@ -96,6 +113,9 @@ class AppSettings {
       tutorialCompleted: rawTutorial is bool
           ? rawTutorial
           : defaults.tutorialCompleted,
+      movementAssistance: rawAssistance is bool
+          ? rawAssistance
+          : defaults.movementAssistance,
     );
   }
 
@@ -104,15 +124,21 @@ class AppSettings {
       other is AppSettings &&
       other.confirmWallPlacement == confirmWallPlacement &&
       other.aiDifficulty == aiDifficulty &&
-      other.tutorialCompleted == tutorialCompleted;
+      other.tutorialCompleted == tutorialCompleted &&
+      other.movementAssistance == movementAssistance;
 
   @override
-  int get hashCode =>
-      Object.hash(confirmWallPlacement, aiDifficulty, tutorialCompleted);
+  int get hashCode => Object.hash(
+    confirmWallPlacement,
+    aiDifficulty,
+    tutorialCompleted,
+    movementAssistance,
+  );
 
   @override
   String toString() =>
       'AppSettings(confirmWallPlacement: $confirmWallPlacement, '
       'aiDifficulty: $aiDifficulty, '
-      'tutorialCompleted: $tutorialCompleted)';
+      'tutorialCompleted: $tutorialCompleted, '
+      'movementAssistance: $movementAssistance)';
 }

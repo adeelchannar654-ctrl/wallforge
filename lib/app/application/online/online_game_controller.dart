@@ -116,6 +116,7 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
     GameState? initialState,
     DateTime Function()? clock,
     this.opponentTimeout = opponentInactivityThreshold,
+    this.movementAssistance = false,
   }) : _state = initialState ?? GameState.initial(),
        _clock = clock ?? DateTime.now,
        _room = Room.fromJson(<String, dynamic>{}) ?? _emptyRoom;
@@ -139,6 +140,12 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
   /// the shared [opponentInactivityThreshold] the claim and the Security
   /// Rules also use.
   final Duration opponentTimeout;
+
+  /// Whether the local player has movement assistance on (`design.md` §23,
+  /// Phase 11): the board draws their shortest route while Move is selected
+  /// on their turn. Resolved from the persisted settings by the lobby when
+  /// it builds this controller; the game itself has no settings store.
+  final bool movementAssistance;
 
   final DateTime Function() _clock;
 

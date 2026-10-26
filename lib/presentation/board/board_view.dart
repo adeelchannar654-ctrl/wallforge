@@ -16,6 +16,7 @@ class BoardView extends StatelessWidget {
     super.key,
     required this.state,
     this.legalMoveTargets = const {},
+    this.pathCells = const [],
     this.wallPreview,
     this.selectedCell,
     this.showCoordinates = true,
@@ -30,6 +31,11 @@ class BoardView extends StatelessWidget {
 
   /// Cells to highlight as legal move destinations.
   final Set<Cell> legalMoveTargets;
+
+  /// Movement-assistance route cells for the player to move (Phase 11),
+  /// drawn as a dotted trail. Empty unless the setting is on and Move is
+  /// selected.
+  final List<Cell> pathCells;
 
   /// Ghost wall preview (valid/invalid).
   final WallPreview? wallPreview;
@@ -57,7 +63,11 @@ class BoardView extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final available = constraints.biggest.shortestSide;
-        final boardSize = available.clamp(280.0, maxSize);
+        // The 280 floor keeps a playable board tappable, but a caller that
+        // caps the board below it (Home's small visual, Phase 11) means the
+        // cap, not the floor — clamp() would throw for lower > upper.
+        final floor = maxSize >= 280.0 ? 280.0 : 0.0;
+        final boardSize = available.clamp(floor, maxSize);
 
         final geometry = BoardGeometry(
           boardSize: state.boardConfig.size,
@@ -78,6 +88,7 @@ class BoardView extends StatelessWidget {
                   state: state,
                   geometry: geometry,
                   legalMoveTargets: legalMoveTargets,
+                  pathCells: pathCells,
                   wallPreview: wallPreview,
                   selectedCell: selectedCell,
                   showCoordinates: showCoordinates,
