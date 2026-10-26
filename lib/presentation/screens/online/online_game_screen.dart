@@ -2,12 +2,17 @@ import 'package:flutter/material.dart';
 
 import '../../../app/application/game_interaction.dart';
 import '../../../app/application/online/online_game_controller.dart';
+import '../../../app/application/online/rematch_controller.dart';
+import '../../../app/application/shortest_path.dart';
+import '../../../app/router/app_router.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_radii.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
 import '../../../domain/wallforge_domain.dart';
 import '../../board/board.dart';
+import '../result/result_screen.dart';
+import 'online_rematch_section.dart';
 
 /// Online match screen — one player, one board, one opponent.
 ///
@@ -33,6 +38,7 @@ class OnlineGameScreen extends StatelessWidget {
     super.key,
     required this.controller,
     this.ownsController = false,
+    this.rematch,
   });
 
   /// The match being played.
@@ -41,10 +47,16 @@ class OnlineGameScreen extends StatelessWidget {
   /// Whether this widget disposes the controller with the route.
   final bool ownsController;
 
+  /// The rematch negotiation for this match (Phase 11, Q-9.2), built by the
+  /// lobby alongside the match controller. Null when the screen was reached
+  /// without one — the Result screen then simply offers no rematch section.
+  final RematchController? rematch;
+
   @override
   Widget build(BuildContext context) {
     return _Owner(
       controller: controller,
+      rematch: rematch,
       owns: ownsController,
       child: ListenableBuilder(
         listenable: controller,
@@ -53,7 +65,56 @@ class OnlineGameScreen extends StatelessWidget {
     );
   }
 
+  /// The shared Result screen's data, from the real finished state.
+  MatchResultData _resultData() {
+    final state = controller.state;
+    final config = state.boardConfig;
+    return MatchResultData(
+      mode: ResultMode.online,
+      winner: controller.isAbandoned ? null : controller.winner,
+      turnsPlayed: state.turnNumber,
+      wallsUsedBlue:
+          config.wallsPerPlayer - state.wallsRemaining(PlayerId.blue),
+      wallsUsedRed: config.wallsPerPlayer - state.wallsRemaining(PlayerId.red),
+      config: config,
+      mySide: controller.mySide,
+      opponentLeft: controller.isAbandoned,
+      roomCode: controller.room.code,
+      note: controller.isAbandoned
+          ? controller.claimedByMe
+                ? 'You claimed this match as abandoned.'
+                : 'Your opponent claimed this match as abandoned.'
+          : null,
+    );
+  }
+
   Widget _build(BuildContext context) {
+    // Phase 11: a finished or abandoned match hands the body to the shared
+    // Result screen (§21) — the same component the local game uses — with
+    // the rematch consent section in place of a plain Rematch button.
+    if (controller.isFinished || controller.isAbandoned) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: _buildAppBar(context),
+        body: ResultScreen(
+          data: _resultData(),
+          onHome: () =>
+              Navigator.of(context)
+                  .pushNamedAndRemoveUntil(AppRoutes.home, (_) => false),
+          rematchSection: rematch == null
+              ? null
+              : OnlineRematchSection(
+                  controller: rematch!,
+                  onMatched: (room) =>
+                      Navigator.of(context).pushNamedAndRemoveUntil(
+                        AppRoutes.online,
+                        (route) => route.settings.name == AppRoutes.home,
+                        arguments: room,
+                      ),
+                ),
+        ),
+      );
+    }
     final isDesktop = MediaQuery.sizeOf(context).width >= 768;
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -390,6 +451,15 @@ class OnlineGameScreen extends StatelessWidget {
                 // Empty when it is not this player's turn, so no target is
                 // drawn and nothing looks tappable.
                 legalMoveTargets: controller.legalMoveTargets,
+                // Movement assistance (§23): this player's shortest route,
+                // only on their turn with Move selected.
+                pathCells:
+                    controller.movementAssistance &&
+                        controller.mode == InteractionMode.move &&
+                        controller.isMyTurn &&
+                        controller.mySide != null
+                    ? shortestRoute(controller.state, controller.mySide!)
+                    : const [],
                 wallPreview: controller.pendingWall == null
                     ? null
                     : WallPreview(
@@ -540,9 +610,11 @@ class _Owner extends StatefulWidget {
     required this.controller,
     required this.owns,
     required this.child,
+    this.rematch,
   });
 
   final OnlineGameController controller;
+  final RematchController? rematch;
   final bool owns;
   final Widget child;
 
@@ -553,7 +625,10 @@ class _Owner extends StatefulWidget {
 class _OwnerState extends State<_Owner> {
   @override
   void dispose() {
-    if (widget.owns) widget.controller.dispose();
+    if (widget.owns) {
+      widget.controller.dispose();
+      widget.rematch?.dispose();
+    }
     super.dispose();
   }
 

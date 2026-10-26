@@ -11,6 +11,8 @@ import 'package:wallforge/domain/models/player_id.dart';
 import 'package:wallforge/domain/models/wall_orientation.dart';
 import 'package:wallforge/presentation/board/board.dart';
 import 'package:wallforge/presentation/screens/game/game_screen.dart';
+import 'package:wallforge/presentation/screens/home/home_screen.dart';
+import 'package:wallforge/presentation/screens/result/result_screen.dart';
 
 void main() {
   group('GameScreen', () {
@@ -219,7 +221,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('result overlay appears and Rematch resets the match', (
+    testWidgets('result screen appears and Rematch resets the match', (
       tester,
     ) async {
       await _setViewport(tester, const Size(1024, 768));
@@ -230,24 +232,34 @@ void main() {
       await tester.pump();
 
       expect(controller.state.status, GameStatus.finished);
-      expect(find.byKey(const ValueKey('game-result-overlay')), findsOneWidget);
-      expect(find.byKey(const ValueKey('result-heading')), findsOneWidget);
+      // Phase 11: the shared Result screen replaces the old overlay, and its
+      // statistics come from the finished state itself — the scripted game
+      // is 17 actions, Blue used 1 wall, Red used 2, Blue reached row 0.
+      expect(find.byType(ResultScreen), findsOneWidget);
+      expect(find.text('BLUE WINS!'), findsOneWidget);
+      expect(find.text('Turns played'), findsOneWidget);
+      expect(find.text('17'), findsOneWidget);
+      expect(find.text('Walls used — Blue'), findsOneWidget);
+      expect(find.text('Walls used — Red'), findsOneWidget);
+      expect(find.text('Result'), findsOneWidget);
+      expect(find.text('Blue wins'), findsOneWidget);
       expect(find.text('REMATCH'), findsOneWidget);
-      expect(find.text('HOME'), findsOneWidget);
+      expect(find.text('RETURN TO HOME'), findsOneWidget);
 
       await tester.tap(find.text('REMATCH'));
       await tester.pump();
       expect(controller.state.status, GameStatus.inProgress);
       expect(controller.state.turnNumber, 0);
-      expect(find.byKey(const ValueKey('game-result-overlay')), findsNothing);
+      expect(find.byType(ResultScreen), findsNothing);
     });
 
-    testWidgets('result Home returns to the previous route', (tester) async {
+    testWidgets('result Home goes to the Home screen', (tester) async {
       await _setViewport(tester, const Size(390, 844));
       final controller = LocalGameController();
       addTearDown(controller.dispose);
       await tester.pumpWidget(
         MaterialApp(
+          onGenerateRoute: AppRouter.onGenerateRoute,
           home: Builder(
             builder: (context) => Scaffold(
               body: TextButton(
@@ -267,9 +279,11 @@ void main() {
       _replayScriptedGame(controller);
       await tester.pump();
 
-      await tester.tap(find.text('HOME'));
+      await tester.tap(find.text('RETURN TO HOME'));
       await tester.pumpAndSettle();
-      expect(find.text('OPEN'), findsOneWidget);
+      // Phase 11: HOME on the result goes to the Home route, which this
+      // harness serves through the real router.
+      expect(find.byType(HomeScreen), findsOneWidget);
     });
 
     testWidgets('Restart and Back work', (tester) async {
@@ -311,22 +325,22 @@ void main() {
   });
 
   group('AppRouter', () {
-    testWidgets('passes a BoardConfig argument to GameScreen', (tester) async {
+    testWidgets('a size chosen on Game Modes reaches the GameScreen', (
+      tester,
+    ) async {
       await _setViewport(tester, const Size(390, 844));
       const config = BoardConfig(size: 7);
       await tester.pumpWidget(
         const MaterialApp(
-          initialRoute: AppRoutes.home,
+          initialRoute: AppRoutes.modes,
           onGenerateRoute: AppRouter.onGenerateRoute,
         ),
       );
-      final preset = find.text('Initial 7×7');
-      await tester.ensureVisible(preset);
-      await tester.tap(preset);
       await tester.pumpAndSettle();
-      // Scrolled to the preset, so the start button needs bringing back into
-      // view. Asserting on the game screen should not depend on how long the
-      // entry page has grown.
+      final size = find.text('7×7');
+      await tester.ensureVisible(size);
+      await tester.tap(size);
+      await tester.pumpAndSettle();
       final start = find.text('START LOCAL MATCH');
       await tester.ensureVisible(start);
       await tester.tap(start);

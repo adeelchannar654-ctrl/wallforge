@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../app/application/game_interaction.dart';
 import '../../../app/application/local_game_controller.dart';
+import '../../../app/application/shortest_path.dart';
+import '../../../app/router/app_router.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_elevation.dart';
 import '../../../app/theme/app_radii.dart';
@@ -10,6 +12,7 @@ import '../../../app/theme/app_typography.dart';
 import '../../../domain/models/game_status.dart';
 import '../../../domain/models/player_id.dart';
 import '../../board/board.dart';
+import '../result/result_screen.dart';
 
 /// Interactive local game screen — pass-and-play between two humans.
 ///
@@ -46,19 +49,28 @@ class GameScreen extends StatelessWidget {
       child: ListenableBuilder(
         listenable: controller,
         builder: (context, _) {
+          // Phase 11: a finished match hands the whole screen to the shared
+          // Result screen (§21) — the same component the online game uses —
+          // instead of the Phase 4 overlay this screen used to draw.
+          if (controller.showingResult) {
+            return Scaffold(
+              backgroundColor: AppColors.background,
+              body: ResultScreen(
+                data: _resultData(),
+                onRematch: controller.rematch,
+                onHome: () =>
+                    Navigator.of(context)
+                        .pushNamedAndRemoveUntil(AppRoutes.home, (_) => false),
+              ),
+            );
+          }
           final isDesktop = MediaQuery.sizeOf(context).width >= 768;
           return Scaffold(
             backgroundColor: AppColors.background,
-            body: Stack(
-              children: [
-                SafeArea(
-                  child: isDesktop
-                      ? _buildDesktopLayout(context)
-                      : _buildMobileLayout(context),
-                ),
-                if (controller.showingResult)
-                  Positioned.fill(child: _buildResultOverlay(context)),
-              ],
+            body: SafeArea(
+              child: isDesktop
+                  ? _buildDesktopLayout(context)
+                  : _buildMobileLayout(context),
             ),
           );
         },
@@ -118,6 +130,23 @@ class GameScreen extends StatelessWidget {
     );
   }
 
+  /// The shared Result screen's data, from the real finished state.
+  MatchResultData _resultData() {
+    final state = controller.state;
+    final config = state.boardConfig;
+    return MatchResultData(
+      mode: controller.versusAi ? ResultMode.versusAi : ResultMode.local,
+      winner: controller.winner,
+      turnsPlayed: state.turnNumber,
+      wallsUsedBlue:
+          config.wallsPerPlayer - state.wallsRemaining(PlayerId.blue),
+      wallsUsedRed: config.wallsPerPlayer - state.wallsRemaining(PlayerId.red),
+      config: config,
+      mySide: controller.versusAi ? PlayerId.blue : null,
+      aiDifficulty: controller.versusAi ? controller.aiDifficulty : null,
+    );
+  }
+
   Widget _buildBoardArea() {
     final pendingFailure = controller.pendingWallFailure;
     return LayoutBuilder(
@@ -135,6 +164,17 @@ class GameScreen extends StatelessWidget {
                 child: BoardView(
                   state: controller.state,
                   legalMoveTargets: controller.legalMoveTargets,
+                  // Movement assistance (§23): the current player's
+                  // shortest route, only while Move is selected.
+                  pathCells:
+                      controller.settings.movementAssistance &&
+                          controller.mode == InteractionMode.move &&
+                          controller.state.status == GameStatus.inProgress
+                      ? shortestRoute(
+                          controller.state,
+                          controller.currentPlayer,
+                        )
+                      : const [],
                   wallPreview: controller.pendingWall != null
                       ? WallPreview(
                           anchor: controller.pendingWall!.anchor,
@@ -179,7 +219,7 @@ class GameScreen extends StatelessWidget {
         ? '${controller.winner?.name.toUpperCase() ?? "DRAW"} WINS!'
         : '${controller.currentPlayer.name.toUpperCase()}\'S TURN';
 
-    return Container(
+    final banner = Container(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.lg,
         vertical: AppSpacing.sm,
@@ -200,6 +240,28 @@ class GameScreen extends StatelessWidget {
         ),
       ),
     );
+
+    // While the AI is deciding, say so (§20's thinking indicator, Phase 11).
+    // Board input is already blocked by the controller during its turn;
+    // this only names that state.
+    if (controller.versusAi && controller.isAiTurn && !isFinished) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          banner,
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'AI is thinking…',
+            key: const ValueKey('ai-thinking'),
+            style: AppTypography.bodyBase.copyWith(
+              color: AppColors.onSurfaceVariant,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      );
+    }
+    return banner;
   }
 
   Widget _buildModeToggle() {
@@ -313,86 +375,6 @@ class GameScreen extends StatelessWidget {
       child: Text(
         label,
         style: AppTypography.labelCaps.copyWith(color: effectiveColor),
-      ),
-    );
-  }
-
-  Widget _buildResultOverlay(BuildContext context) {
-    final winner = controller.winner;
-    final heading = winner == null
-        ? 'MATCH COMPLETE'
-        : '${winner.name.toUpperCase()} WINS!';
-    return ColoredBox(
-      color: Colors.black.withValues(alpha: 0.72),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 360),
-          child: Container(
-            key: const ValueKey('game-result-overlay'),
-            width: double.infinity,
-            margin: const EdgeInsets.all(AppSpacing.lg),
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceContainerHigh,
-              borderRadius: BorderRadius.circular(AppRadii.xl),
-              border: Border.all(color: AppColors.outlineVariant),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  heading,
-                  key: const ValueKey('result-heading'),
-                  style: AppTypography.labelCaps.copyWith(
-                    color: AppColors.tertiary,
-                    fontSize: 18,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  'MATCH COMPLETE',
-                  style: AppTypography.bodyBase.copyWith(
-                    color: AppColors.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                Text(
-                  'TURN ${controller.state.turnNumber}',
-                  style: AppTypography.numericStat.copyWith(
-                    color: AppColors.onSurface,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  'BLUE ${controller.state.wallsRemaining(PlayerId.blue)} WALLS  •  '
-                  'RED ${controller.state.wallsRemaining(PlayerId.red)} WALLS',
-                  style: AppTypography.bodyBase.copyWith(
-                    color: AppColors.onSurfaceVariant,
-                    fontSize: 12,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                Wrap(
-                  alignment: WrapAlignment.center,
-                  spacing: AppSpacing.sm,
-                  runSpacing: AppSpacing.xs,
-                  children: [
-                    _buildButton(
-                      'REMATCH',
-                      AppColors.primaryContainer,
-                      controller.rematch,
-                    ),
-                    _buildButton(
-                      'HOME',
-                      AppColors.onSurfaceVariant,
-                      () => Navigator.of(context).pop(),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }
