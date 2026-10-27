@@ -457,11 +457,11 @@ class FirestoreMatchmakingRepository implements MatchmakingRepository {
     StreamSubscription<Map<String, dynamic>?>? matchedSub;
     StreamSubscription<Map<String, dynamic>?>? roomSub;
     String? followedCode;
-    late StreamController<Room?> controller;
     // The controller lives exactly as long as its listener: onCancel
     // tears down both subscriptions, and a single-subscription
     // controller with no listener is garbage. Nothing else can close it.
     // ignore: close_sinks
+    late StreamController<Room?> controller;
     controller = StreamController<Room?>(
       onListen: () {
         matchedSub = client.watch(_matchedPath(config, uid)).listen((data) {
