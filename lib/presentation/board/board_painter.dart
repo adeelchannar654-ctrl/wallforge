@@ -10,6 +10,7 @@ import '../../domain/models/game_state.dart';
 import '../../domain/models/player_id.dart';
 import '../../domain/models/wall.dart';
 import '../../domain/models/wall_orientation.dart';
+import 'board_animation.dart';
 import 'board_geometry.dart';
 
 /// Preview of a ghost wall placement.
@@ -50,11 +51,19 @@ class BoardPainter extends CustomPainter {
     this.selectedCell,
     this.showCoordinates = true,
     this.activeGlow,
-  });
+    this.animator,
+  }) : super(repaint: animator);
 
   final GameState state;
   final BoardGeometry geometry;
   final Set<Cell> legalMoveTargets;
+
+  /// The Phase 12 one-shot animation driver, or null (pre-Phase-12
+  /// callers and most tests): the board then renders its state exactly,
+  /// with no animation frame. Registered as the painter's repaint
+  /// listenable, so animation frames repaint only this board (its
+  /// `RepaintBoundary`), never the surrounding app (`rules.md` §16).
+  final BoardAnimator? animator;
 
   /// Movement-assistance route for the player to move (Phase 11): the cells
   /// of their shortest route to the goal, drawn as a dotted trail. Empty in
@@ -67,18 +76,20 @@ class BoardPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    final frame = animator?.frame() ?? const BoardAnimFrame();
     _drawBoardArena(canvas, size);
     _drawGridSurface(canvas, size);
     _drawTiles(canvas, size);
-    _drawGoalStrips(canvas, size);
+    _drawGoalStrips(canvas, size, frame);
     if (showCoordinates) _drawCoordinates(canvas, size);
     _drawLegalMoveRings(canvas, size);
     if (pathCells.isNotEmpty) _drawPathTrail(canvas, size);
     _drawConflictHalos(canvas);
-    _drawWalls(canvas, size);
+    _drawWalls(canvas, size, frame);
     _drawGhostWall(canvas, size);
-    _drawPawns(canvas, size);
-    _drawActiveGlow(canvas, size);
+    _drawPawns(canvas, size, frame);
+    _drawActiveGlow(canvas, size, frame);
+    _drawSelectionRing(canvas, frame);
   }
 
   void _drawBoardArena(Canvas canvas, Size size) {
@@ -159,26 +170,53 @@ class BoardPainter extends CustomPainter {
     }
   }
 
-  void _drawGoalStrips(Canvas canvas, Size size) {
+  void _drawGoalStrips(Canvas canvas, Size size, BoardAnimFrame frame) {
     final g = geometry;
 
+    // Phase 12 (§7: the goal animates only on proximity and victory):
+    // a one-shot swell on the strip whose pawn is close, and on the
+    // winner's strip during the celebration. Otherwise boost is 0 and
+    // the strips render exactly as before.
+    var topBoost = 0.0;
+    var bottomBoost = 0.0;
+    final pulse = frame.goalPulse;
+    if (pulse != null) {
+      final boost = 0.6 * math.sin(math.pi * pulse.t);
+      if (pulse.top) {
+        topBoost = boost;
+      } else {
+        bottomBoost = boost;
+      }
+    }
+    final victory = frame.victory;
+    if (victory != null) {
+      final boost = 0.8 * math.sin(math.pi * victory.t);
+      if (victory.winner == PlayerId.blue) {
+        topBoost = math.max(topBoost, boost);
+      } else {
+        bottomBoost = math.max(bottomBoost, boost);
+      }
+    }
+
     // Top goal strip (Blue's goal = row 0)
-    _drawGoalStrip(canvas, g.topGoalStrip, true);
+    _drawGoalStrip(canvas, g.topGoalStrip, true, topBoost);
     _drawGoalStripLabel(canvas, g.topGoalStrip, 'P1 GOAL STRIP', true, g);
     // Bottom goal strip (Red's goal = row size-1)
-    _drawGoalStrip(canvas, g.bottomGoalStrip, false);
+    _drawGoalStrip(canvas, g.bottomGoalStrip, false, bottomBoost);
     _drawGoalStripLabel(canvas, g.bottomGoalStrip, 'P2 GOAL STRIP', false, g);
   }
 
-  void _drawGoalStrip(Canvas canvas, Rect rect, bool isTop) {
+  void _drawGoalStrip(Canvas canvas, Rect rect, bool isTop, double boost) {
+    double boosted(double alpha) =>
+        (alpha * (1 + boost)).clamp(0.0, 1.0).toDouble();
     final gradientPaint = Paint()
       ..shader = ui.Gradient.linear(
         rect.topLeft,
         rect.topRight,
         [
-          AppColors.tertiaryContainer.withValues(alpha: 0.2),
-          AppColors.tertiaryContainer.withValues(alpha: 0.8),
-          AppColors.tertiaryContainer.withValues(alpha: 0.2),
+          AppColors.tertiaryContainer.withValues(alpha: boosted(0.2)),
+          AppColors.tertiaryContainer.withValues(alpha: boosted(0.8)),
+          AppColors.tertiaryContainer.withValues(alpha: boosted(0.2)),
         ],
         [0.0, 0.5, 1.0],
       );
@@ -303,10 +341,28 @@ class BoardPainter extends CustomPainter {
     }
   }
 
-  void _drawWalls(Canvas canvas, Size size) {
+  void _drawWalls(Canvas canvas, Size size, BoardAnimFrame frame) {
     final g = geometry;
+    final animating = frame.wallIn?.wall;
     for (final wall in state.walls) {
+      if (wall == animating) continue;
       _drawWall(canvas, wall, g);
+    }
+    // Phase 12 (§9): the just-placed wall scales/fades into its final
+    // position instead of appearing at full strength in one frame.
+    final wallIn = frame.wallIn;
+    if (wallIn != null) {
+      final rect = g.wallRectFromModel(wallIn.wall);
+      final t = Curves.easeOutCubic.transform(wallIn.t);
+      canvas.saveLayer(
+        rect.inflate(6),
+        Paint()..color = Color.fromRGBO(0, 0, 0, t),
+      );
+      canvas.translate(rect.center.dx, rect.center.dy);
+      canvas.scale(0.7 + 0.3 * t);
+      canvas.translate(-rect.center.dx, -rect.center.dy);
+      _drawWall(canvas, wallIn.wall, g);
+      canvas.restore();
     }
   }
 
@@ -458,16 +514,45 @@ class BoardPainter extends CustomPainter {
     }
   }
 
-  void _drawPawns(Canvas canvas, Size size) {
+  void _drawPawns(Canvas canvas, Size size, BoardAnimFrame frame) {
     final g = geometry;
-    _drawPawn(canvas, PlayerId.blue, g);
-    _drawPawn(canvas, PlayerId.red, g);
+    _drawPawn(canvas, PlayerId.blue, g, frame);
+    _drawPawn(canvas, PlayerId.red, g, frame);
   }
 
-  void _drawPawn(Canvas canvas, PlayerId player, BoardGeometry g) {
+  void _drawPawn(
+    Canvas canvas,
+    PlayerId player,
+    BoardGeometry g,
+    BoardAnimFrame frame,
+  ) {
     final cell = state.pawnPosition(player);
-    final centre = g.cellCenterFromModel(cell);
-    final radius = g.cellSize * 0.28;
+    var centre = g.cellCenterFromModel(cell);
+    var scale = 1.0;
+
+    // Phase 12 (§8): a moved pawn translates smoothly between cells
+    // with a small landing bounce in the final portion; the winner's
+    // pawn additionally swells during the celebration. Without an
+    // animation frame this draws exactly the pre-Phase-12 pawn.
+    final move = frame.pawnMove;
+    if (move != null && move.player == player) {
+      final eased = Curves.easeInOutCubic.transform(move.t);
+      centre = Offset.lerp(
+        g.cellCenterFromModel(move.from),
+        g.cellCenterFromModel(move.to),
+        eased,
+      )!;
+      if (move.t > 0.7) {
+        final u = (move.t - 0.7) / 0.3;
+        scale *= 1 + 0.14 * math.sin(math.pi * u);
+      }
+    }
+    final victory = frame.victory;
+    if (victory != null && victory.winner == player) {
+      scale *= 1 + 0.16 * math.sin(math.pi * victory.t);
+    }
+
+    final radius = g.cellSize * 0.28 * scale;
 
     final isP1 = player == PlayerId.blue;
 
@@ -519,12 +604,35 @@ class BoardPainter extends CustomPainter {
     );
   }
 
-  void _drawActiveGlow(Canvas canvas, Size size) {
+  void _drawActiveGlow(Canvas canvas, Size size, BoardAnimFrame frame) {
     if (activeGlow == null) return;
     final g = geometry;
     final cell = state.pawnPosition(activeGlow!);
-    final centre = g.cellCenterFromModel(cell);
-    final radius = g.cellSize * 0.35;
+    var centre = g.cellCenterFromModel(cell);
+    var radius = g.cellSize * 0.35;
+    var alpha = 0.25;
+
+    // The glow follows a pawn that is still translating, and swells
+    // once when the turn changes (§8's pulse as a state-change signal).
+    final move = frame.pawnMove;
+    if (move != null && move.player == activeGlow) {
+      final eased = Curves.easeInOutCubic.transform(move.t);
+      centre = Offset.lerp(
+        g.cellCenterFromModel(move.from),
+        g.cellCenterFromModel(move.to),
+        eased,
+      )!;
+    }
+    final pulse = frame.glowPulse;
+    if (pulse != null && pulse.player == activeGlow) {
+      final swell = math.sin(math.pi * pulse.t);
+      alpha += 0.30 * swell;
+      radius *= 1 + 0.18 * swell;
+    }
+    final victory = frame.victory;
+    if (victory != null && victory.winner == activeGlow) {
+      alpha += 0.35 * math.sin(math.pi * victory.t);
+    }
 
     final isP1 = activeGlow == PlayerId.blue;
     final glowColor = isP1
@@ -535,8 +643,40 @@ class BoardPainter extends CustomPainter {
       centre,
       radius,
       Paint()
-        ..color = glowColor.withValues(alpha: 0.25)
+        ..color = glowColor.withValues(alpha: alpha.clamp(0.0, 1.0))
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+    );
+  }
+
+  /// `design.md` §8's Selected state: a stronger ring around the
+  /// selected cell, in the current player's colour.
+  ///
+  /// The plumbing for this (BoardView.selectedCell → painter) existed
+  /// since Phase 4 but nothing ever drew it; Phase 12 verification
+  /// found that gap and this is the ring §8 specifies. It fades/scales
+  /// in over [FeedbackTiming.microFeedback] when the board is animated,
+  /// and is fully present in any static render.
+  void _drawSelectionRing(Canvas canvas, BoardAnimFrame frame) {
+    final selected = selectedCell;
+    if (selected == null) return;
+    final g = geometry;
+    final centre = g.cellCenterFromModel(selected);
+    var t = 1.0;
+    final selection = frame.selection;
+    if (selection != null && selection.cell == selected) {
+      t = Curves.easeOutCubic.transform(selection.t);
+    }
+    final isBlue = state.currentPlayer == PlayerId.blue;
+    final color = isBlue
+        ? AppColors.primaryContainer
+        : AppColors.secondaryContainer;
+    canvas.drawCircle(
+      centre,
+      g.cellSize * (0.34 + 0.04 * t),
+      Paint()
+        ..color = color.withValues(alpha: 0.9 * t)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3,
     );
   }
 
@@ -548,5 +688,6 @@ class BoardPainter extends CustomPainter {
       wallPreview != oldDelegate.wallPreview ||
       selectedCell != oldDelegate.selectedCell ||
       showCoordinates != oldDelegate.showCoordinates ||
-      activeGlow != oldDelegate.activeGlow;
+      activeGlow != oldDelegate.activeGlow ||
+      animator != oldDelegate.animator;
 }

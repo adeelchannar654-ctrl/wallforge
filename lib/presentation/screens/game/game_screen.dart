@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../app/application/game_interaction.dart';
 import '../../../app/application/local_game_controller.dart';
+import '../../../core/feedback/feedback_scope.dart';
+import '../../../core/feedback/feedback_timing.dart';
 import '../../../app/application/shortest_path.dart';
 import '../../../app/router/app_router.dart';
 import '../../../app/theme/app_colors.dart';
@@ -88,7 +90,7 @@ class GameScreen extends StatelessWidget {
           child: Column(
             children: [
               const SizedBox(height: AppSpacing.lg),
-              _buildTurnBanner(),
+              _buildTurnBanner(context),
               const SizedBox(height: AppSpacing.md),
               Expanded(child: _buildBoardArea()),
               const SizedBox(height: AppSpacing.sm),
@@ -112,7 +114,7 @@ class GameScreen extends StatelessWidget {
         _buildPlayerStrip(PlayerId.blue),
         const SizedBox(height: AppSpacing.sm),
         // Turn banner
-        _buildTurnBanner(),
+        _buildTurnBanner(context),
         const SizedBox(height: AppSpacing.sm),
         // Board
         Expanded(child: _buildBoardArea()),
@@ -182,6 +184,11 @@ class GameScreen extends StatelessWidget {
                           isValid: pendingFailure == null,
                         )
                       : null,
+                  // §8's Selected state: the tapped cell's ring. The
+                  // controller has carried this since Phase 4 and the
+                  // painter plumbed it, but no screen ever passed it —
+                  // Phase 12 verification found and closed that gap.
+                  selectedCell: controller.selectedCell,
                   activeGlow: controller.state.status == GameStatus.inProgress
                       ? controller.currentPlayer
                       : null,
@@ -212,31 +219,38 @@ class GameScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildTurnBanner() {
+  Widget _buildTurnBanner(BuildContext context) {
     final isBlue = controller.currentPlayer == PlayerId.blue;
     final isFinished = controller.state.status == GameStatus.finished;
     final label = isFinished
         ? '${controller.winner?.name.toUpperCase() ?? "DRAW"} WINS!'
         : '${controller.currentPlayer.name.toUpperCase()}\'S TURN';
 
-    final banner = Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.lg,
-        vertical: AppSpacing.sm,
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerHigh.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(AppRadii.xl),
-        border: Border.all(color: AppColors.outlineVariant),
-      ),
-      child: Text(
-        label,
-        style: AppTypography.labelCaps.copyWith(
-          color: isFinished
-              ? AppColors.tertiary
-              : isBlue
-              ? AppColors.primaryContainer
-              : AppColors.secondaryContainer,
+    // Phase 12: the banner cross-fades when the turn changes — a UI
+    // transition communicating a state change (§24), at the shared
+    // duration, and instant under reduced motion.
+    final banner = AnimatedSwitcher(
+      duration: FeedbackScope.durationOf(context, FeedbackTiming.uiTransition),
+      child: Container(
+        key: ValueKey(label),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.sm,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerHigh.withValues(alpha: 0.9),
+          borderRadius: BorderRadius.circular(AppRadii.xl),
+          border: Border.all(color: AppColors.outlineVariant),
+        ),
+        child: Text(
+          label,
+          style: AppTypography.labelCaps.copyWith(
+            color: isFinished
+                ? AppColors.tertiary
+                : isBlue
+                ? AppColors.primaryContainer
+                : AppColors.secondaryContainer,
+          ),
         ),
       ),
     );

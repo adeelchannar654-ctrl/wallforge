@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../app/application/game_interaction.dart';
 import '../../../app/application/online/online_game_controller.dart';
+import '../../../core/feedback/feedback_scope.dart';
+import '../../../core/feedback/feedback_timing.dart';
 import '../../../app/application/online/rematch_controller.dart';
 import '../../../app/application/shortest_path.dart';
 import '../../../app/router/app_router.dart';
@@ -281,19 +283,30 @@ class OnlineGameScreen extends StatelessWidget {
           Semantics(
             liveRegion: true,
             label: label,
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.lg,
-                vertical: AppSpacing.xs,
+            // Phase 12: cross-fade on turn change (§24 state-change
+            // transition), instant under reduced motion. The Semantics
+            // wrapper stays outside the switcher so the live region's
+            // identity is stable.
+            child: AnimatedSwitcher(
+              duration: FeedbackScope.durationOf(
+                context,
+                FeedbackTiming.uiTransition,
               ),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceContainerHigh,
-                borderRadius: BorderRadius.circular(AppRadii.xl),
-                border: Border.all(color: AppColors.outlineVariant),
-              ),
-              child: Text(
-                label,
-                style: AppTypography.labelCaps.copyWith(color: colour),
+              child: Container(
+                key: ValueKey(label),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.lg,
+                  vertical: AppSpacing.xs,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(AppRadii.xl),
+                  border: Border.all(color: AppColors.outlineVariant),
+                ),
+                child: Text(
+                  label,
+                  style: AppTypography.labelCaps.copyWith(color: colour),
+                ),
               ),
             ),
           ),
@@ -467,6 +480,8 @@ class OnlineGameScreen extends StatelessWidget {
                         orientation: controller.pendingWall!.orientation,
                         isValid: pendingFailure == null,
                       ),
+                // §8's Selected state (see the local game screen).
+                selectedCell: controller.selectedCell,
                 activeGlow: controller.isMyTurn
                     ? controller.currentPlayer
                     : null,

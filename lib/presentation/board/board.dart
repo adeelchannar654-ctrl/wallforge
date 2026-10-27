@@ -1,6 +1,7 @@
 /// Board rendering for Wallforge.
 library;
 
+export 'board_animation.dart';
 export 'board_geometry.dart';
 export 'board_painter.dart';
 export 'board_view.dart';
