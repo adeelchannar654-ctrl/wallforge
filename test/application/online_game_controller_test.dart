@@ -1,5 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallforge/app/application/online/online_game_controller.dart';
+import 'package:wallforge/core/feedback/feedback_backends.dart';
+import 'package:wallforge/core/feedback/feedback_controller.dart';
+import 'package:wallforge/core/feedback/feedback_timing.dart';
 import 'package:wallforge/data/remote/firestore_match_repository.dart';
 import 'package:wallforge/data/remote/firestore_room_repository.dart';
 import 'package:wallforge/data/remote/in_memory_firestore_client.dart';
@@ -567,6 +570,85 @@ void main() {
     });
   });
 
+  group('Phase 12 feedback cues', () {
+    late _RecordingSound hostSound;
+    late _RecordingSound guestSound;
+
+    void attachFeedback() {
+      hostSound = _RecordingSound();
+      guestSound = _RecordingSound();
+      hostView.feedback = FeedbackController(hostSound, const _SilentHaptics());
+      guestView.feedback = FeedbackController(
+        guestSound,
+        const _SilentHaptics(),
+      );
+    }
+
+    int count(List<String> effects, String asset) =>
+        effects.where((e) => e == asset).length;
+
+    test('an adopted own move cues the mover once and the opponent '
+        'gets the turn cue once', () async {
+      attachFeedback();
+      await hostView.submit(kScriptedGame[0].$2);
+      await pumpEventQueue();
+
+      expect(hostSound.effects, [FeedbackAssets.move]);
+      expect(guestSound.effects, [FeedbackAssets.turnChange]);
+
+      await guestView.submit(kScriptedGame[1].$2);
+      await pumpEventQueue();
+
+      expect(hostSound.effects, [
+        FeedbackAssets.move,
+        FeedbackAssets.turnChange,
+      ]);
+      expect(guestSound.effects, [
+        FeedbackAssets.turnChange,
+        FeedbackAssets.move,
+      ]);
+    });
+
+    test('a rejected illegal submit fires the invalid cue on the '
+        'submitter only', () async {
+      attachFeedback();
+      // Blue is on turn; moving onto its own cell is engine-illegal.
+      final failure = await hostView.submit(
+        const GameAction.move(Cell(row: 8, column: 4)),
+      );
+      await pumpEventQueue();
+      expect(failure, isNotNull);
+      expect(hostSound.effects, [FeedbackAssets.invalidAction]);
+      expect(guestSound.effects, isEmpty);
+    });
+
+    test(
+      'the full scripted game cues every event exactly once per side',
+      () async {
+        attachFeedback();
+        for (var turn = 0; turn < kScriptedGame.length; turn++) {
+          await whoseTurn().submit(kScriptedGame[turn].$2);
+          await pumpEventQueue();
+        }
+        // Blue: 8 moves + 1 wall of its own, 8 turn returns (Red's plies),
+        // 1 victory. Red: 6 moves + 2 walls, 8 turn returns (Blue's
+        // non-finishing plies), 1 victory on the finishing ply instead of
+        // a ninth turn cue.
+        expect(count(hostSound.effects, FeedbackAssets.move), 8);
+        expect(count(hostSound.effects, FeedbackAssets.wallPlaced), 1);
+        expect(count(hostSound.effects, FeedbackAssets.turnChange), 8);
+        expect(count(hostSound.effects, FeedbackAssets.victory), 1);
+        expect(hostSound.effects, hasLength(18));
+
+        expect(count(guestSound.effects, FeedbackAssets.move), 6);
+        expect(count(guestSound.effects, FeedbackAssets.wallPlaced), 2);
+        expect(count(guestSound.effects, FeedbackAssets.turnChange), 8);
+        expect(count(guestSound.effects, FeedbackAssets.victory), 1);
+        expect(guestSound.effects, hasLength(17));
+      },
+    );
+  });
+
   group('disposal', () {
     test('disposing mid-match does not throw', () async {
       final view = OnlineGameController(
@@ -587,3 +669,42 @@ void main() {
 /// Placeholder so the disposal test can assert the absence of a pending error
 /// frame without importing test bindings.
 Object? tester0() => null;
+
+/// Phase 12: records effect assets for the cue tests.
+class _RecordingSound implements SoundBackend {
+  final List<String> effects = [];
+
+  @override
+  Future<void> playEffect(String asset, double volume) async {
+    effects.add(asset);
+  }
+
+  @override
+  Future<void> startMusic(String asset, double volume) async {}
+
+  @override
+  Future<void> stopMusic() async {}
+
+  @override
+  Future<void> setMusicVolume(double volume) async {}
+
+  @override
+  void dispose() {}
+}
+
+/// Phase 12: haptics are irrelevant to the online cue counts.
+class _SilentHaptics implements HapticsBackend {
+  const _SilentHaptics();
+
+  @override
+  void light() {}
+
+  @override
+  void medium() {}
+
+  @override
+  void heavy() {}
+
+  @override
+  void selection() {}
+}

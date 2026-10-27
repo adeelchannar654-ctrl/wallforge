@@ -459,19 +459,24 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      // Phase 12 made Audio, Haptics and Reduced motion real, so the
+      // only "not yet available" rows left are Phase 13's (Color
+      // assistance, High contrast, UI scale) — the Phase 12 wording is
+      // gone entirely.
       expect(
         find.text('Not yet available — arrives with Phase 12.'),
-        findsWidgets,
+        findsNothing,
       );
       expect(
         find.text('Not yet available — arrives with Phase 13.'),
         findsWidgets,
       );
-      // Every switch in the audio/haptics/accessibility groups is disabled.
+      // Exactly the three Phase 13 switches are disabled; every other
+      // switch on the screen is live.
       final disabled = find.byWidgetPredicate(
         (w) => w is Switch && w.onChanged == null,
       );
-      expect(disabled, findsWidgets);
+      expect(disabled, findsNWidgets(3));
       // And the account section tells the truth about anonymous play.
       expect(
         find.textContaining('Signed in anonymously (Guest).'),
