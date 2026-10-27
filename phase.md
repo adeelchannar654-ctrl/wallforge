@@ -1289,6 +1289,40 @@ Add feedback without distracting from strategy.
 
 Animations are smooth and can be disabled/reduced where required.
 
+### Result
+
+**Complete (2026-10-27).** Full record in `memory.md` §13t.
+
+- **Feedback layer**: one centralized layer in `lib/core/feedback/` —
+  named timing constants from §24's bands (micro 140 ms, UI transition
+  240 ms, pawn movement 350 ms, wall placement 240 ms, victory 750 ms),
+  the six §25 cues (move, wall placed, invalid, turn change, victory,
+  button press) plus background music, all triggered from the game
+  controllers at the moment an action resolves. Online cues fire on
+  verified snapshot adoption, never at submit, so each event cues
+  exactly once (proven by cue counts over the two-client scripted game).
+- **Audio/haptics**: `audioplayers` 6.8.1 (vetted: Android/iOS/Web,
+  maintained); haptics on Flutter's built-in `HapticFeedback` (no
+  package). All seven audio assets are synthesized in-project
+  (`tool/audio/generate_audio.py`), CC0, 152 KB total.
+- **Animation**: pawn translation with landing bounce, wall
+  scale/opacity-in, one-shot active-glow pulse on turn change,
+  goal-strip pulses on proximity and victory only (§7), the §8 selected
+  ring (found plumbed-but-never-drawn since Phase 4; now drawn and
+  passed by both game screens), page transitions and turn-banner
+  cross-fades — all inside the existing painter/`RepaintBoundary`
+  architecture, ticker active only while an effect plays.
+- **Reduced Motion is real in this phase** (the recorded §2
+  correction): platform signal OR in-app toggle, either activates it;
+  "reduced" means the end state applies instantly; haptics are
+  suppressed while it is active, sound is not. Color assistance, High
+  contrast and UI scale remain inert and Phase-13-labelled.
+- **Gates**: format 149 files 0 changed; analyze no issues; 1,619
+  tests — 1,610 passed, 9 golden-image failures re-verified
+  environmental (identical on the pristine Phase 11 tree); web release
+  build OK; spec OK; oracle byte-identical. No rule, engine, sync or
+  security change.
+
 ---
 
 # Phase 13 — Accessibility

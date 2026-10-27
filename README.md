@@ -17,7 +17,7 @@ A wall may never remove the last route to either player's goal.
 
 ## Status
 
-**Phases 0–11 are complete in code, with one owner-side caveat.** See
+**Phases 0–12 are complete in code, with one owner-side caveat.** See
 [`phase.md`](phase.md) for the full plan and the per-phase results.
 
 - **Phase 0 — Project Foundation.** Flutter project, platform targets, folder
@@ -104,13 +104,32 @@ A wall may never remove the last route to either player's goal.
   online matches are not recorded and the screen says so), and Settings.
   Settings is honest about what exists: gameplay options (confirm wall
   placement, the new movement-assistance route display) are real and
-  persisted; the Audio/Haptics groups are visibly inert until Phase 12
-  and the Accessibility group until Phase 13. The online rematch
+  persisted; the Audio/Haptics groups were built visibly inert, to be
+  made real in Phase 12 (below), and the Accessibility group in
+  Phase 13. The online rematch
   (Q-9.2) is a new room with fresh seats and explicit consent from both
   players, built on the shipped matchmaking claim; a rules-emulator test
   proves the claim shape for this use (34 rules tests in total). The
   developer board-preview screen that used to be the app's entry point
   is retired.
+- **Phase 12 — Audio, Haptics and Animation.** The game now feeds back
+  without distracting from strategy. A single feedback layer
+  ([`lib/core/feedback/`](lib/core/feedback)) owns every sound cue
+  (move, wall placement, invalid action, turn change, victory, button
+  press), the background music loop, and the haptics, all triggered from
+  the game controllers at the moment an action resolves — in online
+  play, when the verified snapshot adopts it, so nothing ever cues
+  twice. Animations follow `design.md` §24's timing bands: pawns slide
+  with a landing bounce, walls scale and fade into place, the goal
+  strips pulse only on proximity and victory, and screens transition in
+  240 ms. The Settings Audio (Music / Sound effects / Volume), Haptics
+  and Reduced motion controls are live; Reduced motion — from the
+  device's own setting or the in-app toggle — resolves every animation
+  to its end state instantly, while Color assistance, High contrast and
+  UI scale remain honestly inert until Phase 13. All audio assets are
+  synthesized in-project and CC0-licensed; see
+  [`memory.md`](memory.md) §13t for the full record, including the
+  Reduced Motion correction and the performance profile.
 
 **Firebase still needs owner-side setup in the Console for Android/iOS.**
 The web app is registered and live-verified (above). Android and iOS

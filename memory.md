@@ -3273,3 +3273,170 @@ local match's "play again") is answered in practice by the Result
 screen's Rematch for local and AI play. No new Open Questions were
 raised by this phase. Phase 12 was not started.
 
+
+## 13t. Phase 12 Record — Audio, Haptics and Animation (completed 2026-10-27)
+
+Authorized 2026-10-27 with the owner's full Phase 12 prompt. Scope:
+sound effects, background music, haptics, board and UI animation, and
+Reduced Motion, exactly as `phase.md` Phase 12 lists them. Out of
+scope: the rest of Accessibility (Phase 13), and any rule, engine,
+sync or security change — none was made (`firestore.rules` untouched,
+oracle byte-identical).
+
+### Source ledger (§0 — every effect cites its source)
+
+| Effect | Source | Timing / treatment |
+|---|---|---|
+| Pawn movement animation | `design.md` §8 "Moving: smooth translation" + §24 band | 350 ms (`FeedbackTiming.pawnMovement`, band 250–450) |
+| Landing bounce | §8 "Landing: small bounce" | Final 30% of the move: scale swell 1 + 0.14·sin(πu) |
+| Wall placement animation | §9 "Small scale/opacity animation into final position" | 240 ms (`wallPlacement`, band 180–300), scale 0.7→1 + fade, from the confirmed ghost's slot to the placed wall |
+| Active pawn glow | §8 "Active: slight glow/pulse" | The Phase 3 static glow already existed (verified, not duplicated); the *pulse* is applied as a one-shot swell (300 ms, UI band) when the turn changes, per §24's purposeful rule — a perpetual pulse was rejected as decoration and as a test/perf hazard (it would keep `pumpAndSettle` and the frame loop busy forever) |
+| Selected ring | §8 "Selected: stronger ring/highlight" | **Gap found by verification:** `selectedCell` was plumbed from controller → BoardView → BoardPainter since Phase 4 but no code ever drew it, and no screen ever passed it. Phase 12 draws the ring (3 px, current player's colour, fading in over the 140 ms micro band) and passes `controller.selectedCell` from the local and online game screens |
+| Goal-strip animation | §7 "Use animation only when appropriate: goal proximity, victory. Do not constantly animate" | Proximity pulse 500 ms (victory-band floor); victory pulse inside the 750 ms celebration. *Proximity* is recorded as: the pawn newly reached the row adjacent to its goal row (Blue row 1, Red row size−2) — one step from the goal edge, decidable without pathfinding (`rules.md` §16) |
+| Victory celebration | §7 + §8 "Goal: celebration animation" + §24 band | 750 ms (`victory`, band 500–1000): winning pawn swell + its goal strip's pulse |
+| UI transitions | §24 UI band + `phase.md` task list | 240 ms (`uiTransition`, band 180–300): `WallforgePageRoute` fade + slight rise for every route; the turn banner cross-fades via `AnimatedSwitcher` in both game screens |
+| Sound cues | §25's exact list: move, wall placement, invalid action, turn change, victory, button press | One synthesized clip per cue (below) |
+| Background music | `PRD.md` §6.6 + `phase.md` task list (§25 does not list it separately) | One 6 s loopable pad (Am–F–C–G), toggled independently from effects per §23's grouping |
+| Haptics | §25 "subtle, optional, disabled by reduced-motion where appropriate" | Move = light impact, wall = medium, invalid = heavy, victory = medium, button = selection click, **turn change = none** (decided and recorded: the turn returning is already announced by sound and the banner; a buzz on every opponent move would not be "subtle"). No haptic is ever the only signal — every cue pairs with the existing visual/text treatment (§26; the invalid action keeps its Phase 4.2 text/shape feedback) |
+
+Timing constants live in one place, `lib/core/feedback/feedback_timing.dart`
+(`FeedbackTiming`): microFeedback 140 (band 100–180), uiTransition 240
+(180–300), pawnMovement 350 (250–450), wallPlacement 240 (180–300),
+victory 750 (500–1000), turnGlowPulse 300, goalProximityPulse 500.
+
+### The Reduced Motion correction (§2, recorded as required)
+
+`design.md` §23 files Reduced Motion under Accessibility, and Phase 11
+labelled that group Phase 13 because no animation system existed to
+reduce. `phase.md`'s Phase 12 task list names "Reduced-motion mode"
+itself, and Phase 12's exit criterion is "animations are smooth and
+can be disabled/reduced where required" — so **Reduced Motion is real
+in Phase 12**: it is the control for the system this phase built, and
+deferring it would have shipped animations with no off switch. Color
+assistance, High contrast and UI scale remain visibly inert and
+Phase-13-labelled (a settings test pins exactly three disabled,
+Phase-13-labelled switches), because nothing in this phase touches
+colour, contrast or scale. (Phase 13's own task list also names reduced
+motion; that is now satisfied early, and Phase 13 inherits it as
+done.)
+
+The seam is `FeedbackScope.reducedMotionActive(context)`: platform
+`MediaQuery.disableAnimations` **OR** the persisted in-app toggle —
+either one activates it. "Reduced" is recorded as: **skip the animation
+and apply the end state instantly** (duration zero), applied
+consistently by the board animator, the page route and the banner
+switchers, and mirroring Flutter's own treatment of the platform
+signal. Haptics are suppressed while reduced motion is active (§25);
+sound is not motion and is never muted by it.
+
+### Architecture (as built)
+
+- The feedback layer is `lib/core/feedback/` — `core/` because
+  `architecture.md` §15 already places cross-cutting code there and the
+  layer serves controllers (application), widgets (presentation) and
+  the router (app) alike. `FeedbackController` exposes the six cue
+  methods and owns the settings snapshot and music lifecycle;
+  `SoundBackend`/`HapticsBackend` are interfaces so tests substitute
+  fakes; `FeedbackScope` is the widget-side seam; `FeedbackService`
+  holds the one shared instance for context-free callers (the router,
+  controller factories). The class is `FeedbackService`, not `Feedback`:
+  Flutter already exports a `Feedback` widget and the names collided.
+- Cues trigger from the shared `GameInteraction` mixin at the point an
+  action resolves (local success/failure), from `LocalGameController`
+  (victory; the AI's turn return), and — for online play — from
+  `OnlineGameController`'s verified-snapshot adoption, **not** at submit
+  time: a submit's verdict is asynchronous, so `cuesOnAttempt` is false
+  online, own-action cues fire when the snapshot adopts them (the Phase
+  9 echo verdict makes double-firing impossible), opponent actions fire
+  the turn-change cue, a finish fires victory, and only an
+  `invalidAction` rejection fires the invalid cue. Catch-up jumps
+  (>1 ply) attribute no action and fire nothing except a finish. The
+  first adopt after connecting is joining, not an event, and fires
+  nothing (the echo verdict counts as adopted — this was a real bug
+  caught by the phase's own online cue test, which at first saw the
+  mover's cue swallowed by exactly this guard).
+- Board animation respects the Phase 3 painter architecture: the
+  painter gained an optional `BoardAnimator` (registered as its
+  `repaint` listenable, so frames repaint only the board's
+  `RepaintBoundary`) and an idle frame renders byte-for-byte the
+  pre-Phase-12 board. Animations react to transitions in
+  `BoardView.didUpdateWidget` (single-ply only; jumps animate nothing),
+  never cause engine work, and never feed back into state — a new
+  transition mid-animation simply replaces the effect.
+- Settings: `AppSettings` gained `musicEnabled` (default on),
+  `effectsEnabled` (on), `volume` (default 0.5 — the value the Phase 11
+  inert slider displayed, so activation did not silently move it;
+  clamped 0–1 on load), `hapticsEnabled` (on), `reducedMotion` (off),
+  all with total `fromJson` fallbacks and round-trip tests. Every
+  Settings save applies to the live feedback layer in the same moment
+  it persists.
+
+### Packages and assets (§3.3 vetting)
+
+- **Audio: `audioplayers` 6.8.1** (added via `flutter pub add`).
+  Purpose: Flutter has no built-in audio playback. Compatibility
+  verified on pub.dev (2026-10-27): "works for Android, iOS, Linux,
+  macOS, Windows, and web" — covering the project's three targets;
+  actively maintained (package updated 2026-06). No animation package:
+  Flutter's built-ins sufficed, as `rules.md` §4 requires be shown
+  first. Haptics: **no package** — the built-in `HapticFeedback` API
+  covers every §25 need.
+- **Assets are produced, not sourced**: every file in `assets/audio/`
+  is synthesized by `tool/audio/generate_audio.py` (deterministic,
+  seeded) and released under CC0 (`assets/audio/LICENCE.txt`, following
+  the fonts folder's licence-file convention). Effects are 22050 Hz
+  mono WAV (2–34 KB each); the music loop is a 6 s MP3 at 96 kbps
+  (73 KB). Total 152 KB. This avoided any third-party licence question
+  entirely and keeps the project's zero-cost posture.
+
+### Performance profile (§3/§16, real findings)
+
+- The animator's ticker runs **only while an effect is in flight** and
+  stops itself when the last effect drains (asserted in tests via
+  `isAnimating` after every animation test); an idle board schedules
+  no frames. Repaints are confined to the board's existing
+  `RepaintBoundary` (the painter's `repaint` listenable); no other
+  widget rebuilds per frame.
+- Animations never run pathfinding or legal-move calculation:
+  proximity is a row check on the already-known pawn positions, and
+  every other effect keys off the state transition itself.
+- Flurry test: 12 plies delivered at 50 ms intervals (faster than any
+  animation) through the real `BoardView` — state stays exact, effects
+  are replaced rather than queued, everything drains, no exceptions;
+  the full new board-animation suite (11 tests incl. full rendering)
+  completes in seconds on this 2-CPU VM.
+- Audio: effects play on one low-latency player (a new cue replaces,
+  never queues behind, the previous); all backend calls are
+  failure-tolerant — on the web a browser may refuse playback before
+  the first user gesture, and that refusal is logged, never surfaced,
+  and never blocks play.
+
+### Completion record (2026-10-27)
+
+New tests: 48 (feedback gating + cue mapping, controller cue wiring,
+online exactly-once cue counts across the scripted two-client game —
+18 cues on the host, 17 on the guest, exactly as the cue rules predict,
+board animation timing/reduced/flurry, settings gating). One Phase 11
+settings test was updated where Phase 12 legitimately changed the
+behaviour it pinned (the inert-rows test now pins the three remaining
+Phase 13 rows).
+
+Gates (2026-10-27): format 149 files 0 changed; analyze — no issues;
+full suite 1,619 tests — 1,610 passed, 9 golden-image failures
+**re-verified environmental**: the identical 9 (5 board + 4 game
+goldens) fail on the pristine Phase 11 tree (worktree at `d132be9`,
+verified this phase), unchanged in set from Phases 10–11; web release
+build OK; spec checker OK; oracle byte-identical (1,229,568 bytes,
+SHA-256 6f1e3c05…); mojibake scan clean. `firestore.rules` untouched;
+rules-emulator suite not re-run (no rules or sync change this phase).
+
+Also in-phase, a one-line repair outside the phase's scope but in its
+path: the Phase 11 `// ignore: close_sinks` in
+`firestore_matchmaking_repository.dart` sat one statement below the
+declaration the lint reports on, so `flutter analyze` showed one info;
+the comment now sits on the declaration it describes. No code changed.
+
+Open Questions: none raised by this phase. The music is a synthesized
+pad, not a composed track — replacing it with a recorded/composed loop
+later is an asset swap behind `FeedbackAssets.music`, not a code
+change. Phase 13 was not started.
