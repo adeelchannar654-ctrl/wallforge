@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/router/app_router.dart';
+import '../../../core/feedback/feedback_scope.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
@@ -17,10 +18,16 @@ import '../../widgets/app_chrome.dart';
 ///   disagree. Movement assistance is the Phase 11 feature §23 lists:
 ///   while Move is selected, the board draws the current player's shortest
 ///   route to their goal.
-/// * **Audio and Haptics are Phase 12** and **Accessibility is Phase 13**:
-///   those features do not exist yet, so their rows are rendered visibly
-///   inert and labelled "Not yet available" — never as working-looking
-///   toggles that control nothing.
+/// * **Audio and Haptics are real (Phase 12).** Music, Sound effects,
+///   Volume and Haptic feedback are live controls over the feedback
+///   layer: every save is applied to it immediately, not just persisted.
+/// * **Reduced motion is real (Phase 12)** — the recorded cross-document
+///   correction (`memory.md` §13t): `phase.md`'s Phase 12 task list names
+///   reduced-motion mode itself, and it controls the animation system
+///   Phase 12 builds, so it could not wait for Phase 13. The rest of
+///   Accessibility (Color assistance, High contrast, UI scale) remains
+///   visibly inert and Phase-13-labelled: nothing in Phase 12 touches
+///   colour, contrast or scale.
 /// * **Account is real**: the anonymous sign-in state, and Sign out through
 ///   the Phase 8 auth gateway.
 class SettingsScreen extends StatefulWidget {
@@ -63,6 +70,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _save(AppSettings next) async {
     setState(() => _settings = next);
+    // Phase 12: the feedback layer gates live behaviour, so a save is
+    // applied to it in the same moment it is persisted.
+    FeedbackScope.maybeOf(context)?.applySettings(next);
     await widget.settingsRepository.save(next);
   }
 
@@ -147,27 +157,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: AppSpacing.lg),
               _group(
                 'AUDIO',
-                children: const [
-                  UnavailableSettingsRow(
+                children: [
+                  _toggleRow(
                     label: 'Music',
-                    availableIn: 'Phase 12',
+                    description: 'Background music while you play.',
+                    value: _settings.musicEnabled,
+                    onChanged: _loaded
+                        ? (v) => _save(_settings.copyWith(musicEnabled: v))
+                        : null,
                   ),
-                  Divider(color: AppColors.outlineVariant),
-                  UnavailableSettingsRow(
+                  const Divider(color: AppColors.outlineVariant),
+                  _toggleRow(
                     label: 'Sound effects',
-                    availableIn: 'Phase 12',
+                    description: 'Sounds for moves, walls and results.',
+                    value: _settings.effectsEnabled,
+                    onChanged: _loaded
+                        ? (v) => _save(_settings.copyWith(effectsEnabled: v))
+                        : null,
                   ),
-                  Divider(color: AppColors.outlineVariant),
-                  _VolumeRow(),
+                  const Divider(color: AppColors.outlineVariant),
+                  _volumeRow(),
                 ],
               ),
               const SizedBox(height: AppSpacing.lg),
               _group(
                 'HAPTICS',
-                children: const [
-                  UnavailableSettingsRow(
+                children: [
+                  _toggleRow(
                     label: 'Haptic feedback',
-                    availableIn: 'Phase 12',
+                    description:
+                        'Subtle vibration on game actions. '
+                        'Off while reduced motion is on.',
+                    value: _settings.hapticsEnabled,
+                    onChanged: _loaded
+                        ? (v) => _save(_settings.copyWith(hapticsEnabled: v))
+                        : null,
                   ),
                 ],
               ),
@@ -175,9 +199,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _group(
                 'ACCESSIBILITY',
                 children: [
-                  const UnavailableSettingsRow(
+                  _toggleRow(
                     label: 'Reduced motion',
-                    availableIn: 'Phase 13',
+                    description:
+                        'Animations jump straight to their end state. '
+                        'Combines with your device\'s reduce-motion '
+                        'setting — either one turns it on.',
+                    value: _settings.reducedMotion,
+                    onChanged: _loaded
+                        ? (v) => _save(_settings.copyWith(reducedMotion: v))
+                        : null,
                   ),
                   const Divider(color: AppColors.outlineVariant),
                   const UnavailableSettingsRow(
@@ -263,6 +294,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  /// The §23 Volume row, real since Phase 12: dragging applies the new
+  /// volume to the feedback layer live (so the change is audible while
+  /// dragging); the value is persisted when the drag ends.
+  Widget _volumeRow() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Volume', style: AppTypography.bodyBase),
+        Text(
+          'How loud music and sound effects play.',
+          style: AppTypography.bodyBase.copyWith(
+            color: AppColors.onSurfaceVariant,
+            fontSize: 12,
+          ),
+        ),
+        Slider(
+          value: _settings.volume,
+          onChanged: _loaded
+              ? (v) {
+                  final next = _settings.copyWith(volume: v);
+                  setState(() => _settings = next);
+                  FeedbackScope.maybeOf(context)?.applySettings(next);
+                }
+              : null,
+          onChangeEnd: _loaded
+              ? (v) => _save(_settings.copyWith(volume: v))
+              : null,
+        ),
+      ],
+    );
+  }
+
   Widget _toggleRow({
     required String label,
     required String description,
@@ -288,33 +351,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         Switch(value: value, onChanged: onChanged),
       ],
-    );
-  }
-}
-
-/// The §23 Volume row, Phase 12's like the rest of Audio: a disabled
-/// slider, labelled as not yet available.
-class _VolumeRow extends StatelessWidget {
-  const _VolumeRow();
-
-  @override
-  Widget build(BuildContext context) {
-    return Opacity(
-      opacity: 0.55,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Volume', style: AppTypography.bodyBase),
-          Text(
-            'Not yet available — arrives with Phase 12.',
-            style: AppTypography.bodyBase.copyWith(
-              color: AppColors.onSurfaceVariant,
-              fontSize: 12,
-            ),
-          ),
-          const Slider(value: 0.5, onChanged: null),
-        ],
-      ),
     );
   }
 }
