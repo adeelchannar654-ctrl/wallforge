@@ -1,0 +1,11 @@
+Wallforge audio assets — licence
+================================
+
+Every file in this folder (button.wav, move.wav, wall.wav, invalid.wav,
+turn.wav, victory.wav, music.mp3) was synthesized for this project by
+tool/audio/generate_audio.py. No third-party audio, samples or recordings
+are included.
+
+The project releases these files under CC0 1.0 Universal (public domain
+dedication): you may copy, modify and use them for any purpose without
+permission. https://creativecommons.org/publicdomain/zero/1.0/

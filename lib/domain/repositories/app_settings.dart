@@ -15,17 +15,39 @@
 ///   selected, the current player's shortest route to their goal is drawn
 ///   on the board. Added in Phase 11 because `design.md` §23 lists the
 ///   setting; it is a real, working feature, not a placeholder.
+/// * [musicEnabled], [effectsEnabled], [volume] — the Phase 12 audio
+///   settings (`design.md` §23's Audio group), gating the feedback layer's
+///   background music and sound effects.
+/// * [hapticsEnabled] — the Phase 12 haptics setting (§23's Haptics group).
+/// * [reducedMotion] — the Phase 12 reduced-motion setting (§23's
+///   Accessibility group). It became real in Phase 12, not Phase 13,
+///   because `phase.md`'s Phase 12 task list names reduced-motion mode
+///   explicitly and this phase builds the animation system it controls;
+///   the correction is recorded in `memory.md` §13t. The other
+///   Accessibility items (colour assistance, high contrast, UI scale)
+///   remain Phase 13 and are still not fields here.
 ///
-/// No theme, sound, haptics or accessibility setting is included: none of those
-/// exist in the app yet, and inventing fields for them would be fabricating
-/// settings. They can be added when they are actually implemented.
+/// No theme setting is included: none exists in the app, and inventing
+/// fields for features that do not exist would be fabricating settings.
 class AppSettings {
   const AppSettings({
     this.confirmWallPlacement = true,
     this.aiDifficulty = defaultAiDifficulty,
     this.tutorialCompleted = false,
     this.movementAssistance = false,
+    this.musicEnabled = true,
+    this.effectsEnabled = true,
+    this.volume = defaultVolume,
+    this.hapticsEnabled = true,
+    this.reducedMotion = false,
   });
+
+  /// The default master volume.
+  ///
+  /// 0.5 because that is the value the Phase 11 Settings screen's inert
+  /// Volume slider displayed; activating the slider in Phase 12 at the
+  /// same value means the control did not silently jump.
+  static const double defaultVolume = 0.5;
 
   /// Factory-wide defaults, used when nothing is stored or the stored value is
   /// unreadable. Matches the app's own initial values.
@@ -75,16 +97,53 @@ class AppSettings {
   /// the board is unchanged until the player opts in.
   final bool movementAssistance;
 
+  /// Whether background music plays (Phase 12, `design.md` §23 Audio).
+  ///
+  /// Toggled independently from [effectsEnabled], per §23's grouping of
+  /// Music and Effects as separate rows. Defaults on.
+  final bool musicEnabled;
+
+  /// Whether sound effects play (Phase 12, `design.md` §23 Audio).
+  /// Defaults on.
+  final bool effectsEnabled;
+
+  /// Master volume for music and effects, 0.0–1.0 (Phase 12, §23 Audio).
+  ///
+  /// [fromJson] clamps out-of-range stored values rather than trusting
+  /// them, so a corrupt store cannot produce a negative or >1 volume.
+  final double volume;
+
+  /// Whether haptic feedback fires (Phase 12, `design.md` §23 Haptics).
+  /// Defaults on. Reduced motion suppresses haptics at the feedback layer
+  /// regardless of this toggle (`design.md` §25).
+  final bool hapticsEnabled;
+
+  /// Whether the user asked for reduced motion in-app (Phase 12,
+  /// `design.md` §23 Accessibility). Combined with the platform's own
+  /// `MediaQuery.disableAnimations` signal at the feedback seam: either
+  /// one being on means reduced motion is active. Defaults off.
+  final bool reducedMotion;
+
   AppSettings copyWith({
     bool? confirmWallPlacement,
     String? aiDifficulty,
     bool? tutorialCompleted,
     bool? movementAssistance,
+    bool? musicEnabled,
+    bool? effectsEnabled,
+    double? volume,
+    bool? hapticsEnabled,
+    bool? reducedMotion,
   }) => AppSettings(
     confirmWallPlacement: confirmWallPlacement ?? this.confirmWallPlacement,
     aiDifficulty: aiDifficulty ?? this.aiDifficulty,
     tutorialCompleted: tutorialCompleted ?? this.tutorialCompleted,
     movementAssistance: movementAssistance ?? this.movementAssistance,
+    musicEnabled: musicEnabled ?? this.musicEnabled,
+    effectsEnabled: effectsEnabled ?? this.effectsEnabled,
+    volume: volume ?? this.volume,
+    hapticsEnabled: hapticsEnabled ?? this.hapticsEnabled,
+    reducedMotion: reducedMotion ?? this.reducedMotion,
   );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -92,6 +151,11 @@ class AppSettings {
     'aiDifficulty': aiDifficulty,
     'tutorialCompleted': tutorialCompleted,
     'movementAssistance': movementAssistance,
+    'musicEnabled': musicEnabled,
+    'effectsEnabled': effectsEnabled,
+    'volume': volume,
+    'hapticsEnabled': hapticsEnabled,
+    'reducedMotion': reducedMotion,
   };
 
   /// Rebuilds settings from [json], substituting defaults for anything missing
@@ -103,6 +167,11 @@ class AppSettings {
     final rawDifficulty = json['aiDifficulty'];
     final rawTutorial = json['tutorialCompleted'];
     final rawAssistance = json['movementAssistance'];
+    final rawMusic = json['musicEnabled'];
+    final rawEffects = json['effectsEnabled'];
+    final rawVolume = json['volume'];
+    final rawHaptics = json['hapticsEnabled'];
+    final rawReducedMotion = json['reducedMotion'];
     final difficultyIsKnown =
         rawDifficulty is String && knownAiDifficulties.contains(rawDifficulty);
     return AppSettings(
@@ -116,6 +185,15 @@ class AppSettings {
       movementAssistance: rawAssistance is bool
           ? rawAssistance
           : defaults.movementAssistance,
+      musicEnabled: rawMusic is bool ? rawMusic : defaults.musicEnabled,
+      effectsEnabled: rawEffects is bool ? rawEffects : defaults.effectsEnabled,
+      volume: rawVolume is num
+          ? rawVolume.toDouble().clamp(0.0, 1.0)
+          : defaults.volume,
+      hapticsEnabled: rawHaptics is bool ? rawHaptics : defaults.hapticsEnabled,
+      reducedMotion: rawReducedMotion is bool
+          ? rawReducedMotion
+          : defaults.reducedMotion,
     );
   }
 
@@ -125,7 +203,12 @@ class AppSettings {
       other.confirmWallPlacement == confirmWallPlacement &&
       other.aiDifficulty == aiDifficulty &&
       other.tutorialCompleted == tutorialCompleted &&
-      other.movementAssistance == movementAssistance;
+      other.movementAssistance == movementAssistance &&
+      other.musicEnabled == musicEnabled &&
+      other.effectsEnabled == effectsEnabled &&
+      other.volume == volume &&
+      other.hapticsEnabled == hapticsEnabled &&
+      other.reducedMotion == reducedMotion;
 
   @override
   int get hashCode => Object.hash(
@@ -133,6 +216,11 @@ class AppSettings {
     aiDifficulty,
     tutorialCompleted,
     movementAssistance,
+    musicEnabled,
+    effectsEnabled,
+    volume,
+    hapticsEnabled,
+    reducedMotion,
   );
 
   @override
@@ -140,5 +228,10 @@ class AppSettings {
       'AppSettings(confirmWallPlacement: $confirmWallPlacement, '
       'aiDifficulty: $aiDifficulty, '
       'tutorialCompleted: $tutorialCompleted, '
-      'movementAssistance: $movementAssistance)';
+      'movementAssistance: $movementAssistance, '
+      'musicEnabled: $musicEnabled, '
+      'effectsEnabled: $effectsEnabled, '
+      'volume: $volume, '
+      'hapticsEnabled: $hapticsEnabled, '
+      'reducedMotion: $reducedMotion)';
 }
