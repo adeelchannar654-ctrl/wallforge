@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/application/online/online_game_controller.dart';
+import '../../../core/feedback/feedback_controller.dart';
+import '../../../core/feedback/feedback_scope.dart';
 import '../../../app/application/online/online_lobby_controller.dart';
 import '../../../app/application/online/rematch_controller.dart';
 import '../../../app/router/app_router.dart';
@@ -308,6 +310,9 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
     OnlineLobbyController controller,
     Room room,
   ) async {
+    // Phase 12: resolve the feedback layer before the await below, so no
+    // BuildContext is used across an async gap.
+    final feedback = FeedbackScope.maybeOf(context) ?? FeedbackService.shared;
     final settings = await const SharedPreferencesSettingsRepository().load();
     final match = OnlineGameController(
       rooms: controller.roomsRepository!,
@@ -316,6 +321,10 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
       code: room.code,
       movementAssistance: settings.movementAssistance,
     );
+    // The match controller fires its cues through the app's feedback
+    // layer, with the settings snapshot just loaded applied to it.
+    match.feedback = feedback;
+    feedback?.applySettings(settings);
     // The rematch negotiation for this match (Phase 11, Q-9.2): built here,
     // where the lobby's repositories and both players' ids are known, and
     // handed to the game screen alongside the match controller.

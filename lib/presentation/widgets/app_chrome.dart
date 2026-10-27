@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/feedback/feedback_scope.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_radii.dart';
 import '../../app/theme/app_spacing.dart';
@@ -57,7 +58,14 @@ class PrimaryActionButton extends StatelessWidget {
       height: 52,
       width: double.infinity,
       child: FilledButton.icon(
-        onPressed: onPressed,
+        onPressed: onPressed == null
+            ? null
+            : () {
+                // Phase 12: the button-press cue (§25) fires from this
+                // shared kit, so every primary action sounds the same.
+                FeedbackScope.maybeOf(context)?.onButtonPress();
+                onPressed!();
+              },
         icon: Icon(icon ?? Icons.play_arrow, size: 20),
         label: Text(label),
         style: FilledButton.styleFrom(
@@ -92,7 +100,12 @@ class SecondaryActionButton extends StatelessWidget {
       height: 48,
       width: double.infinity,
       child: OutlinedButton.icon(
-        onPressed: onPressed,
+        onPressed: onPressed == null
+            ? null
+            : () {
+                FeedbackScope.maybeOf(context)?.onButtonPress();
+                onPressed!();
+              },
         icon: Icon(icon ?? Icons.arrow_forward, size: 18),
         label: Text(label),
         style: OutlinedButton.styleFrom(

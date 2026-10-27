@@ -203,6 +203,10 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
   void onActionApplied() {
     if (_state.status == GameStatus.finished) {
       _showingResult = true;
+      // Phase 12: the match ending is its own event, distinct from the
+      // winning action's cue, and fires exactly once — this is the only
+      // place a local match transitions into the finished state.
+      feedback?.onVictory();
       unawaited(recordFinishedMatch());
     } else {
       _saveUnfinished();
@@ -235,6 +239,9 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
       _settings = loaded;
       setConfirmWallPlacementSilently(loaded.confirmWallPlacement);
       _aiDifficulty = _difficultyFromName(loaded.aiDifficulty);
+      // Phase 12: keep the feedback layer's snapshot at the persisted
+      // values, so cues are gated correctly from the first move.
+      feedback?.applySettings(loaded);
     }
     if (_disposed) return;
     notifyListeners();
@@ -397,7 +404,14 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
     _aiPreviousCell = _state.pawnPosition(kAiPlayer);
     setModeSilently(InteractionMode.move);
     final failure = attemptAction(action);
-    if (failure == null) onActionApplied();
+    if (failure == null) {
+      onActionApplied();
+      // Phase 12: the AI's action returns the turn to the human — the
+      // turn-change cue fires here rather than a second move cue for an
+      // action the viewer did not take (one event, one sound; the
+      // victory cue above already covered a finishing AI move).
+      if (_state.status != GameStatus.finished) feedback?.onTurnChanged();
+    }
     notifyListeners();
   }
 

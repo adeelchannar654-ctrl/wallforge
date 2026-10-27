@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/application/game_interaction.dart';
 import '../../../app/application/local_game_controller.dart';
+import '../../../core/feedback/feedback_controller.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
@@ -185,6 +186,11 @@ class _TutorialScreenState extends State<TutorialScreen> {
     _stepComplete = _step.interaction == null;
     final state = _step.state;
     final controller = LocalGameController(config: _config);
+    // Phase 12: the tutorial plays on the real board through the real
+    // controller, so its moves carry the same feedback as a match's.
+    // (The shared instance, not the scope: this runs from initState,
+    // where inherited-widget lookups are not yet allowed.)
+    controller.feedback = FeedbackService.shared;
     // Adopt the prepared position through the same validated path a
     // resumed match takes.
     controller.resumeMatch(

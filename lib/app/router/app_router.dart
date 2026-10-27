@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../core/feedback/feedback_controller.dart';
+import '../../core/feedback/feedback_scope.dart';
+import '../../core/feedback/feedback_transitions.dart';
 import '../../data/local/in_memory_repositories.dart';
 import '../../domain/models/board_config.dart';
 import '../../domain/repositories/room.dart';
@@ -131,15 +134,19 @@ class AppRouter {
           ),
         );
       case AppRoutes.game:
-        return MaterialPageRoute<void>(
+        return WallforgePageRoute<void>(
           settings: settings,
           // The route builds the controller, so the screen disposes it with
           // the route (Q-8.6). Previously it leaked for the life of the
           // process.
-          builder: (_) => GameScreen(
-            controller: _controllerFor(settings),
-            ownsController: true,
-          ),
+          builder: (context) {
+            final controller = _controllerFor(settings);
+            // Phase 12: the game controller fires its cues through the
+            // app's feedback layer.
+            controller.feedback =
+                FeedbackScope.maybeOf(context) ?? FeedbackService.shared;
+            return GameScreen(controller: controller, ownsController: true);
+          },
         );
       case AppRoutes.online:
       case AppRoutes.onlineCreate:
@@ -148,13 +155,19 @@ class AppRouter {
       case AppRoutes.onlineGame:
         final args = settings.arguments;
         if (args is OnlineGameRouteArgs) {
-          return _page(
-            settings,
-            OnlineGameScreen(
-              controller: args.controller,
-              rematch: args.rematch,
-              ownsController: true,
-            ),
+          return WallforgePageRoute<void>(
+            settings: settings,
+            builder: (context) {
+              // Phase 12: assign the feedback layer if the lobby did not
+              // already (the lobby normally assigns it at match entry).
+              args.controller.feedback ??=
+                  FeedbackScope.maybeOf(context) ?? FeedbackService.shared;
+              return OnlineGameScreen(
+                controller: args.controller,
+                rematch: args.rematch,
+                ownsController: true,
+              );
+            },
           );
         }
         // No live controller: there is no match to show. Fall back to the
@@ -173,8 +186,10 @@ class AppRouter {
     }
   }
 
-  static MaterialPageRoute<void> _page(RouteSettings settings, Widget child) {
-    return MaterialPageRoute<void>(settings: settings, builder: (_) => child);
+  /// Every app route uses the Phase 12 page route (the §24 UI-transition
+  /// duration and treatment), so screen changes feel like one system.
+  static WallforgePageRoute<void> _page(RouteSettings settings, Widget child) {
+    return WallforgePageRoute<void>(settings: settings, builder: (_) => child);
   }
 
   /// The online lobby, optionally adopting an already-seated room (a
@@ -189,7 +204,7 @@ class AppRouter {
       AppRoutes.onlineJoin => OnlineLobbyFocus.join,
       _ => OnlineLobbyFocus.none,
     };
-    return MaterialPageRoute<void>(
+    return WallforgePageRoute<void>(
       settings: settings,
       // The route built the controller, so the screen disposes it.
       builder: (_) => OnlineLobbyScreen(
@@ -204,7 +219,7 @@ class AppRouter {
   static Route<void> _result(RouteSettings settings) {
     final args = settings.arguments;
     if (args is ResultRouteArgs) {
-      return MaterialPageRoute<void>(
+      return WallforgePageRoute<void>(
         settings: settings,
         builder: (context) => Scaffold(
           body: ResultScreen(

@@ -158,6 +158,11 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
   String? _statusMessage;
   bool _submitting = false;
   bool _disposed = false;
+
+  /// Whether any snapshot has been adopted yet (Phase 12 cue gating: the
+  /// first adopt is this client *joining* a state, not an event in the
+  /// match, so it fires no cues).
+  bool _adopted = false;
   bool _recovering = false;
   bool _claiming = false;
   AbandonmentFailure? _claimFailure;
@@ -350,6 +355,14 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
     _onDocument(document);
   }
 
+  /// Phase 12: this controller's submit verdict is asynchronous, so the
+  /// shared interaction layer must not fire cues on attempt — they fire
+  /// when the verified snapshot adopts an action (see
+  /// [_fireAdoptedCues]), and the invalid cue fires on an `invalidAction`
+  /// rejection in [submit].
+  @override
+  bool get cuesOnAttempt => false;
+
   // --- Submitting -------------------------------------------------------------
 
   /// The online sink: sends the action rather than applying it locally.
@@ -391,6 +404,11 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
         return null;
       case MoveRejected(:final failure):
         _lastSyncFailure = failure;
+        // Phase 12: only an engine refusal is the "invalid action" cue —
+        // network and turn races are connection facts, not user errors.
+        if (failure.reason == MatchSyncFailureReason.invalidAction) {
+          feedback?.onInvalidAction();
+        }
         switch (failure.reason) {
           case MatchSyncFailureReason.networkUnavailable:
             // Hold it. Firestore does not queue a transaction, so resubmission
@@ -466,6 +484,9 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
     final verdict = _verify(room, document);
     if (verdict == _Verdict.echo) {
       _room = room;
+      // An echo still proves this client holds a verified state, so the
+      // first one ends the "just joined" window for Phase 12 cues.
+      _adopted = true;
       _lastPresence = opponentPresence;
       // An echo can still be the answer to a held action: if the move we were
       // holding landed while we were away, the very document that looks
@@ -481,8 +502,11 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
     }
 
     // --- adopt ---
+    final previousState = _state;
     _room = room;
     _state = room.boardState!;
+    _fireAdoptedCues(previousState, _state);
+    _adopted = true;
     _lastPresence = opponentPresence;
     _lastSyncFailure = null;
     _statusMessage = null;
@@ -492,6 +516,45 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
     _sync = OnlineSyncState.inSync;
     _resolvePendingAfterSync();
     notifyListeners();
+  }
+
+  /// Phase 12 cues for an adopted snapshot — fired exactly once per
+  /// event, from the verified state transition itself:
+  ///
+  /// * exactly one ply advanced, and the mover was this client → the
+  ///   move/wall cue (this is the confirmation of our own submit; the
+  ///   echo verdict guarantees it cannot fire twice for one action);
+  /// * exactly one ply, mover was the opponent → the turn-change cue
+  ///   (the turn returned to us; one event, one sound);
+  /// * the match transitioned into finished → the victory cue (in
+  ///   addition to our own winning action's cue; instead of the
+  ///   turn-change cue for the opponent's winning action);
+  /// * a jump of more than one ply is a catch-up: no action can be
+  ///   attributed, so only a finish is cued.
+  void _fireAdoptedCues(GameState previous, GameState next) {
+    if (!_adopted) return;
+    final feedback = this.feedback;
+    if (feedback == null) return;
+    final finishedNow =
+        next.status == GameStatus.finished &&
+        previous.status != GameStatus.finished;
+    if (next.turnNumber != previous.turnNumber + 1) {
+      if (finishedNow) feedback.onVictory();
+      return;
+    }
+    final mover = previous.currentPlayer;
+    if (mover == mySide) {
+      final movedPawn =
+          previous.pawnPosition(mover) != next.pawnPosition(mover);
+      if (movedPawn) {
+        feedback.onMove();
+      } else {
+        feedback.onWallPlaced();
+      }
+    } else if (!finishedNow) {
+      feedback.onTurnChanged();
+    }
+    if (finishedNow) feedback.onVictory();
   }
 
   /// Decides whether an incoming document may be shown.

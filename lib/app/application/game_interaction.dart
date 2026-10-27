@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../core/feedback/feedback_controller.dart';
 import '../../domain/engine/game_engine.dart';
 import '../../domain/models/action_failure.dart';
 import '../../domain/models/cell.dart';
@@ -42,6 +43,25 @@ enum InteractionMode {
 /// for reasons of its own — the online controller refuses while it is not this
 /// player's turn, or while reconnecting.
 mixin GameInteraction on ChangeNotifier {
+  /// The Phase 12 feedback layer, assigned by whichever screen/router
+  /// created the host controller. Null in tests that don't install one —
+  /// cues then simply don't fire.
+  ///
+  /// Cues are triggered here, at the point an interaction resolves,
+  /// because this layer is where success and failure are known — not in
+  /// widgets, and not once per screen showing the same controller.
+  FeedbackController? feedback;
+
+  /// Whether this controller's [attemptAction] verdict is final when it
+  /// returns, so cues may fire on attempt.
+  ///
+  /// True for the local controller (the engine decides synchronously).
+  /// The online controller overrides this to false: its submit verdict
+  /// is only known when the verified snapshot adopts the action (or the
+  /// submission is rejected), so its cues fire there instead — a
+  /// rejected submit must never sound like a success.
+  bool get cuesOnAttempt => true;
+
   InteractionMode _mode = InteractionMode.move;
   Cell? _selectedCell;
   ({Cell anchor, WallOrientation orientation})? _pendingWall;
@@ -182,9 +202,11 @@ mixin GameInteraction on ChangeNotifier {
     if (failure == null) {
       _selectedCell = null;
       _mode = InteractionMode.move;
+      if (cuesOnAttempt) feedback?.onMove();
       onActionApplied();
     } else {
       _lastFailure = failure;
+      if (cuesOnAttempt) feedback?.onInvalidAction();
     }
     notifyListeners();
   }
@@ -229,10 +251,13 @@ mixin GameInteraction on ChangeNotifier {
     _lastFailure = failure;
     if (failure == null) {
       _pendingWall = null;
+      if (cuesOnAttempt) feedback?.onWallPlaced();
       // Returns to move mode after a wall lands, which is what the Phase 4
       // local controller did and what the board's ghost preview assumes.
       interactionSetMode(InteractionMode.move);
       onActionApplied();
+    } else if (cuesOnAttempt) {
+      feedback?.onInvalidAction();
     }
     notifyListeners();
   }
