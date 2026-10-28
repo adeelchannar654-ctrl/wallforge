@@ -274,7 +274,9 @@ class OnlineGameScreen extends StatelessWidget {
         ? AppColors.tertiary
         : controller.currentPlayer == PlayerId.blue
         ? AppColors.primaryContainer
-        : AppColors.secondaryContainer;
+        // Banner identity text uses the light tint token for WCAG AA
+        // contrast, as in the local game screen (Phase 13).
+        : AppColors.secondary;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),

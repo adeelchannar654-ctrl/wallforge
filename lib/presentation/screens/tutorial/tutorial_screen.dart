@@ -287,9 +287,19 @@ class _TutorialScreenState extends State<TutorialScreen> {
                 ],
               ),
               const SizedBox(height: AppSpacing.lg),
-              Text(_step.title, style: AppTypography.headlineLg),
-              const SizedBox(height: AppSpacing.sm),
-              Text(_step.body, style: AppTypography.bodyBase),
+              // Phase 13: step changes are announced to assistive
+              // technology as they happen.
+              Semantics(
+                liveRegion: true,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_step.title, style: AppTypography.headlineLg),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(_step.body, style: AppTypography.bodyBase),
+                  ],
+                ),
+              ),
               const SizedBox(height: AppSpacing.lg),
               if (controller != null) ...[
                 Center(

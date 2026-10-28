@@ -129,10 +129,15 @@ class SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: AppTypography.labelCaps.copyWith(
-        color: AppColors.onSurfaceVariant,
+    // Phase 13: section titles are headings for assistive technology,
+    // on every screen that uses this shared widget.
+    return Semantics(
+      header: true,
+      child: Text(
+        text,
+        style: AppTypography.labelCaps.copyWith(
+          color: AppColors.onSurfaceVariant,
+        ),
       ),
     );
   }

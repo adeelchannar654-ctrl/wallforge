@@ -194,14 +194,15 @@ class OnlineLobbyController extends ChangeNotifier {
     if (!_authState.isSignedIn) {
       // The wording deliberately does not blame connectivity: the most common
       // cause by far is a build with no Firebase configuration, which says
-      // nothing about the player's connection. The auth layer's own reason is
-      // included because it is credential-free and safe to show.
-      final detail = _authState.detail;
+      // nothing about the player's connection. Phase 13's error audit
+      // removed the auth layer's detail from this message: it carries
+      // exception type names (`FirebaseAuthException(...)`), which are
+      // technical text a general player cannot act on. The detail is
+      // still logged below for diagnosis.
+      _log.log('sign-in failed: ${_authState.detail ?? 'no detail'}');
       _fail(
         RoomFailureReason.notAuthenticated,
-        detail == null
-            ? 'Could not sign in. Online play is unavailable.'
-            : 'Could not sign in. Online play is unavailable ($detail).',
+        'Could not sign in. Online play is unavailable.',
       );
       return;
     }

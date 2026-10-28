@@ -203,13 +203,9 @@ class GameScreen extends StatelessWidget {
               if (pendingFailure != null)
                 Padding(
                   padding: const EdgeInsets.only(top: AppSpacing.xs),
-                  child: Text(
+                  child: _failureText(
                     LocalGameController.failureMessage(pendingFailure),
                     key: const ValueKey('pending-wall-failure'),
-                    style: AppTypography.bodyBase.copyWith(
-                      color: AppColors.error,
-                      fontSize: 12,
-                    ),
                   ),
                 ),
             ],
@@ -249,20 +245,27 @@ class GameScreen extends StatelessWidget {
                 ? AppColors.tertiary
                 : isBlue
                 ? AppColors.primaryContainer
-                : AppColors.secondaryContainer,
+                // The banner is identity *text*: the light tint token,
+                // not the deep container crimson, so the words meet
+                // WCAG AA contrast on the banner surface (Phase 13).
+                : AppColors.secondary,
           ),
         ),
       ),
     );
 
     // While the AI is deciding, say so (§20's thinking indicator, Phase 11).
+    // Phase 13: the turn banner is a live region — whose turn it is (and
+    // who won) is announced to assistive technology as it changes, the
+    // treatment the online game screen already had.
+    final liveBanner = Semantics(liveRegion: true, child: banner);
     // Board input is already blocked by the controller during its turn;
     // this only names that state.
     if (controller.versusAi && controller.isAiTurn && !isFinished) {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          banner,
+          liveBanner,
           const SizedBox(height: AppSpacing.xs),
           Text(
             'AI is thinking…',
@@ -275,7 +278,7 @@ class GameScreen extends StatelessWidget {
         ],
       );
     }
-    return banner;
+    return liveBanner;
   }
 
   Widget _buildModeToggle() {
@@ -319,6 +322,33 @@ class GameScreen extends StatelessWidget {
     );
   }
 
+  /// A failure message the way `design.md` §26 requires: icon + text
+  /// (never colour alone), announced to assistive technology as a live
+  /// region (Phase 13). The wording itself comes from the engine's
+  /// plain-language failure messages.
+  Widget _failureText(String message, {Key? key}) {
+    return Semantics(
+      key: key,
+      liveRegion: true,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.error_outline, color: AppColors.error, size: 14),
+          const SizedBox(width: AppSpacing.xs),
+          Flexible(
+            child: Text(
+              message,
+              style: AppTypography.bodyBase.copyWith(
+                color: AppColors.error,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildActionButtons(BuildContext context) {
     final hasPending = controller.pendingWall != null;
     final hasFailure = controller.lastFailure != null;
@@ -331,12 +361,8 @@ class GameScreen extends StatelessWidget {
       runSpacing: AppSpacing.xs,
       children: [
         if (hasFailure)
-          Text(
+          _failureText(
             LocalGameController.failureMessage(controller.lastFailure!),
-            style: AppTypography.bodyBase.copyWith(
-              color: AppColors.error,
-              fontSize: 12,
-            ),
           ),
         if (hasPending) ...[
           _buildButton('CANCEL', AppColors.onSurfaceVariant, controller.cancel),

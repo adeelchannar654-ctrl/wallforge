@@ -151,13 +151,19 @@ class ResultScreen extends StatelessWidget {
               Center(child: PlayerPawnDisc(player: data.winner!, size: 72)),
               const SizedBox(height: AppSpacing.lg),
             ],
-            Text(
-              _heading,
-              textAlign: TextAlign.center,
-              style: AppTypography.headlineLgMobile.copyWith(
-                color: data.viewerWon
-                    ? AppColors.tertiary
-                    : AppColors.onSurface,
+            // Phase 13: the result is the screen's heading and is
+            // announced to assistive technology on arrival.
+            Semantics(
+              header: true,
+              liveRegion: true,
+              child: Text(
+                _heading,
+                textAlign: TextAlign.center,
+                style: AppTypography.headlineLgMobile.copyWith(
+                  color: data.viewerWon
+                      ? AppColors.tertiary
+                      : AppColors.onSurface,
+                ),
               ),
             ),
             if (_summary != null) ...[

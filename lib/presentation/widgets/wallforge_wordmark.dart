@@ -15,24 +15,28 @@ class WallforgeWordmark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text.rich(
-      TextSpan(
-        children: [
-          TextSpan(
-            text: 'WALL',
-            style: AppTypography.displayLg.copyWith(
-              fontSize: fontSize,
-              color: AppColors.textPrimary,
+    // Phase 13: the brand wordmark is each screen's top heading.
+    return Semantics(
+      header: true,
+      child: Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(
+              text: 'WALL',
+              style: AppTypography.displayLg.copyWith(
+                fontSize: fontSize,
+                color: AppColors.textPrimary,
+              ),
             ),
-          ),
-          TextSpan(
-            text: 'FORGE',
-            style: AppTypography.displayLg.copyWith(
-              fontSize: fontSize,
-              color: AppColors.primaryContainer,
+            TextSpan(
+              text: 'FORGE',
+              style: AppTypography.displayLg.copyWith(
+                fontSize: fontSize,
+                color: AppColors.primaryContainer,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

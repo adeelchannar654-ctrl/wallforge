@@ -616,25 +616,28 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
           ),
         );
 
-  Widget _buildError(String message) => Container(
-    padding: const EdgeInsets.all(AppSpacing.md),
-    decoration: BoxDecoration(
-      color: AppColors.errorContainer.withValues(alpha: 0.25),
-      borderRadius: BorderRadius.circular(AppRadii.sm),
-      border: Border.all(color: AppColors.error),
-    ),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Icon(Icons.error_outline, color: AppColors.error, size: 18),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: Text(
-            message,
-            style: AppTypography.bodyBase.copyWith(color: AppColors.error),
+  Widget _buildError(String message) => Semantics(
+    liveRegion: true,
+    child: Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.errorContainer.withValues(alpha: 0.25),
+        borderRadius: BorderRadius.circular(AppRadii.sm),
+        border: Border.all(color: AppColors.error),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Icon(Icons.error_outline, color: AppColors.error, size: 18),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              message,
+              style: AppTypography.bodyBase.copyWith(color: AppColors.error),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     ),
   );
 }
