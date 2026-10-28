@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../core/feedback/feedback_controller.dart';
-import '../../core/feedback/feedback_scope.dart';
 import '../../core/feedback/feedback_transitions.dart';
 import '../../data/local/in_memory_repositories.dart';
 import '../../domain/models/board_config.dart';
@@ -134,19 +133,30 @@ class AppRouter {
           ),
         );
       case AppRoutes.game:
+        // The controller is created ONCE, here: onGenerateRoute runs a
+        // single time per navigation, while a route builder may re-run
+        // whenever an ancestor rebuilds. Creating it inside the builder
+        // made the match ephemeral — the Phase 12 regression (§13u):
+        // the builder also read FeedbackScope via dependOn…, which
+        // subscribed the route element to FeedbackController
+        // notifications, and loadPersisted's applySettings notification
+        // then rebuilt the route around a brand-new controller every
+        // frame, discarding every move and wall before it could be
+        // seen. The builder below only ever *captures* this controller,
+        // and feedback is assigned from FeedbackService.shared — the
+        // mechanism FeedbackService documents for the router — never
+        // via a dependOn call inside a builder.
+        final gameController = _controllerFor(settings);
+        // Phase 12: the game controller fires its cues through the
+        // app's feedback layer.
+        gameController.feedback = FeedbackService.shared;
         return WallforgePageRoute<void>(
           settings: settings,
-          // The route builds the controller, so the screen disposes it with
+          // The route owns the controller, so the screen disposes it with
           // the route (Q-8.6). Previously it leaked for the life of the
           // process.
-          builder: (context) {
-            final controller = _controllerFor(settings);
-            // Phase 12: the game controller fires its cues through the
-            // app's feedback layer.
-            controller.feedback =
-                FeedbackScope.maybeOf(context) ?? FeedbackService.shared;
-            return GameScreen(controller: controller, ownsController: true);
-          },
+          builder: (_) =>
+              GameScreen(controller: gameController, ownsController: true),
         );
       case AppRoutes.online:
       case AppRoutes.onlineCreate:
@@ -157,11 +167,13 @@ class AppRouter {
         if (args is OnlineGameRouteArgs) {
           return WallforgePageRoute<void>(
             settings: settings,
-            builder: (context) {
+            builder: (_) {
               // Phase 12: assign the feedback layer if the lobby did not
               // already (the lobby normally assigns it at match entry).
-              args.controller.feedback ??=
-                  FeedbackScope.maybeOf(context) ?? FeedbackService.shared;
+              // From FeedbackService.shared, not a dependOn read: a route
+              // builder must never subscribe itself to the feedback
+              // layer's notifications (the §13u regression).
+              args.controller.feedback ??= FeedbackService.shared;
               return OnlineGameScreen(
                 controller: args.controller,
                 rematch: args.rematch,
