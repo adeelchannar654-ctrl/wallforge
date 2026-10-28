@@ -175,11 +175,11 @@ class ResultScreen extends StatelessWidget {
               child: Column(
                 children: [
                   _statRow('Turns played', '${data.turnsPlayed}'),
-                  const Divider(color: AppColors.outlineVariant),
+                  Divider(color: AppColors.outlineVariant),
                   _statRow('Walls used — Blue', '${data.wallsUsedBlue}'),
-                  const Divider(color: AppColors.outlineVariant),
+                  Divider(color: AppColors.outlineVariant),
                   _statRow('Walls used — Red', '${data.wallsUsedRed}'),
-                  const Divider(color: AppColors.outlineVariant),
+                  Divider(color: AppColors.outlineVariant),
                   _statRow('Result', _resultText),
                 ],
               ),

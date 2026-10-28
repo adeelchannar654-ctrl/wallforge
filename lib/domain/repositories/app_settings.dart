@@ -23,9 +23,12 @@
 ///   Accessibility group). It became real in Phase 12, not Phase 13,
 ///   because `phase.md`'s Phase 12 task list names reduced-motion mode
 ///   explicitly and this phase builds the animation system it controls;
-///   the correction is recorded in `memory.md` §13t. The other
-///   Accessibility items (colour assistance, high contrast, UI scale)
-///   remain Phase 13 and are still not fields here.
+///   the correction is recorded in `memory.md` §13t.
+/// * [colorAssistance], [highContrast], [uiScale] — the Phase 13
+///   accessibility settings (§23's Accessibility group): a
+///   colour-blind-safe player-colour swap for the board, the
+///   high-contrast token set, and the app-wide text/UI scale. Recorded
+///   in `memory.md` §13v.
 ///
 /// No theme setting is included: none exists in the app, and inventing
 /// fields for features that do not exist would be fabricating settings.
@@ -40,7 +43,18 @@ class AppSettings {
     this.volume = defaultVolume,
     this.hapticsEnabled = true,
     this.reducedMotion = false,
+    this.colorAssistance = false,
+    this.highContrast = false,
+    this.uiScale = defaultUiScale,
   });
+
+  /// The default UI scale: unscaled.
+  static const double defaultUiScale = 1.0;
+
+  /// The largest UI scale the Settings control offers. 1.5 is the
+  /// recorded Phase 13 bound: it is the largest factor at which every
+  /// screen was layout-verified (`memory.md` §13v).
+  static const double maxUiScale = 1.5;
 
   /// The default master volume.
   ///
@@ -124,6 +138,24 @@ class AppSettings {
   /// one being on means reduced motion is active. Defaults off.
   final bool reducedMotion;
 
+  /// Whether colour assistance is on (Phase 13, §23 Accessibility):
+  /// the board's player colours swap to the colour-blind-safe pair
+  /// (Okabe–Ito blue/orange) verified in `memory.md` §13v, on top of
+  /// the always-on §26 colour-plus-label redundancy. Defaults off.
+  final bool colorAssistance;
+
+  /// Whether the high-contrast token set is active (Phase 13, §23
+  /// Accessibility): the app-wide alternate palette whose text pairs
+  /// meet WCAG AA ratios (computed and recorded in `memory.md` §13v).
+  /// Defaults off.
+  final bool highContrast;
+
+  /// The app-wide UI/text scale factor (Phase 13, §23 Accessibility),
+  /// applied through `TextScaler`. [fromJson] clamps stored values to
+  /// [defaultUiScale]–[maxUiScale], the range the Settings control
+  /// offers and the layout tests cover. Defaults to [defaultUiScale].
+  final double uiScale;
+
   AppSettings copyWith({
     bool? confirmWallPlacement,
     String? aiDifficulty,
@@ -134,6 +166,9 @@ class AppSettings {
     double? volume,
     bool? hapticsEnabled,
     bool? reducedMotion,
+    bool? colorAssistance,
+    bool? highContrast,
+    double? uiScale,
   }) => AppSettings(
     confirmWallPlacement: confirmWallPlacement ?? this.confirmWallPlacement,
     aiDifficulty: aiDifficulty ?? this.aiDifficulty,
@@ -144,6 +179,9 @@ class AppSettings {
     volume: volume ?? this.volume,
     hapticsEnabled: hapticsEnabled ?? this.hapticsEnabled,
     reducedMotion: reducedMotion ?? this.reducedMotion,
+    colorAssistance: colorAssistance ?? this.colorAssistance,
+    highContrast: highContrast ?? this.highContrast,
+    uiScale: uiScale ?? this.uiScale,
   );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -156,6 +194,9 @@ class AppSettings {
     'volume': volume,
     'hapticsEnabled': hapticsEnabled,
     'reducedMotion': reducedMotion,
+    'colorAssistance': colorAssistance,
+    'highContrast': highContrast,
+    'uiScale': uiScale,
   };
 
   /// Rebuilds settings from [json], substituting defaults for anything missing
@@ -172,6 +213,9 @@ class AppSettings {
     final rawVolume = json['volume'];
     final rawHaptics = json['hapticsEnabled'];
     final rawReducedMotion = json['reducedMotion'];
+    final rawColorAssistance = json['colorAssistance'];
+    final rawHighContrast = json['highContrast'];
+    final rawUiScale = json['uiScale'];
     final difficultyIsKnown =
         rawDifficulty is String && knownAiDifficulties.contains(rawDifficulty);
     return AppSettings(
@@ -194,6 +238,15 @@ class AppSettings {
       reducedMotion: rawReducedMotion is bool
           ? rawReducedMotion
           : defaults.reducedMotion,
+      colorAssistance: rawColorAssistance is bool
+          ? rawColorAssistance
+          : defaults.colorAssistance,
+      highContrast: rawHighContrast is bool
+          ? rawHighContrast
+          : defaults.highContrast,
+      uiScale: rawUiScale is num
+          ? rawUiScale.toDouble().clamp(defaultUiScale, maxUiScale)
+          : defaults.uiScale,
     );
   }
 
@@ -208,7 +261,10 @@ class AppSettings {
       other.effectsEnabled == effectsEnabled &&
       other.volume == volume &&
       other.hapticsEnabled == hapticsEnabled &&
-      other.reducedMotion == reducedMotion;
+      other.reducedMotion == reducedMotion &&
+      other.colorAssistance == colorAssistance &&
+      other.highContrast == highContrast &&
+      other.uiScale == uiScale;
 
   @override
   int get hashCode => Object.hash(
@@ -221,6 +277,9 @@ class AppSettings {
     volume,
     hapticsEnabled,
     reducedMotion,
+    colorAssistance,
+    highContrast,
+    uiScale,
   );
 
   @override
@@ -233,5 +292,8 @@ class AppSettings {
       'effectsEnabled: $effectsEnabled, '
       'volume: $volume, '
       'hapticsEnabled: $hapticsEnabled, '
-      'reducedMotion: $reducedMotion)';
+      'reducedMotion: $reducedMotion, '
+      'colorAssistance: $colorAssistance, '
+      'highContrast: $highContrast, '
+      'uiScale: $uiScale)';
 }

@@ -11,7 +11,7 @@ class AppTheme {
   const AppTheme._();
 
   static ThemeData get dark {
-    const colorScheme = ColorScheme(
+    final colorScheme = ColorScheme(
       brightness: Brightness.dark,
       primary: AppColors.primaryContainer,
       onPrimary: AppColors.onPrimaryContainer,
@@ -44,6 +44,14 @@ class AppTheme {
       useMaterial3: true,
       brightness: Brightness.dark,
       colorScheme: colorScheme,
+      // Phase 13 (PRD.md: keyboard accessibility where practical): a
+      // clearly visible focus indicator drawn from the token system,
+      // so keyboard/tab navigation is perceivable on every control
+      // that takes focus. Pairs with the palette: high-contrast mode
+      // raises `outline`/`primaryContainer`, and the focus ring
+      // follows automatically.
+      focusColor: AppColors.primaryContainer.withValues(alpha: 0.28),
+      hoverColor: AppColors.primaryContainer.withValues(alpha: 0.12),
       scaffoldBackgroundColor: AppColors.background,
       fontFamily: 'Inter',
       textTheme: TextTheme(
@@ -70,7 +78,7 @@ class AppTheme {
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadii.xl),
-          side: const BorderSide(color: AppColors.outlineVariant),
+          side: BorderSide(color: AppColors.outlineVariant),
         ),
       ),
     );

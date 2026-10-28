@@ -24,10 +24,11 @@ import '../../widgets/app_chrome.dart';
 /// * **Reduced motion is real (Phase 12)** — the recorded cross-document
 ///   correction (`memory.md` §13t): `phase.md`'s Phase 12 task list names
 ///   reduced-motion mode itself, and it controls the animation system
-///   Phase 12 builds, so it could not wait for Phase 13. The rest of
-///   Accessibility (Color assistance, High contrast, UI scale) remains
-///   visibly inert and Phase-13-labelled: nothing in Phase 12 touches
-///   colour, contrast or scale.
+///   Phase 12 builds, so it could not wait for Phase 13.
+/// * **Accessibility is fully real (Phase 13).** Color assistance, High
+///   contrast and UI scale are live controls: every save is applied by
+///   the app root in the same moment it is persisted — the palette swap
+///   and the text scale take effect app-wide, this screen included.
 /// * **Account is real**: the anonymous sign-in state, and Sign out through
 ///   the Phase 8 auth gateway.
 class SettingsScreen extends StatefulWidget {
@@ -112,7 +113,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               _save(_settings.copyWith(confirmWallPlacement: v))
                         : null,
                   ),
-                  const Divider(color: AppColors.outlineVariant),
+                  Divider(color: AppColors.outlineVariant),
                   _toggleRow(
                     label: 'Movement assistance',
                     description:
@@ -124,7 +125,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               _save(_settings.copyWith(movementAssistance: v))
                         : null,
                   ),
-                  const Divider(color: AppColors.outlineVariant),
+                  Divider(color: AppColors.outlineVariant),
                   Row(
                     children: [
                       Expanded(
@@ -166,7 +167,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ? (v) => _save(_settings.copyWith(musicEnabled: v))
                         : null,
                   ),
-                  const Divider(color: AppColors.outlineVariant),
+                  Divider(color: AppColors.outlineVariant),
                   _toggleRow(
                     label: 'Sound effects',
                     description: 'Sounds for moves, walls and results.',
@@ -175,7 +176,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ? (v) => _save(_settings.copyWith(effectsEnabled: v))
                         : null,
                   ),
-                  const Divider(color: AppColors.outlineVariant),
+                  Divider(color: AppColors.outlineVariant),
                   _volumeRow(),
                 ],
               ),
@@ -210,22 +211,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ? (v) => _save(_settings.copyWith(reducedMotion: v))
                         : null,
                   ),
-                  const Divider(color: AppColors.outlineVariant),
-                  const UnavailableSettingsRow(
+                  Divider(color: AppColors.outlineVariant),
+                  _toggleRow(
                     label: 'Color assistance',
-                    availableIn: 'Phase 13',
+                    description:
+                        'Player colours switch to a colour-blind-safe '
+                        'blue and orange on the board and player chips.',
+                    value: _settings.colorAssistance,
+                    onChanged: _loaded
+                        ? (v) => _save(_settings.copyWith(colorAssistance: v))
+                        : null,
                   ),
-                  const Divider(color: AppColors.outlineVariant),
-                  const UnavailableSettingsRow(
+                  Divider(color: AppColors.outlineVariant),
+                  _toggleRow(
                     label: 'High contrast',
-                    availableIn: 'Phase 13',
+                    description:
+                        'Black surfaces with brighter text and borders, '
+                        'applied across the whole app.',
+                    value: _settings.highContrast,
+                    onChanged: _loaded
+                        ? (v) => _save(_settings.copyWith(highContrast: v))
+                        : null,
                   ),
-                  const Divider(color: AppColors.outlineVariant),
-                  const UnavailableSettingsRow(
-                    label: 'UI scale',
-                    availableIn: 'Phase 13',
-                  ),
-                  const Divider(color: AppColors.outlineVariant),
+                  Divider(color: AppColors.outlineVariant),
+                  _uiScaleRow(),
+                  Divider(color: AppColors.outlineVariant),
                   Padding(
                     padding: const EdgeInsets.only(top: AppSpacing.sm),
                     child: Text(
@@ -320,6 +330,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
               : null,
           onChangeEnd: _loaded
               ? (v) => _save(_settings.copyWith(volume: v))
+              : null,
+        ),
+      ],
+    );
+  }
+
+  /// The §23 UI scale row (Phase 13): a slider over the range the
+  /// layout tests verify (100%–150%). Dragging applies the scale live
+  /// through the same save path (the app root re-derives the
+  /// TextScaler from the settings snapshot); the value persists on
+  /// every change, like the toggles.
+  Widget _uiScaleRow() {
+    final percent = (_settings.uiScale * 100).round();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Expanded(
+              child: Text('UI scale', style: AppTypography.bodyBase),
+            ),
+            Text(
+              '$percent%',
+              style: AppTypography.bodyBase.copyWith(
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+        Text(
+          'Make text and controls across the app larger.',
+          style: AppTypography.bodyBase.copyWith(
+            color: AppColors.onSurfaceVariant,
+            fontSize: 12,
+          ),
+        ),
+        Slider(
+          value: _settings.uiScale,
+          min: AppSettings.defaultUiScale,
+          max: AppSettings.maxUiScale,
+          divisions: 5,
+          label: '$percent%',
+          onChanged: _loaded
+              ? (v) => _save(_settings.copyWith(uiScale: v))
               : null,
         ),
       ],

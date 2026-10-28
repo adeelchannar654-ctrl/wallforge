@@ -260,7 +260,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.chevron_right,
                 color: AppColors.onSurfaceVariant,
               ),
@@ -276,7 +276,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return AppCard(
       child: Row(
         children: [
-          const Icon(
+          Icon(
             Icons.school_outlined,
             color: AppColors.primaryContainer,
             size: 28,

@@ -626,7 +626,7 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const Icon(Icons.error_outline, color: AppColors.error, size: 18),
+        Icon(Icons.error_outline, color: AppColors.error, size: 18),
         const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: Text(

@@ -110,7 +110,7 @@ class SecondaryActionButton extends StatelessWidget {
         label: Text(label),
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.onSurface,
-          side: const BorderSide(color: AppColors.outlineVariant),
+          side: BorderSide(color: AppColors.outlineVariant),
           textStyle: AppTypography.titleMd,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadii.md),
@@ -158,8 +158,8 @@ class PlayerPawnDisc extends StatelessWidget {
         gradient: RadialGradient(
           center: const Alignment(-0.35, -0.35),
           colors: isBlue
-              ? const [AppColors.primaryFixed, AppColors.primaryContainer]
-              : const [AppColors.secondaryFixedDim, Color(0xFFFF4B6E)],
+              ? [AppColors.primaryFixed, AppColors.primaryContainer]
+              : [AppColors.secondaryFixedDim, const Color(0xFFFF4B6E)],
         ),
         border: Border.all(color: AppColors.outlineVariant),
       ),

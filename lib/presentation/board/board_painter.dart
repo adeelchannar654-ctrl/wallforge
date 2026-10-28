@@ -292,7 +292,7 @@ class BoardPainter extends CustomPainter {
   void _drawLegalMoveRings(Canvas canvas, Size size) {
     final g = geometry;
     final p1 = state.currentPlayer == PlayerId.blue;
-    final ringColor = p1 ? AppColors.primaryContainer : AppColors.secondary;
+    final ringColor = p1 ? AppColors.bluePlayer : AppColors.redPlayer;
     final ringPaint = Paint()
       ..color = ringColor.withValues(alpha: 0.3)
       ..style = PaintingStyle.stroke
@@ -316,7 +316,7 @@ class BoardPainter extends CustomPainter {
   void _drawPathTrail(Canvas canvas, Size size) {
     final g = geometry;
     final p1 = state.currentPlayer == PlayerId.blue;
-    final color = p1 ? AppColors.primaryContainer : AppColors.secondary;
+    final color = p1 ? AppColors.bluePlayer : AppColors.redPlayer;
     final start = g.cellCenterFromModel(
       state.pawnPosition(state.currentPlayer),
     );
@@ -375,9 +375,12 @@ class BoardPainter extends CustomPainter {
       ..shader = ui.Gradient.linear(
         rect.topLeft,
         isP1 ? const Offset(1, 0) : const Offset(0, 1),
+        // The wall's owner colours come from the same identity tokens
+        // as the pawns (Phase 13), so colour assistance re-tints walls
+        // with their owner.
         isP1
-            ? [AppColors.primaryFixed, AppColors.primaryContainer]
-            : [AppColors.onSecondaryContainer, AppColors.secondaryContainer],
+            ? [AppColors.pawnGradientBlue.first, AppColors.bluePlayer]
+            : [AppColors.pawnGradientRed.first, AppColors.redPlayer],
       );
 
     final wallRrect = RRect.fromRectAndRadius(rect, const Radius.circular(4));
@@ -410,8 +413,14 @@ class BoardPainter extends CustomPainter {
     final ghostRrect = RRect.fromRectAndRadius(rect, const Radius.circular(4));
 
     if (wp.isValid) {
-      _drawGhostFill(canvas, ghostRrect, AppColors.primaryContainer, 0.35);
-      _drawGhostOutline(canvas, ghostRrect, AppColors.primaryContainer, 0.4);
+      // The ghost is the current player's own wall preview, so it
+      // carries that player's identity colour (Phase 13 — before, the
+      // preview was always Blue's colour, even on Red's turn).
+      final mine = state.currentPlayer == PlayerId.blue
+          ? AppColors.bluePlayer
+          : AppColors.redPlayer;
+      _drawGhostFill(canvas, ghostRrect, mine, 0.35);
+      _drawGhostOutline(canvas, ghostRrect, mine, 0.4);
       return;
     }
 
@@ -574,9 +583,7 @@ class BoardPainter extends CustomPainter {
       ..shader = ui.Gradient.linear(
         Offset(centre.dx - radius, centre.dy - radius),
         Offset(centre.dx + radius, centre.dy + radius),
-        isP1
-            ? const [Color(0xFFD9FBFF), Color(0xFF00DAF3), Color(0xFF004F58)]
-            : const [Color(0xFFFF8FA3), Color(0xFFE6004C), Color(0xFF67001F)],
+        isP1 ? AppColors.pawnGradientBlue : AppColors.pawnGradientRed,
         [0.0, 0.5, 1.0],
       );
     canvas.drawCircle(centre, radius, pawnPaint);
@@ -602,7 +609,35 @@ class BoardPainter extends CustomPainter {
       radius * 0.12,
       dotPaint,
     );
+
+    // The player's letter on the pawn itself (`design.md` §26: identity
+    // is name + colour + label, never colour alone). Phase 13 added
+    // this: before it, the pawn's identity on the canvas rested on its
+    // colour and start position only, despite the Settings screen
+    // claiming the letters existed. The letter sits at the pawn's
+    // centre in near-black, legible on both gradients' mid-tones and
+    // unchanged in meaning under colour assistance (B stays Blue's
+    // piece even when its colour becomes the Okabe–Ito blue).
+    final letter = TextPainter(
+      text: TextSpan(
+        text: pawnLetter(player),
+        style: TextStyle(
+          fontSize: radius * 0.95,
+          fontFamily: 'Inter',
+          fontWeight: FontWeight.w900,
+          color: Colors.black.withValues(alpha: 0.78),
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    letter.paint(canvas, centre - Offset(letter.width / 2, letter.height / 2));
   }
+
+  /// The letter drawn on [player]'s pawn (`design.md` §26's text
+  /// label): `B` for Blue, `R` for Red. Exposed for the Phase 13
+  /// player-identity tests.
+  static String pawnLetter(PlayerId player) =>
+      player == PlayerId.blue ? 'B' : 'R';
 
   void _drawActiveGlow(Canvas canvas, Size size, BoardAnimFrame frame) {
     if (activeGlow == null) return;
@@ -635,9 +670,7 @@ class BoardPainter extends CustomPainter {
     }
 
     final isP1 = activeGlow == PlayerId.blue;
-    final glowColor = isP1
-        ? AppColors.primaryContainer
-        : AppColors.secondaryContainer;
+    final glowColor = isP1 ? AppColors.bluePlayer : AppColors.redPlayer;
 
     canvas.drawCircle(
       centre,
@@ -667,9 +700,7 @@ class BoardPainter extends CustomPainter {
       t = Curves.easeOutCubic.transform(selection.t);
     }
     final isBlue = state.currentPlayer == PlayerId.blue;
-    final color = isBlue
-        ? AppColors.primaryContainer
-        : AppColors.secondaryContainer;
+    final color = isBlue ? AppColors.bluePlayer : AppColors.redPlayer;
     canvas.drawCircle(
       centre,
       g.cellSize * (0.34 + 0.04 * t),

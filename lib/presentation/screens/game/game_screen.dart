@@ -311,9 +311,9 @@ class GameScreen extends StatelessWidget {
         }),
         side: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return const BorderSide(color: AppColors.primaryContainer);
+            return BorderSide(color: AppColors.primaryContainer);
           }
-          return const BorderSide(color: AppColors.outlineVariant);
+          return BorderSide(color: AppColors.outlineVariant);
         }),
       ),
     );
