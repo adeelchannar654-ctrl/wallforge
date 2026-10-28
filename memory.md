@@ -3440,3 +3440,179 @@ Open Questions: none raised by this phase. The music is a synthesized
 pad, not a composed track — replacing it with a recorded/composed loop
 later is an asset swap behind `FeedbackAssets.music`, not a code
 change. Phase 13 was not started.
+
+## 13u. Phase 12 Correction — the local-play regression (found and fixed 2026-10-28)
+
+**The original Phase 12 report (§13t) was wrong.** It stated the phase
+was complete and gate-verified. In the real app, local pass-and-play
+and vs-AI play were both broken: the pawn did not move and walls did
+not place. Online play worked. The owner found this running the
+Drive copy on their laptop; §13t's gates had not caught it, for the
+reasons below. This section is the correction: the real root cause
+(found by reproduction, not assumed), the fix, and the test that now
+stands guard.
+
+### Root cause (proven, with the evidence)
+
+The Phase 12 feedback wiring in the `/game` route builder
+(`app_router.dart`) did two things inside the route's `builder:`:
+
+1. it created the match's `LocalGameController` there
+   (`_controllerFor(settings)`), and
+2. it read the feedback layer with
+   `FeedbackScope.maybeOf(context)` — a `dependOnInheritedWidgetOfExactType`
+   call, which **subscribes the calling element to that inherited
+   widget's notifications**.
+
+`FeedbackScope` is an `InheritedNotifier<FeedbackController>`, and the
+controller the route creates starts an async settings load
+(`PersistenceFactory.attachLocal` → `loadPersisted()`), which on
+completion calls `feedback?.applySettings(loaded)` — and
+`applySettings` calls `notifyListeners()`. So the sequence on entering
+a local game was: route builds → controller A created → its load
+completes → feedback notifies → **the subscribed route element
+rebuilds → the builder runs again → controller B (a fresh match)
+created** → B's load completes → notify → controller C… an unbounded
+loop, one brand-new controller per frame. A player's tap was applied
+correctly by whichever controller was current — and that controller
+was discarded and replaced by a fresh initial-state controller before
+the next frame, so the move was never visible. Walls identically.
+
+Evidence, all gathered before any fix:
+
+- A tap-driven test pumping the real `WallforgeApp` (router, feedback
+  scope, persistence) and navigating to `/game` could not even settle:
+  `pumpAndSettle` timed out — the screen scheduled a new frame
+  forever. Probing showed **zero transient callbacks** (no ticker or
+  animation running) with `hasScheduledFrame` stuck true: a rebuild
+  loop, not an animation.
+- The same test then read the controller off the built `GameScreen`
+  twice, one second apart: **two different instances**
+  (`identical()` false). After the fix: the same instance.
+- Bisecting the ingredients (bare GameScreen; GameScreen + scope +
+  assigned feedback; router without the app root) — all settle. The
+  loop needs all three together: a `FeedbackScope` ancestor, feedback
+  assigned to the controller, and the persisted-settings load. That
+  combination existed only in the real app, which is precisely why
+  §13t's gates missed it: every Phase 12 test either pumped the game
+  screen directly (no router builder, no scope), used the router
+  *without* a `FeedbackScope` above it (`maybeOf` found nothing, no
+  subscription was created, feedback stayed null, the settings load
+  had nothing to notify, and the builder ran once), called controllers
+  directly, or pumped the full app without navigating to `/game`.
+
+Online play was immune for a structural reason: its controller is
+created once by the lobby and reaches the screen via route
+*arguments*; the `/online/game` builder reuses it (`feedback ??=`), so
+even when that builder re-ran, the match survived. Pass-and-play and
+vs-AI share `LocalGameController` and the `/game` route, so both
+failed identically — through the same blocked path, not two paths.
+
+**The reviewer's hypothesis was investigated and is not the cause.**
+The shared `GameInteraction` mixin does not wait for any snapshot
+adoption in local play: `tapCell` calls `attemptAction` synchronously,
+the engine applies the action, and only *then* do cues fire
+(`cuesOnAttempt` is true for local; every cue call is guarded and
+unawaited in the feedback layer, so a cue cannot throw into or delay
+the action path). The defect was not in the interaction layer at all —
+it was the route builder treating a per-navigation object as
+per-build, and subscribing itself to the very notifications its own
+object's startup produced.
+
+### The fix
+
+Two changes, both in `app_router.dart`, aimed at the mechanism rather
+than the symptom:
+
+1. **The `/game` controller is created once, in `onGenerateRoute`** —
+   which runs exactly once per navigation — and the route builder
+   only captures it. A route builder may re-run for reasons outside
+   the game's control (any ancestor change); the match must not be
+   recreated when it does. This restores the invariant Phases 4–11
+   enjoyed by accident (nothing above the Navigator ever notified)
+   and makes it structural.
+2. **Route builders no longer read the feedback layer with
+   dependOn.** Feedback is assigned from `FeedbackService.shared` —
+   the mechanism `FeedbackService`'s own documentation designates for
+   the router — in both the `/game` and `/online/game` routes. A
+   builder subscribing to feedback notifications is what closed the
+   loop; no route builder does it anymore.
+
+Gameplay never depended on feedback and still does not: cues fire
+after the action applies, from the controllers, fully guarded (§13t's
+cue design is unchanged and correct). What changed is that feedback
+*wiring* can no longer recreate gameplay state.
+
+### The regression test
+
+`test/presentation/screens/game/local_play_regression_test.dart` —
+two tests that boot the real `WallforgeApp` (the only tree in which
+the bug can exist) and play through the real `GameScreen` with real
+taps, in the category of the Phase 9 online tap tests:
+
+- **Pass-and-play**: a full 5×5 match played tap by tap — greedy legal
+  moves chosen from the targets the controller itself advertises, one
+  wall placed by real taps (WALL mode → slot tap → CONFIRM) — with an
+  assertion after *every* tap that the match advanced by exactly one
+  ply, and a final assertion that the screen holds the same controller
+  instance it started with.
+- **Vs-AI**: a full 5×5 match — human taps, AI replies inside its
+  think delay — asserting each human tap advances the match and each
+  AI reply follows, to a finished match with a winner.
+
+Verified against the pre-fix tree (77bf6ec): **both fail** (the game
+screen never settles — the loop's signature). With the fix: **both
+pass**, repeatedly.
+
+### Gate corrections to §13t
+
+§13t's suite line also does not reproduce and is corrected here. Run
+twice on the fixed tree on this machine, the full suite is **1,607
+tests — 1,596 passed, 11 failed**, and the failing set is:
+
+- the same 9 golden-image failures (5 board + 4 game), re-verified
+  environmental on the pristine Phase 11 tree, and
+- **2 failures in `online_game_presence_test.dart`** ("claiming
+  through the confirmation ends the match", "the claimed player sees
+  the abandoned state, not a win") that are **pre-existing**: they
+  fail identically on the pristine Phase 11 tree (`d132be9`) and the
+  pristine Phase 12 tree (`77bf6ec`), standalone and in the suite.
+  They are unrelated to Phase 12 and to this fix (their failing set
+  is unchanged by it), and they are recorded here as an open item
+  rather than silently absorbed: the abandonment-claim confirmation
+  does not surface the abandoned state in this environment, and the
+  cause has not been investigated yet.
+
+§13t's other gates stand as recorded (format 0 changed, analyze
+clean — after this session also removed two redundant-argument lint
+infos in the Phase 12 feedback test and one in the new test — spec
+OK, oracle byte-identical, web build OK), and are re-verified for the
+fix below.
+
+Gates for this correction (2026-10-28): format 150 files 0 changed;
+analyze — no issues; full suite as above (1,607 / 1,596 / 11, failing
+set identical to the pre-fix trees); web release build OK; spec
+checker OK (80 catalog rows, 65 rule IDs); oracle byte-identical
+(1,229,568 bytes, SHA-256 6f1e3c05…).
+
+### Process corrections
+
+- Phase 12's commits were pushed to GitHub on 2026-10-28 (remote
+  `main` verified at `77bf6ecc613f485079025eba0ec900749d2bdc90`), and
+  this correction's commits follow immediately. **Standing rule from
+  the owner, recorded 2026-10-28: push after every phase's final
+  commit, every time, without being asked. "Not pushed" is an
+  incomplete phase.** (Consistent with the owner's standing
+  condition: no personal information or credentials in the repo —
+  every push is diff-scanned first; `firebase_options.dart` and
+  `firebase.json` are never committed.)
+- A test that would have caught this — full-app, tap-driven, local —
+  now exists and runs in the suite. Phases that wire app-level
+  services (anything installed above the Navigator) must include a
+  full-app navigation-and-play test in their gates; screen-level and
+  controller-level tests are not sufficient for wiring that lives in
+  the router or the app root.
+
+Open items carried forward: the 2 pre-existing presence-test failures
+(above); everything §13t listed as open is unchanged. Phase 13 was
+not started.

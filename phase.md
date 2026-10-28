@@ -1322,6 +1322,18 @@ Animations are smooth and can be disabled/reduced where required.
   environmental (identical on the pristine Phase 11 tree); web release
   build OK; spec OK; oracle byte-identical. No rule, engine, sync or
   security change.
+- **Correction (2026-10-28)**: the result above shipped with a
+  regression the gates did not catch — in the real app, local
+  pass-and-play and vs-AI play were broken (every tap's controller was
+  discarded and replaced by a fresh one each frame, via a
+  feedback-notification loop in the `/game` route builder), and the
+  suite figures above do not reproduce (the true failing set on this
+  machine is 11: the 9 goldens plus 2 pre-existing
+  `online_game_presence_test` failures that also fail on the Phase 11
+  tree). Fixed, regression-tested with full-app tap-driven matches,
+  and pushed; the full honest record is `memory.md` §13u, which
+  supersedes this result's completion and gate claims where they
+  differ.
 
 ---
 
