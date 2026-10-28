@@ -162,10 +162,7 @@ class _AiDifficultyScreenState extends State<AiDifficultyScreen> {
                 ),
               ),
               if (selected)
-                Icon(
-                  Icons.check_circle,
-                  color: AppColors.primaryContainer,
-                ),
+                Icon(Icons.check_circle, color: AppColors.primaryContainer),
             ],
           ),
         ),

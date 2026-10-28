@@ -260,10 +260,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
               ),
-              Icon(
-                Icons.chevron_right,
-                color: AppColors.onSurfaceVariant,
-              ),
+              Icon(Icons.chevron_right, color: AppColors.onSurfaceVariant),
             ],
           ),
         ),

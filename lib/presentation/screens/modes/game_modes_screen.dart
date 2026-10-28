@@ -196,10 +196,7 @@ class _GameModesScreenState extends State<GameModesScreen> {
                 ),
               ),
               if (selected)
-                Icon(
-                  Icons.check_circle,
-                  color: AppColors.primaryContainer,
-                ),
+                Icon(Icons.check_circle, color: AppColors.primaryContainer),
             ],
           ),
         ),
