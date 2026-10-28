@@ -130,6 +130,22 @@ A wall may never remove the last route to either player's goal.
   synthesized in-project and CC0-licensed; see
   [`memory.md`](memory.md) §13t for the full record, including the
   Reduced Motion correction and the performance profile.
+- **Phase 13 — Accessibility.** The game no longer relies on colour
+  alone anywhere: pawns carry their B/R letters, and every player
+  mention in the UI is text as well as colour (proven by automated
+  identity tests). Color assistance swaps the player colours to the
+  Okabe–Ito colour-blind-safe pair (verified by colour-vision
+  simulation); High contrast applies a token set whose text pairs
+  are computed to meet WCAG AA (main text 21:1); UI scale (100–150%)
+  enlarges the whole app through Flutter's `TextScaler` and is
+  layout-verified at the largest factor. All three are real,
+  persisted Settings controls, as is Reduced motion from Phase 12.
+  Every screen has screen-reader semantics (headers, live regions),
+  non-board screens are fully keyboard-operable with a visible focus
+  indicator, and error messages are plain-language, icon-plus-text,
+  and announced. See [`memory.md`](memory.md) §13v for the full
+  record, including the contrast measurements and the keyboard
+  scope decision.
 
 **Firebase still needs owner-side setup in the Console for Android/iOS.**
 The web app is registered and live-verified (above). Android and iOS

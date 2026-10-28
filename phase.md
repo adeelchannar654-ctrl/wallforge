@@ -1357,6 +1357,36 @@ Make the game usable by a wider range of players.
 
 The game does not rely only on red/blue color differences.
 
+### Result
+
+Completed 2026-10-29 (full record: `memory.md` §13v). Color
+assistance, High contrast and UI scale are real, persisted settings
+(`AppSettings.colorAssistance` / `highContrast` / `uiScale`),
+applied app-wide through a runtime palette system (the default
+palette is bit-identical to the old constants) and a `TextScaler`
+at the app root. Color assistance swaps the player colours to the
+Okabe–Ito colour-blind-safe pair, verified by colour-vision
+simulation in tests (Machado 2009; distances 244.6/261.9/246.1 of
+441). High contrast is a computed token set: every asserted text
+pair meets WCAG AA, main pairs reach 21:1. The player-identity
+audit found and fixed the phase's headline gap — **the pawns
+carried no letters** despite the Settings screen claiming they did;
+`B`/`R` are now drawn on the pawns — and fixed the turn banner's
+Red text (1.99:1 → 8.42:1) plus the ghost preview's owner colour.
+Semantics coverage now spans every screen (headers, live regions);
+keyboard operation covers all non-board screens, with the board
+exclusion decided and recorded in §13v. The one technical-text leak
+("…(FirebaseAuthException(…))" in the sign-in failure) is removed.
+Reduced Motion was verified, not rebuilt. Gates: format 153 files
+0 changed; analyze clean; **1,632 tests — 1,619 passed, 13 failed**
+(baseline 1,607/11; +25 new Phase 13 tests all pass; failures are
+the 11 goldens — 2 of them newly stale because the ghost tint and
+pawn letters intentionally changed the render, masters to be
+regenerated on a reference machine — and the 2 pre-existing
+presence failures); web build OK; spec checker OK; oracle
+untouched; mojibake clean. No rule, engine, sync or security
+change.
+
 ---
 
 # Phase 14 — Responsive Web

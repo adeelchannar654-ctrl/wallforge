@@ -3616,3 +3616,207 @@ checker OK (80 catalog rows, 65 rule IDs); oracle byte-identical
 Open items carried forward: the 2 pre-existing presence-test failures
 (above); everything §13t listed as open is unchanged. Phase 13 was
 not started.
+
+## 13v. Phase 13 Record — Accessibility (completed 2026-10-29)
+
+Phase 13 makes the game usable by a wider range of players, per
+`phase.md` Phase 13 and `design.md` §26. The exit criterion — *the
+game does not rely only on red/blue color differences* — is now
+backed by automated tests, not a visual pass.
+
+### Source ledger (every value cites its source)
+
+| Decision/value | Source |
+|---|---|
+| Player identity = name + colour + text label together, never colour alone | `design.md` §26 (exact pattern) |
+| Wall states must use shape, opacity, icons, text | `design.md` §26 |
+| "red/blue color must not be the only player identifier" | `PRD.md` §6.4 principle 7 |
+| "Keyboard accessibility where practical" (web) | `PRD.md` §4 (Web users) |
+| Accessibility/color assistance is a named feature; UI scale "where practical" | `PRD.md` §6.6 Settings list |
+| Settings groups: Reduced motion / Color assistance / High contrast / UI scale under "Accessibility" | `design.md` §23 |
+| Accessibility is a presentation-layer responsibility; no new state-management package; justify any new package | `architecture.md` §2.1; `rules.md` §2.3/§3.3 — **no package was added** |
+| Colour-assistance mechanism (palette swap) | *Not specified* in §26 beyond "never colour alone" — chosen and recorded here (below) |
+| UI scale range 1.0–1.5 in 0.1 steps | *Not specified* — chosen and recorded here: 1.5 is the largest factor at which every screen was layout-verified |
+| Keyboard scope boundary (board excluded) | *Not specified* — decided and recorded here (below) |
+
+### What was built
+
+1. **Persisted settings** (`AppSettings`, following the `reducedMotion`
+   pattern exactly): `colorAssistance` (bool, default off),
+   `highContrast` (bool, default off), `uiScale` (double, default 1.0;
+   `fromJson` clamps to 1.0–1.5, substitutes defaults for malformed
+   values, never throws). Round-trip/clamp/malformed tests included.
+2. **Palette system** (`lib/app/theme/app_palette.dart`): the colour
+   tokens moved from compile-time constants into an `AppPalette`
+   object; `AppColors` now delegates every token to the current
+   palette (235 call sites unchanged except lost `const` in const
+   contexts). The **default palette is bit-identical to the
+   pre-Phase-13 constants** — pinned by a snapshot test — so the
+   standard appearance does not change. The app root
+   (`ListenableBuilder` on the settings-carrying feedback controller;
+   §13u-safe: it rebuilds the MaterialApp widget only, the Navigator
+   state persists, no route regenerates) applies
+   `AppPalette.resolve(highContrast, colorAssistance)` before the
+   subtree builds and injects `TextScaler.linear(uiScale)` via
+   `MediaQuery`. The Settings screen's three formerly inert rows are
+   now a live toggle, a live toggle, and a live slider (100–150%)
+   saving through the existing path.
+3. **Color assistance — mechanism chosen:** the player-identity
+   colours (board pawns/walls/rings/glow/ghost, lobby seat chips)
+   swap to the **Okabe–Ito colour-blind-safe pair**: blue `#0072B2`,
+   orange `#E69F00`, with matching pawn gradients. Chosen because it
+   is the published standard pair designed for colour-vision
+   deficiency, and verified here by simulation (Machado, Oliveira &
+   Fernandes 2009 matrices, severity 1.0, implemented in the test):
+   simulated RGB distance between the two player colours is
+   **244.6 (protanopia), 261.9 (deuteranopia), 246.1 (tritanopia)**
+   of a 441 maximum, and a simulated-lightness gap is retained under
+   all three (129 / 151 / 16.5). For honesty: the default neon pair
+   also separates by distance (204.8 / 215.0 / 337.3) — the assisted
+   pair's claim is that it is the *designed-safe* standard, not that
+   the default is indistinguishable. §26's structural redundancy
+   (letters + words everywhere) holds in both modes.
+4. **High contrast — computed ratios (WCAG formula, asserted in
+   tests):** onSurface on background **21.00**, on surfaceContainer
+   **18.36**; onSurfaceVariant on surfaceContainer **13.22**;
+   primaryContainer (banner blue text) on surfaceContainerHigh
+   **10.76**; secondary (banner red text) on surfaceContainerHigh
+   **9.71**; error on surfaceContainer **10.81**; outlineVariant on
+   background **4.59** (non-text ≥ 3). Every asserted text pair meets
+   AA (≥ 4.5); the main pairs meet AAA (≥ 7). The default palette's
+   main text pairs already meet AA (onSurface/background 14.39,
+   onSurfaceVariant/container 9.64) — **except one real failure the
+   audit found**: the turn banner's Red text used `secondaryContainer`
+   (#B0003A) on surfaceContainerHigh at **1.99:1**. Fixed in both game
+   screens: banner identity text now uses the light tint token
+   (`secondary`, #FFB2B9) — **8.42:1** default, 9.71:1 high contrast.
+   (The board's groove lines on tiles are 2.01:1 in high contrast —
+   decorative grid texture; no information rests on them.)
+5. **UI scale:** `TextScaler` at the app root (Flutter's mechanism,
+   no hand-rolled font math). Layout-verified at 1.5× across screens
+   at 320×568 (Home, Game Modes, Settings, the local game) plus the
+   pre-existing viewport matrix at 1.0× — **no overflow anywhere, no
+   accommodation changes were needed**; scrollable screens scroll,
+   the game screen's strips/banners wrap within their containers.
+
+### Player-identity audit (§26 pattern, per surface)
+
+- **Pawns — GAP FOUND AND FIXED.** The Settings screen claimed
+  "pawns always carry their B and R letters", but the painter drew
+  **no letters** — pawn identity on the canvas rested on colour and
+  start position alone. The painter now draws `B`/`R` on each pawn
+  (`BoardPainter.pawnLetter`, near-black on the gradient mid-tone),
+  in both colour modes. This — not eyeballing — is the phase's
+  headline fix.
+- **Board walls — confirmed + one tint fix.** Valid ghost = solid
+  fill/outline; invalid ghost = error fill + a **white dashed centre
+  line** (shape) + stronger outline + the failure **text** beside the
+  board: §26's shape/opacity/icon/text redundancy already held
+  (Phase 4.2). One identity wart fixed: the valid ghost was always
+  Blue's colour even on Red's turn; it now carries the current
+  player's identity colour. Placed walls already tint by owner;
+  their gradients now resolve through the same identity tokens.
+- **HUD/banners — confirmed + the contrast fix above.** Turn banner
+  is words ("BLUE'S TURN"); rails/strips name PLAYER 1/PLAYER 2 (or
+  P1/P2) in text; goal strips are text-labelled ("P1 GOAL STRIP").
+- **Result — confirmed.** Heading is words ("BLUE WINS!"); the pawn
+  disc renders its letter as real text (`PlayerPawnDisc`).
+- **Lobby seats — confirmed.** Rows are text-labelled BLUE/RED with
+  (YOU) and ready state in words.
+- **Rematch consent — confirmed.** The rematch section speaks in
+  words ("waiting for opponent", player names as text) — no
+  colour-only signalling.
+- **Automated proof** (`phase13_accessibility_test.dart`): pawn
+  glyph mapping; banner words + named rails + board semantics
+  naming both pawns; result heading + disc letter; lobby BLUE/RED/
+  (YOU) labels.
+
+### Semantics (§1's survey, closed)
+
+Baseline survey confirmed first-hand: explicit `Semantics(` existed
+only in `board_view.dart` and `online_game_screen.dart`. Added:
+shared `SectionTitle` is now a semantics **header** (covers Settings
+groups, lobby, modes, profile sections at once); the wordmark is a
+header (Home, Splash); the local turn banner is a **live region**
+(mirroring online's); the Result heading is header + live region;
+Tutorial step title/body are a live region; local failure messages
+are live regions with an error icon; the lobby error box is a live
+region. Buttons/sliders/switches already expose correct roles via
+Material; the keyboard tests below exercise them as controls.
+
+### Keyboard (PRD "where practical") — scope decision
+
+Non-board screens are fully keyboard-operable: every control is a
+Material control (focusable, Enter/Space activation), focus order
+follows the layout, and `AppTheme` now sets a visible `focusColor`/
+`hoverColor` from the token system. Tests drive real Tab traversal:
+Tab reaches the Settings switches and Space toggles one (persisted);
+Tab + Enter activates Game Modes controls and navigates.
+**Board decision (recorded):** keyboard *board play* is excluded as
+not practical for this phase — the board is a single pointer-geometry
+canvas; a keyboard model would be a parallel interaction system
+(cursor, wall-orientation/confirm flow) rivalling Phase 4's input
+work, and the board's state is already fully exposed to assistive
+technology through its semantics label. Everything *around* the
+board (mode toggle, confirm/cancel, navigation) is keyboard
+operable. Revisit if the owner wants keyboard play as its own phase.
+
+### Error-state audit (§6)
+
+Checked: the 12 engine `ActionFailure` messages (plain language
+already; now icon + live region in the local screen), online
+`MatchSyncFailureReason`/`RoomFailureReason` messages (plain; lobby
+error box already icon + text, now live region), persistence load
+(falls back to defaults silently — by design, nothing to show),
+Firestore-rejected writes (surface as the same plain room/sync
+messages). **One leak fixed:** the lobby's sign-in failure read
+"Could not sign in. Online play is unavailable
+(FirebaseAuthException(anonymous-disabled))." — exception type names
+shown to players. The message is now the plain sentence alone; the
+detail is logged, not displayed (test asserts the exact string and
+the absence of "Firebase"/"Exception"). Settings/Profile never
+rendered the auth detail (checked).
+
+### Reduced motion — verified, not rebuilt
+
+Phase 12's implementation stands untouched: the persisted toggle,
+the platform signal combination at the feedback seam, and its tests
+all still pass (the Phase 12 settings suite runs green in this
+phase's full run). One Phase 12-era test *wording* changed only
+because the neighbouring rows went live.
+
+### Gates (real output, 2026-10-29)
+
+- `dart format --set-exit-if-changed lib test`: **153 files, 0 changed.**
+- `flutter analyze`: **No issues found.**
+- `flutter test` (full): **1,632 tests — 1,619 passed, 13 failed.**
+  Baseline (Phase 12 corrected) was 1,607 / 11. Delta accounted:
+  **+25 tests are this phase's** (palette/settings/contrast/
+  simulation + identity/semantics/keyboard/layout/app-root), all
+  passing. Failures: 11 golden-image tests and the 2 pre-existing
+  `online_game_presence_test` failures (unchanged, pre-Phase-12).
+  Of the goldens, 9 fail exactly as at baseline (environmental pixel
+  differences in this VM); **2 are new — the board "valid ghost" and
+  "invalid ghost" goldens** — because the ghost preview now carries
+  the current player's colour (above), an intentional rendering
+  change. **The golden masters must be regenerated on a reference
+  machine** (`flutter test --update-goldens`): Phase 13 intentionally
+  changes pawn rendering (the new B/R letters) and the ghost tint,
+  so the masters are stale by design, not by accident.
+- `flutter build web`: **✓ Built build/web.**
+- Spec checker: **OK (80 catalog rows, 65 rule IDs).** Oracle
+  vectors: untouched (no domain change; the in-suite oracle replay
+  passes).
+- Mojibake scan over tracked files: **317 files, 0 hits.**
+- No rule, engine, sync, or security change: `firestore.rules`,
+  `lib/domain`, and the sync layer are untouched by this phase's
+  diff (the only domain-layer file changed is
+  `app_settings.dart`, the settings snapshot).
+
+### Open questions
+
+- None new. Carried: the 2 pre-existing presence-test failures
+  (uninvestigated, pre-Phase-12), golden-master regeneration on a
+  reference machine (above), `firebase deploy --only firestore:rules`
+  pending the owner's Firebase login, and the full live online match
+  to a winner (never run). Phase 14 was not started.

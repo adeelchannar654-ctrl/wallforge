@@ -689,6 +689,17 @@ Wall placement states should also use:
 - Icons.
 - Text where appropriate.
 
+**Phase 13 implementation notes (decisions §26 leaves open, recorded
+in `memory.md` §13v):** color assistance is a palette swap of the
+player-identity colours to the Okabe–Ito colour-blind-safe pair
+(blue `#0072B2` / orange `#E69F00`), verified by colour-vision
+simulation; pawns carry their `B`/`R` letters as the on-piece text
+label; high contrast is an alternate token set whose text pairs are
+computed against WCAG AA; UI scale is a `TextScaler` factor of
+1.0–1.5. Keyboard operation covers every non-board screen; keyboard
+board play is excluded as impractical for a pointer-geometry canvas
+(the board state is fully exposed via its semantics label).
+
 ---
 
 # 27. Responsive Design
