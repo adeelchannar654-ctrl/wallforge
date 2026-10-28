@@ -143,7 +143,9 @@ void main() {
       tester,
     ) async {
       await pumpSettings(tester);
-      final slider = find.byType(Slider);
+      // The Volume slider is the first of the two sliders on the screen
+      // since Phase 13 added the UI scale slider.
+      final slider = find.byType(Slider).first;
       await tester.ensureVisible(slider);
       await tester.drag(slider, const Offset(150, 0));
       await tester.pumpAndSettle();
@@ -152,22 +154,17 @@ void main() {
       expect(saved.volume, lessThanOrEqualTo(1.0));
     });
 
-    testWidgets('Color assistance, High contrast and UI scale remain '
-        'inert and Phase-13-labelled', (tester) async {
+    testWidgets('Color assistance and High contrast are live toggles '
+        'since Phase 13; UI scale is a live slider', (tester) async {
       await pumpSettings(tester);
-      expect(
-        find.text('Not yet available — arrives with Phase 13.'),
-        findsNWidgets(3),
-      );
-      expect(
-        find.text('Not yet available — arrives with Phase 12.'),
-        findsNothing,
-      );
-      for (final label in ['Color assistance', 'High contrast', 'UI scale']) {
+      expect(find.textContaining('Not yet available'), findsNothing);
+      for (final label in ['Color assistance', 'High contrast']) {
         final row = switchFor(label);
         final widget = tester.widget<Switch>(row);
-        expect(widget.onChanged, isNull, reason: '$label must stay inert');
+        expect(widget.onChanged, isNotNull, reason: '$label must be live');
       }
+      expect(find.text('UI scale'), findsOneWidget);
+      expect(find.byType(Slider), findsNWidgets(2)); // Volume + UI scale
     });
   });
 }

@@ -447,9 +447,7 @@ void main() {
       expect((await settings.load()).movementAssistance, isTrue);
     });
 
-    testWidgets('unbuilt features are visibly inert, never fake', (
-      tester,
-    ) async {
+    testWidgets('every feature is real now — nothing is inert', (tester) async {
       await tester.pumpWidget(
         _app(
           SettingsScreen(
@@ -459,24 +457,15 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      // Phase 12 made Audio, Haptics and Reduced motion real, so the
-      // only "not yet available" rows left are Phase 13's (Color
-      // assistance, High contrast, UI scale) — the Phase 12 wording is
-      // gone entirely.
-      expect(
-        find.text('Not yet available — arrives with Phase 12.'),
-        findsNothing,
-      );
-      expect(
-        find.text('Not yet available — arrives with Phase 13.'),
-        findsWidgets,
-      );
-      // Exactly the three Phase 13 switches are disabled; every other
-      // switch on the screen is live.
+      // Phase 12 made Audio, Haptics and Reduced motion real; Phase 13
+      // made the whole Accessibility group real. No "not yet available"
+      // wording remains anywhere on the screen, and no switch is
+      // disabled.
+      expect(find.textContaining('Not yet available'), findsNothing);
       final disabled = find.byWidgetPredicate(
         (w) => w is Switch && w.onChanged == null,
       );
-      expect(disabled, findsNWidgets(3));
+      expect(disabled, findsNothing);
       // And the account section tells the truth about anonymous play.
       expect(
         find.textContaining('Signed in anonymously (Guest).'),
