@@ -129,8 +129,8 @@ void main() {
   group('music lifecycle', () {
     test('applySettings starts music when enabled, once', () {
       final c = controller(const AppSettings(musicEnabled: false));
-      c.applySettings(const AppSettings(musicEnabled: true, volume: 0.4));
-      c.applySettings(const AppSettings(musicEnabled: true, volume: 0.4));
+      c.applySettings(const AppSettings(volume: 0.4));
+      c.applySettings(const AppSettings(volume: 0.4));
       expect(sound.countOf('startMusic'), 1);
       expect(
         sound.calls.firstWhere((x) => x.$1 == 'startMusic').$2,
