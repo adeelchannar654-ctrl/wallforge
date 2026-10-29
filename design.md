@@ -715,6 +715,16 @@ Do not simply scale every component proportionally.
 
 The board may change relative size while information panels change layout.
 
+**Phase 14 implementation notes (decisions §27 leaves open,
+recorded in `memory.md` §13w):** breakpoints are centralized in
+`AppBreakpoints` — phone below 768px, tablet 768–1023px, desktop
+from 1024px. On tablets the game screens use a balanced hybrid
+(single column, centered under a 680px cap — strips, not desktop's
+side rails); desktop keeps the centered board with side panels.
+Landscape phones borrow the side-panel layout with compact rails
+(portrait-first, adapted where practical). A board's minimum size
+never overflows the slot it is offered.
+
 ---
 
 # 28. Input

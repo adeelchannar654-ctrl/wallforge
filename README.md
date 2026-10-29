@@ -146,6 +146,22 @@ A wall may never remove the last route to either player's goal.
   and announced. See [`memory.md`](memory.md) §13v for the full
   record, including the contrast measurements and the keyboard
   scope decision.
+- **Phase 14 — Responsive Web.** The web version adapts through one
+  centralized breakpoint definition (`AppBreakpoints`): phone,
+  tablet and desktop tiers replace the old binary 768px split.
+  Tablets get a genuine hybrid layout — the game screens keep a
+  single, centered column under a width cap so the board grows
+  without inheriting desktop's side rails — and every other screen
+  uses its wide space deliberately (card grids, two-column Settings
+  and Lobby entry, a side-by-side Tutorial) instead of stretching a
+  phone column. Landscape phones borrow the side-panel layout with
+  compact rails. Mouse players get hover ghost previews on the
+  board, verified alongside touch; resizing never recomputes game
+  state. Every screen is render-tested at five viewport sizes, and
+  Phase 13's UI scale is tested composed with every tier. See
+  [`memory.md`](memory.md) §13w for the full record, including the
+  per-screen tablet decisions and the landscape bug the tests
+  caught (board size floors overflowing short slots).
 
 **Firebase still needs owner-side setup in the Console for Android/iOS.**
 The web app is registered and live-verified (above). Android and iOS

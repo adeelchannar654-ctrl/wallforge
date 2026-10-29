@@ -3820,3 +3820,176 @@ because the neighbouring rows went live.
   reference machine (above), `firebase deploy --only firestore:rules`
   pending the owner's Firebase login, and the full live online match
   to a winner (never run). Phase 14 was not started.
+
+## 13w. Phase 14 Record — Responsive Web (completed 2026-10-29)
+
+Phase 14 makes the web version feel intentional rather than
+stretched mobile UI, per `phase.md` Phase 14 and `design.md` §27.
+Exit criterion: *web layouts are usable at common viewport sizes* —
+now exercised by automated tests at five viewport sizes for every
+screen.
+
+### Source ledger
+
+| Decision/value | Source |
+|---|---|
+| Adapt to small phones, large phones, tablets, desktop browsers; "do not simply scale every component proportionally"; the board may change relative size, panels change layout | `design.md` §27 (primary) |
+| "Portrait-first gameplay where practical"; "Responsive desktop and tablet layouts"; "Responsive board sizing" | `PRD.md` §4/§6 |
+| Mouse: hover highlights, click movement, click wall placement | `design.md` §28 |
+| A resize must not recalculate legal moves or re-run pathfinding | `rules.md` §16 (performance) |
+| No new package for what MediaQuery/LayoutBuilder already does | `rules.md` §2.3/§3.3 — **no package was added** |
+| Breakpoint values 768 / 1024 | *Not specified* in §27 — chosen and recorded below |
+| Tablet hybrid shape per screen; content caps (680/720/880/960/1120) | *Not specified* — chosen per screen and recorded below |
+| Landscape-phone treatment | *Not specified* beyond "portrait-first where practical" — decided and recorded below |
+| Board floors must never overflow their slot | Found by this phase's landscape test (below) — a correctness fix, recorded here |
+
+### Audit (verified first-hand, as the prompt's §1 predicted)
+
+The `>= 768` literal existed in exactly two places
+(`game_screen.dart`, `online_game_screen.dart`), the split was
+binary, and 768×1024 inherited the full desktop 3-column layout. **No
+non-game screen had any width treatment at all** — every one
+stretched its phone column edge-to-edge at desktop widths. Splash
+was the exception (centered by construction; unchanged). No hover
+support existed anywhere (`design.md` §28's "hover highlights" were
+unimplemented).
+
+### Centralized breakpoints
+
+`lib/app/theme/app_breakpoints.dart`: `AppBreakpoint {phone,
+tablet, desktop}`, `AppBreakpoints.of(context)` /
+`tierForWidth(width)`. **phone < 768** (768 is kept as the boundary:
+it has been the project's split since Phase 3 and it is where
+portrait tablets begin — the standard 768×1024 viewport must be
+tablet, not desktop); **tablet 768–1023**; **desktop ≥ 1024** (the
+desktop game layout — two 280px rails plus a useful board — needs
+~1000px; large tablets in landscape and small laptops start there).
+Every literal was replaced; a test scans `lib/` and fails if a raw
+comparison literal reappears outside the definition.
+
+### What each tier does, per screen
+
+- **Game screens (local + online).** Phone: unchanged single
+  column. **Tablet: the balanced hybrid** — the same single column
+  (strips, not rails) centered under a 680px cap, so the board grows
+  substantially relative to a phone (measured in tests: >100px wider
+  than at 390px, ≤680) while panels keep the strip arrangement
+  instead of inheriting desktop's rails. Desktop: the existing
+  3-column rails layout, unchanged.
+- **Home:** menu column capped (680 tablet / 720 desktop), centered.
+- **Game Modes:** tablet pairs Local + Vs AI in a row with Online
+  full-width below; desktop puts all three mode cards in one row;
+  parameters card follows; content capped 680/960.
+- **AI Difficulty:** paired rows of two on tablet and desktop;
+  single column on phone.
+- **Settings:** tablet keeps one column at a 680 cap; **desktop
+  splits the five groups into two columns** (GAMEPLAY/AUDIO/HAPTICS
+  left, ACCESSIBILITY/ACCOUNT right) under a 1120 cap.
+- **Tutorial:** desktop places the step text and the board side by
+  side (880 cap); tablet 680 cap, stacked; phone unchanged.
+- **Online Lobby:** desktop arranges the entry as two columns
+  (QUICK MATCH + CREATE stacked left, JOIN right); tablet/phone keep
+  the single column at the capped measure; the in-room view is
+  capped the same way.
+- **Profile:** capped 680/960. **Result:** capped 560 on both wide
+  tiers (a single focused message at a deliberate measure).
+  **Splash:** already centered at every width; no change.
+
+### Landscape phones — decision (recorded, per PRD "portrait-first where practical")
+
+Portrait remains the designed-for orientation. A landscape phone
+(wider than tall, height < 500 — detected in `AppBreakpoints`) is
+**not** squeezed into the portrait column: the game screens borrow
+the desktop side-panel arrangement with **compact 200px rails**,
+which uses the wide-short space the way it is shaped. Proven by
+tests at 844×390 on both game screens. Non-game screens are
+scrollable columns and work in landscape unchanged (also rendered
+in the test matrix at 844×390).
+
+**Bug the landscape test caught:** both game screens (and
+`BoardView` itself) clamped the board to a minimum size (280 local /
+240 online / 280 board floor) regardless of the offered height —
+in the ~200px-tall landscape center slot that overflowed the column
+by exactly the difference (80px local, 72px online). Fixed with one
+principle in all three places: *a board floor never overflows its
+slot; below the floor the board takes what is offered.* No golden
+render is affected (goldens render at sizes above the floors).
+
+### Mouse and touch parity (§28)
+
+There was no hover anywhere. `BoardView` now tracks a mouse-hover
+ghost internally (so the stateless screens needed no new state):
+hovering a wall slot in WALL mode shows the preview before any
+click, validity from the engine's own `GameEngine.validate` — the
+same call the staged preview makes, so they cannot disagree; the
+staged preview always wins while one exists; touch never triggers
+it. Wired into the local, online (own-turn only) and tutorial
+boards. Buttons/controls already expose Material hover states, now
+with the Phase 13 theme's token-based hover/focus colours. The test
+hovers a real slot with a mouse gesture and asserts the painter's
+preview (anchor, orientation, validity) appears and clears on exit.
+
+### Resize discipline (§16) — findings
+
+Code-path check: every tier branch in the diff only selects widgets
+(caps, rows, rails); no layout code calls a controller, the engine,
+or pathfinding. Behavioural proof: the resize test plays a real
+move, then resizes through all five viewports and asserts the game
+state is the **identical object** afterwards (same instance, same
+turn, same legal-target set) — layout changes cannot recompute game
+logic because the layout layer holds no path to it. Repaints on
+resize still happen (the painter must redraw at a new size); that
+is rendering, not game logic.
+
+### Phase 13 composition
+
+The app-root test stores `uiScale: 1.5` in the real settings seam
+and pumps the full app at 320×568, 768×1024 and 1440×900: Home is
+reached with no overflow at every size — the player-chosen scale
+and the viewport-chosen tier compose (the tier picks the layout,
+the scaler enlarges text inside it).
+
+### Existing-test accommodations (recorded, per Phase 13's precedent)
+
+Two tests in `online_game_screen_test.dart` ('Blue is told it is
+their turn', 'Red is told to wait') asserted single occurrences of
+banner texts at the default 800×600 test viewport, which Phase 14
+makes the tablet tier — whose narrow column carries the banner
+twice by design (Phase 10). They are pinned to an explicit desktop
+viewport (1440×900), the layout they were written against; the
+wording assertions are unchanged.
+
+### Gates (real output, 2026-10-29)
+
+- `dart format --set-exit-if-changed lib test`: **157 files, 0 changed.**
+- `flutter analyze`: **No issues found.**
+- `flutter test` (full): **1,693 tests — 1,680 passed, 13 failed.**
+  Baseline (Phase 13) was 1,632 / 13. Delta accounted: **+61 tests
+  are this phase's** (two new files), all passing; the failure set
+  is **identical** to baseline — 11 goldens (7 board + 4 game) and
+  the 2 pre-existing `online_game_presence_test` failures. **The
+  Phase 13 golden-regeneration follow-up was NOT done** (no
+  reference machine in this environment): the masters are still the
+  pre-Phase-13 ones, so the ghost/pawn-letter renders still differ
+  from them exactly as reported in §13v; this phase adds no new
+  golden failures.
+- `flutter build web`: **✓ Built build/web.**
+- Spec checker: **OK (80 catalog rows, 65 rule IDs).** Oracle
+  vectors untouched (no domain change; the in-suite oracle replay
+  passes).
+- Mojibake scan: **313 tracked files, 0 hits.**
+- Housekeeping: the golden-failure diagnostic PNGs were swept into
+  this phase's commits by broad `git add`s (the Phase 13 mistake,
+  repeated). They are untracked again and `test/**/failures/` is
+  now in `.gitignore`, so it cannot recur.
+- No rule, engine, sync or security change: `firestore.rules`,
+  `lib/domain`, and the sync layer are untouched; the BoardView
+  change is sizing + hover only.
+
+### Open questions
+
+- None new. Carried: golden-master regeneration on a reference
+  machine (now covering Phases 13+14 renders), the 2 pre-existing
+  presence-test failures, `firebase deploy --only firestore:rules`
+  pending the owner's Firebase login, and the full live online
+  match to a winner (never run). Phase 15 was not started.

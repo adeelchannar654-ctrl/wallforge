@@ -1416,6 +1416,34 @@ Tablet:
 
 Web layouts are usable at common viewport sizes.
 
+### Result
+
+Completed 2026-10-29 (full record: `memory.md` §13w). Breakpoints
+are centralized in `AppBreakpoints` (phone < 768, tablet 768–1023,
+desktop ≥ 1024) and every hard-coded literal is gone — a test scans
+`lib/` for them. The two game screens gained the **tablet hybrid**:
+the single column centered under a 680px cap (strips, not desktop's
+rails; the board measurably larger than on a phone). The other
+screens stopped stretching: capped measures everywhere, card grids
+on Game Modes and AI Difficulty, two-column Settings and Lobby
+entry on desktop, side-by-side Tutorial. **Landscape phones** are
+decided, not skipped: the game screens borrow the side-panel
+layout with compact 200px rails (PRD portrait-first, adapted where
+practical) — and the landscape test caught a real bug: the board
+size floors (280/240) overflowed the short landscape slot; a floor
+now never overflows its slot. Mouse users got the §28 hover ghost
+(it existed nowhere): engine-validated, on both game screens and
+the tutorial. Resize discipline is proven, not assumed — after a
+real move, resizing through every tier leaves the game state the
+identical object. Phase 13's uiScale 1.5 composes with every tier
+in the real app. Gates: format 157 files 0 changed; analyze clean;
+**1,693 tests — 1,680 passed, 13 failed** (baseline 1,632/13; +61
+new Phase 14 tests all pass; the failure set is identical — 11
+goldens + 2 pre-existing presence failures; the Phase 13
+golden-master regeneration remains outstanding, no new golden
+failures added); web build OK; spec checker OK; oracle untouched;
+mojibake clean. No rule, engine, sync or security change.
+
 ---
 
 # Phase 15 — Performance
