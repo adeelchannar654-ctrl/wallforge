@@ -127,7 +127,7 @@ void main() {
       // The recorded decision: landscape phones borrow the side-panel
       // arrangement with compact 200px rails.
       expect(find.text('PLAYER 1'), findsOneWidget);
-      // The rail card renders at 200 minus its margins (2 x 16).
+      // The rail card occupies its full 200px compact rail slot.
       final railCard = tester.getSize(
         find
             .ancestor(
@@ -136,7 +136,7 @@ void main() {
             )
             .first,
       );
-      expect(railCard.width, closeTo(200 - 32, 1));
+      expect(railCard.width, closeTo(200, 1));
       expect(tester.takeException(), isNull);
     });
   });
