@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/theme/app_breakpoints.dart';
+
 import '../../../app/application/match_setup.dart';
 import '../../../app/router/app_router.dart';
 import '../../../app/theme/app_colors.dart';
@@ -8,6 +10,7 @@ import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
 import '../../../domain/models/board_config.dart';
 import '../../widgets/app_chrome.dart';
+import '../../widgets/responsive_content.dart';
 
 /// The three ways to play, as route arguments and mode-card identity.
 enum GameMode { local, versusAi, online }
@@ -66,85 +69,129 @@ class _GameModesScreenState extends State<GameModesScreen> {
         title: const Text('Game Modes'),
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.marginMobile,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildModeCard(
-                mode: GameMode.local,
-                icon: Icons.people_outline,
-                title: 'Local',
-                description: 'Two players on one device.',
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              _buildModeCard(
-                mode: GameMode.versusAi,
-                icon: Icons.smart_toy_outlined,
-                title: 'Vs AI',
-                description: 'Single player against AI.',
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              _buildModeCard(
-                mode: GameMode.online,
-                icon: Icons.public,
-                title: 'Online',
-                description: 'Remote two-player match.',
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              AppCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SectionTitle('PARAMETERS'),
-                    const SizedBox(height: AppSpacing.md),
-                    const Text('Board size', style: AppTypography.bodyBase),
-                    const SizedBox(height: AppSpacing.sm),
-                    Wrap(
-                      spacing: AppSpacing.sm,
-                      children: [
-                        for (final size in const [5, 7, 9, 11])
-                          ChoiceChip(
-                            label: Text('$size×$size'),
-                            selected: _size == size,
-                            onSelected: (_) => setState(() => _size = size),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    const Text(
-                      'Walls per player',
-                      style: AppTypography.bodyBase,
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    Wrap(
-                      spacing: AppSpacing.sm,
-                      children: [
-                        for (final walls in const [8, 10, 12])
-                          ChoiceChip(
-                            label: Text('$walls walls'),
-                            selected: _walls == walls,
-                            onSelected: (_) => setState(() => _walls = walls),
-                          ),
-                      ],
-                    ),
-                  ],
+        // Phase 14: wide tiers rearrange the cards (below) inside a
+        // capped, centered measure instead of stretching the column.
+        child: ResponsiveContent(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.marginMobile,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ..._modeCards(context),
+                const SizedBox(height: AppSpacing.lg),
+                AppCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SectionTitle('PARAMETERS'),
+                      const SizedBox(height: AppSpacing.md),
+                      const Text('Board size', style: AppTypography.bodyBase),
+                      const SizedBox(height: AppSpacing.sm),
+                      Wrap(
+                        spacing: AppSpacing.sm,
+                        children: [
+                          for (final size in const [5, 7, 9, 11])
+                            ChoiceChip(
+                              label: Text('$size×$size'),
+                              selected: _size == size,
+                              onSelected: (_) => setState(() => _size = size),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      const Text(
+                        'Walls per player',
+                        style: AppTypography.bodyBase,
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Wrap(
+                        spacing: AppSpacing.sm,
+                        children: [
+                          for (final walls in const [8, 10, 12])
+                            ChoiceChip(
+                              label: Text('$walls walls'),
+                              selected: _walls == walls,
+                              onSelected: (_) => setState(() => _walls = walls),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: AppSpacing.xl),
-              PrimaryActionButton(
-                label: _actionLabel,
-                icon: Icons.arrow_forward,
-                onPressed: _proceed,
-              ),
-              const SizedBox(height: AppSpacing.xxl),
-            ],
+                const SizedBox(height: AppSpacing.xl),
+                PrimaryActionButton(
+                  label: _actionLabel,
+                  icon: Icons.arrow_forward,
+                  onPressed: _proceed,
+                ),
+                const SizedBox(height: AppSpacing.xxl),
+              ],
+            ),
           ),
         ),
       ),
     );
+  }
+
+  /// The three mode cards, arranged per breakpoint tier (Phase 14):
+  /// a single column on phone; on tablet, Local and Vs AI pair in one
+  /// row with Online full-width below; on desktop, all three share
+  /// one row. The parameters card follows in the column either way.
+  List<Widget> _modeCards(BuildContext context) {
+    final local = _buildModeCard(
+      mode: GameMode.local,
+      icon: Icons.people_outline,
+      title: 'Local',
+      description: 'Two players on one device.',
+    );
+    final versusAi = _buildModeCard(
+      mode: GameMode.versusAi,
+      icon: Icons.smart_toy_outlined,
+      title: 'Vs AI',
+      description: 'Single player against AI.',
+    );
+    final online = _buildModeCard(
+      mode: GameMode.online,
+      icon: Icons.public,
+      title: 'Online',
+      description: 'Remote two-player match.',
+    );
+    final tier = AppBreakpoints.of(context);
+    return switch (tier) {
+      AppBreakpoint.phone => <Widget>[
+        local,
+        const SizedBox(height: AppSpacing.sm),
+        versusAi,
+        const SizedBox(height: AppSpacing.sm),
+        online,
+      ],
+      AppBreakpoint.tablet => <Widget>[
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: local),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(child: versusAi),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        online,
+      ],
+      AppBreakpoint.desktop => <Widget>[
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: local),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(child: versusAi),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(child: online),
+          ],
+        ),
+      ],
+    };
   }
 
   Widget _buildModeCard({

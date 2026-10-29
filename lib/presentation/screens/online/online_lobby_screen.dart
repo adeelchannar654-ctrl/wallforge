@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/theme/app_breakpoints.dart';
+
 import '../../../app/application/online/online_game_controller.dart';
 import '../../../core/feedback/feedback_controller.dart';
 import '../../../core/feedback/feedback_scope.dart';
@@ -13,6 +15,7 @@ import '../../../app/theme/app_typography.dart';
 import '../../../data/local/shared_preferences_settings_repository.dart';
 import '../../../domain/wallforge_domain.dart';
 import '../../widgets/app_chrome.dart';
+import '../../widgets/responsive_content.dart';
 
 /// Which lobby section a route alias asked to bring into view.
 enum OnlineLobbyFocus { none, create, join }
@@ -122,29 +125,32 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
             title: const Text('ONLINE PLAY', style: AppTypography.labelCaps),
           ),
           body: SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  _buildStatusLine(controller),
-                  const SizedBox(height: AppSpacing.lg),
-                  if (!controller.isInRoom)
-                    ..._buildEntry(controller)
-                  else
-                    ..._buildRoom(controller),
-                  if (controller.phase == OnlineLobbyPhase.searching &&
-                      !controller.isInRoom) ...[
-                    const SizedBox(height: AppSpacing.md),
-                    _buildSearching(context, controller),
+            // Phase 14: capped and centered on tablet/desktop.
+            child: ResponsiveContent(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    _buildStatusLine(controller),
+                    const SizedBox(height: AppSpacing.lg),
+                    if (!controller.isInRoom)
+                      ..._buildEntry(controller)
+                    else
+                      ..._buildRoom(controller),
+                    if (controller.phase == OnlineLobbyPhase.searching &&
+                        !controller.isInRoom) ...[
+                      const SizedBox(height: AppSpacing.md),
+                      _buildSearching(context, controller),
+                    ],
+                    if (controller.failureMessage != null) ...[
+                      const SizedBox(height: AppSpacing.md),
+                      _buildError(controller.failureMessage!),
+                    ],
+                    const SizedBox(height: AppSpacing.lg),
+                    _cancel(context, controller),
                   ],
-                  if (controller.failureMessage != null) ...[
-                    const SizedBox(height: AppSpacing.md),
-                    _buildError(controller.failureMessage!),
-                  ],
-                  const SizedBox(height: AppSpacing.lg),
-                  _cancel(context, controller),
-                ],
+                ),
               ),
             ),
           ),
@@ -194,109 +200,135 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
 
   List<Widget> _buildEntry(OnlineLobbyController controller) {
     final board = controller.boardConfig;
-    return <Widget>[
-      if (controller.hasMatchmaking)
-        _card(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              const Text('QUICK MATCH', style: AppTypography.labelCaps),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                'Get paired with someone else automatically. No room code '
-                'needed — a ${board.size}x${board.size} board.',
-                style: AppTypography.bodyBase.copyWith(
-                  color: AppColors.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              _primaryButton(
-                label: 'FIND OPPONENT',
-                onPressed: controller.isBusy ? null : controller.quickMatch,
-              ),
-            ],
+    final quickCard = _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          const Text('QUICK MATCH', style: AppTypography.labelCaps),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'Get paired with someone else automatically. No room code '
+            'needed — a ${board.size}x${board.size} board.',
+            style: AppTypography.bodyBase.copyWith(
+              color: AppColors.onSurfaceVariant,
+            ),
           ),
-        ),
-      if (controller.hasMatchmaking) const SizedBox(height: AppSpacing.md),
-      _card(
-        key: _createKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            const Text('CREATE A ROOM', style: AppTypography.labelCaps),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              'You play Blue and share a ${board.size}x${board.size} board. '
-              'Give the code to your opponent.',
-              style: AppTypography.bodyBase.copyWith(
-                color: AppColors.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            _primaryButton(
-              label: controller.isBusy ? 'WORKING' : 'CREATE ROOM',
-              onPressed: controller.isBusy ? null : controller.createRoom,
-            ),
-          ],
-        ),
+          const SizedBox(height: AppSpacing.md),
+          _primaryButton(
+            label: 'FIND OPPONENT',
+            onPressed: controller.isBusy ? null : controller.quickMatch,
+          ),
+        ],
       ),
-      const SizedBox(height: AppSpacing.md),
-      _card(
-        key: _joinKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            const Text('JOIN A ROOM', style: AppTypography.labelCaps),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              'Enter the ${RoomCode.length}-character code your opponent '
-              'created.',
-              style: AppTypography.bodyBase.copyWith(
-                color: AppColors.onSurfaceVariant,
-              ),
+    );
+    final createCard = _card(
+      key: _createKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          const Text('CREATE A ROOM', style: AppTypography.labelCaps),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'You play Blue and share a ${board.size}x${board.size} board. '
+            'Give the code to your opponent.',
+            style: AppTypography.bodyBase.copyWith(
+              color: AppColors.onSurfaceVariant,
             ),
-            const SizedBox(height: AppSpacing.md),
-            TextField(
-              controller: _codeField,
-              textCapitalization: TextCapitalization.characters,
-              maxLength: RoomCode.length,
-              style: AppTypography.numericStat.copyWith(
-                color: AppColors.onSurface,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          _primaryButton(
+            label: controller.isBusy ? 'WORKING' : 'CREATE ROOM',
+            onPressed: controller.isBusy ? null : controller.createRoom,
+          ),
+        ],
+      ),
+    );
+    final joinCard = _card(
+      key: _joinKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          const Text('JOIN A ROOM', style: AppTypography.labelCaps),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'Enter the ${RoomCode.length}-character code your opponent '
+            'created.',
+            style: AppTypography.bodyBase.copyWith(
+              color: AppColors.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          TextField(
+            controller: _codeField,
+            textCapitalization: TextCapitalization.characters,
+            maxLength: RoomCode.length,
+            style: AppTypography.numericStat.copyWith(
+              color: AppColors.onSurface,
+              letterSpacing: 4,
+            ),
+            decoration: InputDecoration(
+              hintText: 'ABC123',
+              hintStyle: AppTypography.numericStat.copyWith(
+                color: AppColors.outline,
                 letterSpacing: 4,
               ),
-              decoration: InputDecoration(
-                hintText: 'ABC123',
-                hintStyle: AppTypography.numericStat.copyWith(
-                  color: AppColors.outline,
-                  letterSpacing: 4,
-                ),
-                counterText: '',
-                filled: true,
-                fillColor: AppColors.surfaceContainer,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppRadii.sm),
-                ),
+              counterText: '',
+              filled: true,
+              fillColor: AppColors.surfaceContainer,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppRadii.sm),
               ),
-              onChanged: (_) => setState(() => _joinError = null),
             ),
-            if (_joinError != null)
-              Padding(
-                padding: const EdgeInsets.only(top: AppSpacing.xs),
-                child: Text(
-                  _joinError!,
-                  style: AppTypography.bodyBase.copyWith(
-                    color: AppColors.error,
-                  ),
-                ),
+            onChanged: (_) => setState(() => _joinError = null),
+          ),
+          if (_joinError != null)
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.xs),
+              child: Text(
+                _joinError!,
+                style: AppTypography.bodyBase.copyWith(color: AppColors.error),
               ),
-            const SizedBox(height: AppSpacing.md),
-            _primaryButton(
-              label: 'JOIN ROOM',
-              onPressed: controller.isBusy ? null : _join,
             ),
+          const SizedBox(height: AppSpacing.md),
+          _primaryButton(
+            label: 'JOIN ROOM',
+            onPressed: controller.isBusy ? null : _join,
+          ),
+        ],
+      ),
+    );
+    // Phase 14: on desktop the entry arranges as two columns —
+    // QUICK MATCH + CREATE stacked on the left, JOIN on the right —
+    // instead of one long stretched column. Phone/tablet keep the
+    // single column (inside the screen's capped measure).
+    if (AppBreakpoints.of(context).isDesktop) {
+      return <Widget>[
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  if (controller.hasMatchmaking) quickCard,
+                  if (controller.hasMatchmaking)
+                    const SizedBox(height: AppSpacing.md),
+                  createCard,
+                ],
+              ),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(child: joinCard),
           ],
         ),
-      ),
+      ];
+    }
+    return <Widget>[
+      if (controller.hasMatchmaking) quickCard,
+      if (controller.hasMatchmaking) const SizedBox(height: AppSpacing.md),
+      createCard,
+      const SizedBox(height: AppSpacing.md),
+      joinCard,
     ];
   }
 

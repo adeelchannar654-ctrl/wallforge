@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/theme/app_breakpoints.dart';
+
 import '../../../app/application/game_interaction.dart';
 import '../../../app/application/local_game_controller.dart';
 import '../../../core/feedback/feedback_controller.dart';
@@ -17,6 +19,7 @@ import '../../../domain/models/wall_orientation.dart';
 import '../../../domain/repositories/repositories.dart';
 import '../../board/board.dart';
 import '../../widgets/app_chrome.dart';
+import '../../widgets/responsive_content.dart';
 
 /// The guided tutorial (`design.md` §22 + `PRD.md` §6.7).
 ///
@@ -261,101 +264,189 @@ class _TutorialScreenState extends State<TutorialScreen> {
         ],
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.marginMobile,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: LinearProgressIndicator(
-                      value: (_index + 1) / _steps.length,
-                      color: AppColors.primaryContainer,
-                      backgroundColor: AppColors.surfaceContainerHigh,
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.md),
-                  Text(
-                    'Step ${_index + 1} of ${_steps.length}',
-                    style: AppTypography.bodyBase.copyWith(
-                      color: AppColors.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              // Phase 13: step changes are announced to assistive
-              // technology as they happen.
-              Semantics(
-                liveRegion: true,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        // Phase 14: capped and centered on tablet/desktop.
+        child: ResponsiveContent(
+          desktopMaxWidth: 880,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.marginMobile,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
                   children: [
-                    Text(_step.title, style: AppTypography.headlineLg),
-                    const SizedBox(height: AppSpacing.sm),
-                    Text(_step.body, style: AppTypography.bodyBase),
+                    Expanded(
+                      child: LinearProgressIndicator(
+                        value: (_index + 1) / _steps.length,
+                        color: AppColors.primaryContainer,
+                        backgroundColor: AppColors.surfaceContainerHigh,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Text(
+                      'Step ${_index + 1} of ${_steps.length}',
+                      style: AppTypography.bodyBase.copyWith(
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                    ),
                   ],
                 ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              if (controller != null) ...[
-                Center(
-                  child: SizedBox(
-                    width: 300,
-                    height: 300,
-                    child: ListenableBuilder(
-                      listenable: controller,
-                      builder: (context, _) => BoardView(
-                        state: controller.state,
-                        legalMoveTargets: controller.legalMoveTargets,
-                        wallPreview: controller.pendingWall != null
-                            ? WallPreview(
-                                anchor: controller.pendingWall!.anchor,
-                                orientation:
-                                    controller.pendingWall!.orientation,
-                                isValid: controller.pendingWallFailure == null,
-                              )
-                            : null,
-                        onCellTap: _step.interaction == _Interaction.move
-                            ? controller.tapCell
-                            : null,
-                        onWallSlotTap: _step.interaction == _Interaction.wall
-                            ? controller.tapWallSlot
-                            : null,
+                const SizedBox(height: AppSpacing.lg),
+                // Phase 14: on desktop the step text and the board sit
+                // side by side; narrower tiers keep the stacked column.
+                if (AppBreakpoints.of(context).isDesktop &&
+                    controller != null) ...[
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Phase 13: step changes are announced to assistive
+                            // technology as they happen.
+                            Semantics(
+                              liveRegion: true,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _step.title,
+                                    style: AppTypography.headlineLg,
+                                  ),
+                                  const SizedBox(height: AppSpacing.sm),
+                                  Text(
+                                    _step.body,
+                                    style: AppTypography.bodyBase,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.lg),
+                      Column(
+                        children: [
+                          if (true) ...[
+                            Center(
+                              child: SizedBox(
+                                width: 300,
+                                height: 300,
+                                child: ListenableBuilder(
+                                  listenable: controller,
+                                  builder: (context, _) => BoardView(
+                                    state: controller.state,
+                                    legalMoveTargets:
+                                        controller.legalMoveTargets,
+                                    wallPreview: controller.pendingWall != null
+                                        ? WallPreview(
+                                            anchor:
+                                                controller.pendingWall!.anchor,
+                                            orientation: controller
+                                                .pendingWall!
+                                                .orientation,
+                                            isValid:
+                                                controller.pendingWallFailure ==
+                                                null,
+                                          )
+                                        : null,
+                                    onCellTap:
+                                        _step.interaction == _Interaction.move
+                                        ? controller.tapCell
+                                        : null,
+                                    onWallSlotTap:
+                                        _step.interaction == _Interaction.wall
+                                        ? controller.tapWallSlot
+                                        : null,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            if (_step.interaction != null) ...[
+                              const SizedBox(height: AppSpacing.md),
+                              _buildInteractionControls(controller),
+                            ],
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ] else ...[
+                  // Phase 13: step changes are announced to assistive
+                  // technology as they happen.
+                  Semantics(
+                    liveRegion: true,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(_step.title, style: AppTypography.headlineLg),
+                        const SizedBox(height: AppSpacing.sm),
+                        Text(_step.body, style: AppTypography.bodyBase),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  if (controller != null) ...[
+                    Center(
+                      child: SizedBox(
+                        width: 300,
+                        height: 300,
+                        child: ListenableBuilder(
+                          listenable: controller,
+                          builder: (context, _) => BoardView(
+                            state: controller.state,
+                            legalMoveTargets: controller.legalMoveTargets,
+                            wallPreview: controller.pendingWall != null
+                                ? WallPreview(
+                                    anchor: controller.pendingWall!.anchor,
+                                    orientation:
+                                        controller.pendingWall!.orientation,
+                                    isValid:
+                                        controller.pendingWallFailure == null,
+                                  )
+                                : null,
+                            onCellTap: _step.interaction == _Interaction.move
+                                ? controller.tapCell
+                                : null,
+                            onWallSlotTap:
+                                _step.interaction == _Interaction.wall
+                                ? controller.tapWallSlot
+                                : null,
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (_step.interaction != null) ...[
+                      const SizedBox(height: AppSpacing.md),
+                      _buildInteractionControls(controller),
+                    ],
+                  ],
+                ],
+                const SizedBox(height: AppSpacing.xl),
+                PrimaryActionButton(
+                  label: isLast ? 'FINISH' : 'NEXT',
+                  icon: isLast ? Icons.check : Icons.arrow_forward,
+                  onPressed: _stepComplete ? _next : null,
+                ),
+                if (!_stepComplete)
+                  Padding(
+                    padding: const EdgeInsets.only(top: AppSpacing.sm),
+                    child: Text(
+                      _step.interaction == _Interaction.move
+                          ? 'Make the move to continue.'
+                          : 'Place a wall to continue.',
+                      textAlign: TextAlign.center,
+                      style: AppTypography.bodyBase.copyWith(
+                        color: AppColors.onSurfaceVariant,
+                        fontSize: 12,
                       ),
                     ),
                   ),
-                ),
-                if (_step.interaction != null) ...[
-                  const SizedBox(height: AppSpacing.md),
-                  _buildInteractionControls(controller),
-                ],
+                const SizedBox(height: AppSpacing.xxl),
               ],
-              const SizedBox(height: AppSpacing.xl),
-              PrimaryActionButton(
-                label: isLast ? 'FINISH' : 'NEXT',
-                icon: isLast ? Icons.check : Icons.arrow_forward,
-                onPressed: _stepComplete ? _next : null,
-              ),
-              if (!_stepComplete)
-                Padding(
-                  padding: const EdgeInsets.only(top: AppSpacing.sm),
-                  child: Text(
-                    _step.interaction == _Interaction.move
-                        ? 'Make the move to continue.'
-                        : 'Place a wall to continue.',
-                    textAlign: TextAlign.center,
-                    style: AppTypography.bodyBase.copyWith(
-                      color: AppColors.onSurfaceVariant,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              const SizedBox(height: AppSpacing.xxl),
-            ],
+            ),
           ),
         ),
       ),

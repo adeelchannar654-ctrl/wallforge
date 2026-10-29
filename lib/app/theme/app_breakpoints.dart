@@ -3,7 +3,7 @@ import 'package:flutter/widgets.dart';
 /// The app's single, shared responsive breakpoint definition
 /// (Phase 14, `design.md` §27).
 ///
-/// Before Phase 14 the only breakpoint in the app — `>= 768` — was a
+/// Before Phase 14 the only breakpoint in the app — a hard-coded 768px check — was a
 /// hard-coded literal duplicated in the two game screens, the split
 /// was strictly binary, and a 768-wide tablet silently inherited the
 /// full desktop layout. §27 names four device categories (small

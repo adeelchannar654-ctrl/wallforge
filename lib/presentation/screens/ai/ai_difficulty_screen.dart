@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/theme/app_breakpoints.dart';
+
 import '../../../app/application/ai/ai_difficulty.dart';
 import '../../../app/application/match_setup.dart';
 import '../../../app/router/app_router.dart';
@@ -11,6 +13,7 @@ import '../../../data/local/shared_preferences_settings_repository.dart';
 import '../../../domain/models/board_config.dart';
 import '../../../domain/repositories/repositories.dart';
 import '../../widgets/app_chrome.dart';
+import '../../widgets/responsive_content.dart';
 
 /// The dedicated AI difficulty screen (`design.md` §20) — resolves Q-5.2.
 ///
@@ -83,46 +86,81 @@ class _AiDifficultyScreenState extends State<AiDifficultyScreen> {
         title: const Text('Vs AI'),
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.marginMobile,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'You play Blue. The AI plays Red.',
-                style: AppTypography.bodyBase.copyWith(
-                  color: AppColors.onSurfaceVariant,
+        // Phase 14: wide tiers pair the difficulty cards (below)
+        // inside a capped, centered measure.
+        child: ResponsiveContent(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.marginMobile,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'You play Blue. The AI plays Red.',
+                  style: AppTypography.bodyBase.copyWith(
+                    color: AppColors.onSurfaceVariant,
+                  ),
                 ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                'Board ${widget.config.size}×${widget.config.size} · '
-                '${widget.config.wallsPerPlayer} walls each',
-                style: AppTypography.bodyBase.copyWith(
-                  color: AppColors.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              const SectionTitle('DIFFICULTY'),
-              const SizedBox(height: AppSpacing.md),
-              for (final difficulty in AiDifficulty.values) ...[
-                _buildDifficultyCard(difficulty),
                 const SizedBox(height: AppSpacing.sm),
+                Text(
+                  'Board ${widget.config.size}×${widget.config.size} · '
+                  '${widget.config.wallsPerPlayer} walls each',
+                  style: AppTypography.bodyBase.copyWith(
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                const SectionTitle('DIFFICULTY'),
+                const SizedBox(height: AppSpacing.md),
+                ..._difficultyCards(context),
+                const SizedBox(height: AppSpacing.lg),
+                PrimaryActionButton(
+                  label: 'START MATCH',
+                  icon: Icons.play_arrow,
+                  onPressed: _start,
+                ),
+                const SizedBox(height: AppSpacing.xxl),
               ],
-              const SizedBox(height: AppSpacing.lg),
-              PrimaryActionButton(
-                label: 'START MATCH',
-                icon: Icons.play_arrow,
-                onPressed: _start,
-              ),
-              const SizedBox(height: AppSpacing.xxl),
-            ],
+            ),
           ),
         ),
       ),
     );
+  }
+
+  /// The difficulty cards per breakpoint tier (Phase 14): a single
+  /// column on phone; paired rows of two on tablet and desktop.
+  List<Widget> _difficultyCards(BuildContext context) {
+    final cards = <Widget>[
+      for (final difficulty in AiDifficulty.values)
+        _buildDifficultyCard(difficulty),
+    ];
+    if (AppBreakpoints.of(context).isPhone) {
+      return <Widget>[
+        for (final card in cards) ...<Widget>[
+          card,
+          const SizedBox(height: AppSpacing.sm),
+        ],
+      ];
+    }
+    return <Widget>[
+      for (var i = 0; i < cards.length; i += 2) ...<Widget>[
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Expanded(child: cards[i]),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: i + 1 < cards.length
+                  ? cards[i + 1]
+                  : const SizedBox.shrink(),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.sm),
+      ],
+    ];
   }
 
   Widget _buildDifficultyCard(AiDifficulty difficulty) {

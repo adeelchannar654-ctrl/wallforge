@@ -8,6 +8,7 @@ import '../../../data/local/shared_preferences_statistics_repository.dart';
 import '../../../data/remote/firebase_auth_gateway.dart';
 import '../../../domain/repositories/repositories.dart';
 import '../../widgets/app_chrome.dart';
+import '../../widgets/responsive_content.dart';
 
 /// The Profile screen: the player's real statistics, and nothing else.
 ///
@@ -70,113 +71,116 @@ class _ProfileScreenState extends State<ProfileScreen> {
         title: const Text('Profile'),
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.marginMobile,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              AppCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SectionTitle('ACCOUNT'),
-                    const SizedBox(height: AppSpacing.sm),
-                    Text(
-                      _authState.isSignedIn
-                          ? 'Signed in anonymously (Guest)'
-                          : 'Not signed in',
-                      style: AppTypography.bodyBase,
-                    ),
-                    if (_authState.isSignedIn && _authState.uid != null)
+        // Phase 14: capped and centered on tablet/desktop.
+        child: ResponsiveContent(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.marginMobile,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                AppCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SectionTitle('ACCOUNT'),
+                      const SizedBox(height: AppSpacing.sm),
                       Text(
-                        'Player ID ${_authState.uid}',
-                        style: AppTypography.bodyBase.copyWith(
-                          color: AppColors.onSurfaceVariant,
-                          fontSize: 12,
-                        ),
+                        _authState.isSignedIn
+                            ? 'Signed in anonymously (Guest)'
+                            : 'Not signed in',
+                        style: AppTypography.bodyBase,
                       ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              AppCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SectionTitle('PROFILE STATISTICS'),
-                    const SizedBox(height: AppSpacing.md),
-                    if (_loaded && s.matchesPlayed == 0)
-                      Text(
-                        'No matches played yet. Finish a local or AI match '
-                        'and your results will appear here.',
-                        style: AppTypography.bodyBase.copyWith(
-                          color: AppColors.onSurfaceVariant,
-                        ),
-                      )
-                    else ...[
-                      _row('Matches played', '${s.matchesPlayed}'),
-                      _row('Won', '${s.humanWins}'),
-                      _row('Lost', '${s.humanLosses}'),
-                      if (s.winRate != null)
-                        _row(
-                          'Win rate',
-                          '${(s.winRate! * 100).toStringAsFixed(0)}%',
+                      if (_authState.isSignedIn && _authState.uid != null)
+                        Text(
+                          'Player ID ${_authState.uid}',
+                          style: AppTypography.bodyBase.copyWith(
+                            color: AppColors.onSurfaceVariant,
+                            fontSize: 12,
+                          ),
                         ),
                     ],
-                  ],
+                  ),
                 ),
-              ),
-              if (s.byDifficulty.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.lg),
                 AppCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SectionTitle('BY MODE AND DIFFICULTY'),
+                      const SectionTitle('PROFILE STATISTICS'),
                       const SizedBox(height: AppSpacing.md),
-                      for (final entry in _sorted(s.byDifficulty))
-                        _row(
-                          entry.key == 'local'
-                              ? 'Local pass-and-play'
-                              : 'Vs AI — ${_difficultyLabel(entry.key)}',
-                          '${entry.value.played} played · '
-                          '${entry.value.wins} won',
-                        ),
+                      if (_loaded && s.matchesPlayed == 0)
+                        Text(
+                          'No matches played yet. Finish a local or AI match '
+                          'and your results will appear here.',
+                          style: AppTypography.bodyBase.copyWith(
+                            color: AppColors.onSurfaceVariant,
+                          ),
+                        )
+                      else ...[
+                        _row('Matches played', '${s.matchesPlayed}'),
+                        _row('Won', '${s.humanWins}'),
+                        _row('Lost', '${s.humanLosses}'),
+                        if (s.winRate != null)
+                          _row(
+                            'Win rate',
+                            '${(s.winRate! * 100).toStringAsFixed(0)}%',
+                          ),
+                      ],
                     ],
                   ),
                 ),
-              ],
-              if (s.byBoardSize.isNotEmpty) ...[
+                if (s.byDifficulty.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.lg),
+                  AppCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SectionTitle('BY MODE AND DIFFICULTY'),
+                        const SizedBox(height: AppSpacing.md),
+                        for (final entry in _sorted(s.byDifficulty))
+                          _row(
+                            entry.key == 'local'
+                                ? 'Local pass-and-play'
+                                : 'Vs AI — ${_difficultyLabel(entry.key)}',
+                            '${entry.value.played} played · '
+                            '${entry.value.wins} won',
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+                if (s.byBoardSize.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.lg),
+                  AppCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SectionTitle('BY BOARD SIZE'),
+                        const SizedBox(height: AppSpacing.md),
+                        for (final entry in _sorted(s.byBoardSize))
+                          _row(
+                            '${entry.key}×${entry.key} board',
+                            '${entry.value.played} played · '
+                                '${entry.value.wins} won',
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.lg),
-                AppCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SectionTitle('BY BOARD SIZE'),
-                      const SizedBox(height: AppSpacing.md),
-                      for (final entry in _sorted(s.byBoardSize))
-                        _row(
-                          '${entry.key}×${entry.key} board',
-                          '${entry.value.played} played · '
-                              '${entry.value.wins} won',
-                        ),
-                    ],
+                Text(
+                  'Statistics cover local and AI matches on this device. '
+                  'Online matches are not recorded here.',
+                  style: AppTypography.bodyBase.copyWith(
+                    color: AppColors.onSurfaceVariant,
+                    fontSize: 12,
                   ),
                 ),
+                const SizedBox(height: AppSpacing.xxl),
               ],
-              const SizedBox(height: AppSpacing.lg),
-              Text(
-                'Statistics cover local and AI matches on this device. '
-                'Online matches are not recorded here.',
-                style: AppTypography.bodyBase.copyWith(
-                  color: AppColors.onSurfaceVariant,
-                  fontSize: 12,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xxl),
-            ],
+            ),
           ),
         ),
       ),

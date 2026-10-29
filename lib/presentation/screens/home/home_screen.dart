@@ -15,6 +15,7 @@ import '../../../domain/models/game_state.dart';
 import '../../../domain/repositories/repositories.dart';
 import '../../board/board.dart';
 import '../../widgets/app_chrome.dart';
+import '../../widgets/responsive_content.dart';
 import '../../widgets/wallforge_logo.dart';
 import '../../widgets/wallforge_wordmark.dart';
 import '../modes/game_modes_screen.dart';
@@ -121,77 +122,82 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.marginMobile,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: AppSpacing.md),
-              const Center(child: WallforgeLogo(size: 84)),
-              const Center(child: WallforgeWordmark(fontSize: 34)),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                AppInfo.tagline,
-                textAlign: TextAlign.center,
-                style: AppTypography.bodyBase.copyWith(
-                  color: AppColors.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xl),
-              // The small board visual (§17): a real initial position,
-              // rendered by the real BoardView, not an image.
-              Center(
-                child: SizedBox(
-                  width: 176,
-                  height: 176,
-                  child: BoardView(
-                    state: GameState.initial(),
-                    showCoordinates: false,
-                    maxSize: 176,
+        // Phase 14: on tablet/desktop the menu column is capped and
+        // centered instead of stretching across the viewport.
+        child: ResponsiveContent(
+          desktopMaxWidth: 720,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.marginMobile,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: AppSpacing.md),
+                const Center(child: WallforgeLogo(size: 84)),
+                const Center(child: WallforgeWordmark(fontSize: 34)),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  AppInfo.tagline,
+                  textAlign: TextAlign.center,
+                  style: AppTypography.bodyBase.copyWith(
+                    color: AppColors.onSurfaceVariant,
                   ),
                 ),
-              ),
-              const SizedBox(height: AppSpacing.xl),
-              PrimaryActionButton(
-                label: 'PLAY',
-                icon: Icons.play_arrow,
-                onPressed: () => _openModes(GameMode.local),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              if (_unfinished != null) ...[
-                _buildResumeCard(_unfinished!),
+                const SizedBox(height: AppSpacing.xl),
+                // The small board visual (§17): a real initial position,
+                // rendered by the real BoardView, not an image.
+                Center(
+                  child: SizedBox(
+                    width: 176,
+                    height: 176,
+                    child: BoardView(
+                      state: GameState.initial(),
+                      showCoordinates: false,
+                      maxSize: 176,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xl),
+                PrimaryActionButton(
+                  label: 'PLAY',
+                  icon: Icons.play_arrow,
+                  onPressed: () => _openModes(GameMode.local),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                if (_unfinished != null) ...[
+                  _buildResumeCard(_unfinished!),
+                  const SizedBox(height: AppSpacing.md),
+                ],
+                _buildModeRow(
+                  icon: Icons.people_outline,
+                  title: 'Local Match',
+                  subtitle: 'Two players on one device.',
+                  onTap: () => _openModes(GameMode.local),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                _buildModeRow(
+                  icon: Icons.smart_toy_outlined,
+                  title: 'Vs AI',
+                  subtitle: 'Single player against AI.',
+                  onTap: () => _openModes(GameMode.versusAi),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                _buildModeRow(
+                  icon: Icons.public,
+                  title: 'Online Match',
+                  subtitle: 'Remote two-player match.',
+                  onTap: () => _openModes(GameMode.online),
+                ),
                 const SizedBox(height: AppSpacing.md),
+                _buildTutorialCard(),
+                if (_loaded && _statistics.matchesPlayed > 0) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  _buildStatisticsCard(),
+                ],
+                const SizedBox(height: AppSpacing.xxl),
               ],
-              _buildModeRow(
-                icon: Icons.people_outline,
-                title: 'Local Match',
-                subtitle: 'Two players on one device.',
-                onTap: () => _openModes(GameMode.local),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              _buildModeRow(
-                icon: Icons.smart_toy_outlined,
-                title: 'Vs AI',
-                subtitle: 'Single player against AI.',
-                onTap: () => _openModes(GameMode.versusAi),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              _buildModeRow(
-                icon: Icons.public,
-                title: 'Online Match',
-                subtitle: 'Remote two-player match.',
-                onTap: () => _openModes(GameMode.online),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              _buildTutorialCard(),
-              if (_loaded && _statistics.matchesPlayed > 0) ...[
-                const SizedBox(height: AppSpacing.md),
-                _buildStatisticsCard(),
-              ],
-              const SizedBox(height: AppSpacing.xxl),
-            ],
+            ),
           ),
         ),
       ),

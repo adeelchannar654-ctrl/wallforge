@@ -7,6 +7,7 @@ import '../../../app/theme/app_typography.dart';
 import '../../../domain/models/board_config.dart';
 import '../../../domain/models/player_id.dart';
 import '../../widgets/app_chrome.dart';
+import '../../widgets/responsive_content.dart';
 
 /// Which kind of match ended — drives the heading and the summary line.
 enum ResultMode { local, versusAi, online }
@@ -139,74 +140,80 @@ class ResultScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.marginMobile,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const SizedBox(height: AppSpacing.xxl),
-            if (data.winner != null) ...[
-              Center(child: PlayerPawnDisc(player: data.winner!, size: 72)),
-              const SizedBox(height: AppSpacing.lg),
-            ],
-            // Phase 13: the result is the screen's heading and is
-            // announced to assistive technology on arrival.
-            Semantics(
-              header: true,
-              liveRegion: true,
-              child: Text(
-                _heading,
-                textAlign: TextAlign.center,
-                style: AppTypography.headlineLgMobile.copyWith(
-                  color: data.viewerWon
-                      ? AppColors.tertiary
-                      : AppColors.onSurface,
+      // Phase 14: a result is a single focused message; on wide
+      // viewports it sits at a deliberate measure, centered.
+      child: ResponsiveContent(
+        tabletMaxWidth: 560,
+        desktopMaxWidth: 560,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.marginMobile,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: AppSpacing.xxl),
+              if (data.winner != null) ...[
+                Center(child: PlayerPawnDisc(player: data.winner!, size: 72)),
+                const SizedBox(height: AppSpacing.lg),
+              ],
+              // Phase 13: the result is the screen's heading and is
+              // announced to assistive technology on arrival.
+              Semantics(
+                header: true,
+                liveRegion: true,
+                child: Text(
+                  _heading,
+                  textAlign: TextAlign.center,
+                  style: AppTypography.headlineLgMobile.copyWith(
+                    color: data.viewerWon
+                        ? AppColors.tertiary
+                        : AppColors.onSurface,
+                  ),
                 ),
               ),
-            ),
-            if (_summary != null) ...[
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                _summary!,
-                textAlign: TextAlign.center,
-                style: AppTypography.bodyBase.copyWith(
-                  color: AppColors.onSurfaceVariant,
+              if (_summary != null) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  _summary!,
+                  textAlign: TextAlign.center,
+                  style: AppTypography.bodyBase.copyWith(
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+              const SizedBox(height: AppSpacing.xl),
+              AppCard(
+                child: Column(
+                  children: [
+                    _statRow('Turns played', '${data.turnsPlayed}'),
+                    Divider(color: AppColors.outlineVariant),
+                    _statRow('Walls used — Blue', '${data.wallsUsedBlue}'),
+                    Divider(color: AppColors.outlineVariant),
+                    _statRow('Walls used — Red', '${data.wallsUsedRed}'),
+                    Divider(color: AppColors.outlineVariant),
+                    _statRow('Result', _resultText),
+                  ],
                 ),
               ),
+              const SizedBox(height: AppSpacing.xl),
+              if (rematchSection != null)
+                rematchSection!
+              else if (onRematch != null)
+                PrimaryActionButton(
+                  label: 'REMATCH',
+                  icon: Icons.replay,
+                  onPressed: onRematch,
+                ),
+              const SizedBox(height: AppSpacing.md),
+              SecondaryActionButton(
+                label: 'RETURN TO HOME',
+                icon: Icons.home_outlined,
+                onPressed: onHome,
+              ),
+              const SizedBox(height: AppSpacing.xxl),
             ],
-            const SizedBox(height: AppSpacing.xl),
-            AppCard(
-              child: Column(
-                children: [
-                  _statRow('Turns played', '${data.turnsPlayed}'),
-                  Divider(color: AppColors.outlineVariant),
-                  _statRow('Walls used — Blue', '${data.wallsUsedBlue}'),
-                  Divider(color: AppColors.outlineVariant),
-                  _statRow('Walls used — Red', '${data.wallsUsedRed}'),
-                  Divider(color: AppColors.outlineVariant),
-                  _statRow('Result', _resultText),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.xl),
-            if (rematchSection != null)
-              rematchSection!
-            else if (onRematch != null)
-              PrimaryActionButton(
-                label: 'REMATCH',
-                icon: Icons.replay,
-                onPressed: onRematch,
-              ),
-            const SizedBox(height: AppSpacing.md),
-            SecondaryActionButton(
-              label: 'RETURN TO HOME',
-              icon: Icons.home_outlined,
-              onPressed: onHome,
-            ),
-            const SizedBox(height: AppSpacing.xxl),
-          ],
+          ),
         ),
       ),
     );
