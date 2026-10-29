@@ -96,6 +96,13 @@ void main() {
 
   group('both seats of one room', () {
     testWidgets('Blue is told it is their turn', (tester) async {
+      // Phase 14: the default test viewport (800 wide) is now the
+      // tablet tier, whose narrow column carries the turn banner
+      // twice by design (Phase 10); these wording assertions were
+      // written against the desktop layout, so pin it explicitly.
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
       final seats = await startedMatch();
       await pump(tester, seats.blue);
 
@@ -108,6 +115,13 @@ void main() {
     });
 
     testWidgets('Red is told to wait, with the reason stated', (tester) async {
+      // Phase 14: the default test viewport (800 wide) is now the
+      // tablet tier, whose narrow column carries the turn banner
+      // twice by design (Phase 10); these wording assertions were
+      // written against the desktop layout, so pin it explicitly.
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
       final seats = await startedMatch();
       await pump(tester, seats.red);
 
