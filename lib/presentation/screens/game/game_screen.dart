@@ -6,6 +6,7 @@ import '../../../core/feedback/feedback_scope.dart';
 import '../../../core/feedback/feedback_timing.dart';
 import '../../../app/application/shortest_path.dart';
 import '../../../app/router/app_router.dart';
+import '../../../app/theme/app_breakpoints.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_elevation.dart';
 import '../../../app/theme/app_radii.dart';
@@ -18,9 +19,14 @@ import '../result/result_screen.dart';
 
 /// Interactive local game screen — pass-and-play between two humans.
 ///
-/// Layout:
-/// - Mobile (< 768px): single-column, board above controls.
-/// - Desktop (>= 768px): 3-column, 280px side rails with HUD + board center.
+/// Layout (Phase 14, `AppBreakpoints` — design.md §27):
+/// - Phone: single-column, board above controls.
+/// - Tablet: the balanced hybrid — the same single column, centered
+///   and capped, so the board grows relative to a phone's while the
+///   panels keep their strip arrangement instead of desktop's rails.
+/// - Desktop: 3-column, 280px side rails with HUD + board center.
+/// - Landscape phones borrow the desktop arrangement with compact
+///   200px rails (the recorded portrait-first exception, §13w).
 class GameScreen extends StatelessWidget {
   const GameScreen({
     super.key,
@@ -66,12 +72,18 @@ class GameScreen extends StatelessWidget {
               ),
             );
           }
-          final isDesktop = MediaQuery.sizeOf(context).width >= 768;
+          final tier = AppBreakpoints.of(context);
+          final landscapePhone = AppBreakpoints.isLandscapePhoneOf(context);
           return Scaffold(
             backgroundColor: AppColors.background,
             body: SafeArea(
-              child: isDesktop
-                  ? _buildDesktopLayout(context)
+              child: tier.isDesktop || landscapePhone
+                  ? _buildDesktopLayout(
+                      context,
+                      railWidth: landscapePhone ? 200 : 280,
+                    )
+                  : tier.isTablet
+                  ? _buildTabletLayout(context)
                   : _buildMobileLayout(context),
             ),
           );
@@ -80,11 +92,11 @@ class GameScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildDesktopLayout(BuildContext context) {
+  Widget _buildDesktopLayout(BuildContext context, {double railWidth = 280}) {
     return Row(
       children: [
         // Left rail — P1 HUD
-        SizedBox(width: 280, child: _buildPlayerRail(PlayerId.blue)),
+        SizedBox(width: railWidth, child: _buildPlayerRail(PlayerId.blue)),
         // Center — board + turn banner
         Expanded(
           child: Column(
@@ -102,8 +114,26 @@ class GameScreen extends StatelessWidget {
           ),
         ),
         // Right rail — P2 HUD
-        SizedBox(width: 280, child: _buildPlayerRail(PlayerId.red)),
+        SizedBox(width: railWidth, child: _buildPlayerRail(PlayerId.red)),
       ],
+    );
+  }
+
+  /// The tablet hybrid (Phase 14): the phone's single column —
+  /// strips, banner, board, controls — centered under a width cap,
+  /// so on a portrait tablet the board is substantially larger than
+  /// on a phone while the information panels keep the strip layout
+  /// rather than inheriting desktop's side rails (§27: panels change
+  /// layout, the board changes relative size; nothing is merely
+  /// scaled up).
+  Widget _buildTabletLayout(BuildContext context) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          maxWidth: AppBreakpoints.tabletGameContentMaxWidth,
+        ),
+        child: _buildMobileLayout(context),
+      ),
     );
   }
 

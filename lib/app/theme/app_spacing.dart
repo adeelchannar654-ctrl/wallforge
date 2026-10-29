@@ -29,10 +29,10 @@ class AppSpacing {
   /// 64px — huge.
   static const double huge = 64;
 
-  /// Outer margin for mobile (< 768px).
+  /// Outer margin for phone-width layouts (see AppBreakpoints).
   static const double marginMobile = 16;
 
-  /// Outer margin for desktop (>= 768px).
+  /// Outer margin for wide layouts (see AppBreakpoints).
   static const double marginDesktop = 32;
 
   /// Gutter (alias for lg).

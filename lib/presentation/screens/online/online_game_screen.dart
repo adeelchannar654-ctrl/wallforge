@@ -7,6 +7,7 @@ import '../../../core/feedback/feedback_timing.dart';
 import '../../../app/application/online/rematch_controller.dart';
 import '../../../app/application/shortest_path.dart';
 import '../../../app/router/app_router.dart';
+import '../../../app/theme/app_breakpoints.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_radii.dart';
 import '../../../app/theme/app_spacing.dart';
@@ -117,66 +118,87 @@ class OnlineGameScreen extends StatelessWidget {
         ),
       );
     }
-    final isDesktop = MediaQuery.sizeOf(context).width >= 768;
+    final tier = AppBreakpoints.of(context);
+    final landscapePhone = AppBreakpoints.isLandscapePhoneOf(context);
+    final railWidth = landscapePhone ? 200.0 : 280.0;
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: _buildAppBar(context),
       body: SafeArea(
-        child: isDesktop
+        child: tier.isDesktop || landscapePhone
             ? Row(
                 children: [
-                  SizedBox(width: 280, child: _buildRail(PlayerId.blue)),
+                  SizedBox(width: railWidth, child: _buildRail(PlayerId.blue)),
                   Expanded(child: _buildCenter(context)),
-                  SizedBox(width: 280, child: _buildRail(PlayerId.red)),
+                  SizedBox(width: railWidth, child: _buildRail(PlayerId.red)),
                 ],
               )
-            : LayoutBuilder(
-                builder: (context, constraints) => SingleChildScrollView(
-                  child: SizedBox(
-                    // The narrow column has a real minimum height: two
-                    // player strips, two banners, the toggle and actions,
-                    // and the board at its 240px floor — about 680px in
-                    // the tallest state (the waiting player, whose banner
-                    // carries the reason text, plus Phase 10's presence
-                    // notice). A viewport shorter than that — 320x568 is
-                    // in the project's layout test set — cannot hold it,
-                    // and a plain Column overflows there (the waiting
-                    // player's view already did, before Phase 10; the
-                    // layout tests only ever rendered the mover's). So
-                    // below the minimum the column scrolls instead; at or
-                    // above it, this is exactly the previous layout.
-                    height: constraints.maxHeight < _narrowMinHeight
-                        ? _narrowMinHeight
-                        : constraints.maxHeight,
-                    child: Column(
-                      children: [
-                        _buildStrip(PlayerId.blue),
-                        _buildBanner(context),
-                        Expanded(child: _buildBoardArea()),
-                        // The mode toggle and wall actions must exist on
-                        // narrow layouts too: without them a phone-width
-                        // player could move (the default mode) but never
-                        // switch to WALL mode or confirm a staged wall.
-                        // The local game screen's mobile layout includes
-                        // both for the same reason.
-                        _buildModeToggle(),
-                        const SizedBox(height: AppSpacing.sm),
-                        _buildActions(),
-                        const SizedBox(height: AppSpacing.sm),
-                        // The banner is built twice on the narrow layout
-                        // (above the board and below the actions); the
-                        // presence notice rides only on the first, to keep
-                        // the minimum height above as low as it is.
-                        _buildBanner(context, presenceNotice: false),
-                        _buildStrip(PlayerId.red),
-                      ],
-                    ),
+            : tier.isTablet
+            // The tablet hybrid (Phase 14): the narrow single column,
+            // centered under a width cap — the board grows relative
+            // to a phone's, the panels keep their strip arrangement
+            // instead of inheriting desktop's rails.
+            ? Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: AppBreakpoints.tabletGameContentMaxWidth,
                   ),
+                  child: LayoutBuilder(builder: _narrowScrollColumn),
                 ),
-              ),
+              )
+            : LayoutBuilder(builder: _narrowScrollColumn),
       ),
     );
   }
+
+  /// The narrow (phone/tablet) single column, scrollable below its
+  /// minimum height. Extracted in Phase 14 so the phone and tablet
+  /// tiers share exactly one implementation of it.
+  Widget _narrowScrollColumn(
+    BuildContext context,
+    BoxConstraints constraints,
+  ) => SingleChildScrollView(
+    child: SizedBox(
+      // The narrow column has a real minimum height: two
+      // player strips, two banners, the toggle and actions,
+      // and the board at its 240px floor — about 680px in
+      // the tallest state (the waiting player, whose banner
+      // carries the reason text, plus Phase 10's presence
+      // notice). A viewport shorter than that — 320x568 is
+      // in the project's layout test set — cannot hold it,
+      // and a plain Column overflows there (the waiting
+      // player's view already did, before Phase 10; the
+      // layout tests only ever rendered the mover's). So
+      // below the minimum the column scrolls instead; at or
+      // above it, this is exactly the previous layout.
+      height: constraints.maxHeight < _narrowMinHeight
+          ? _narrowMinHeight
+          : constraints.maxHeight,
+      child: Column(
+        children: [
+          _buildStrip(PlayerId.blue),
+          _buildBanner(context),
+          Expanded(child: _buildBoardArea()),
+          // The mode toggle and wall actions must exist on
+          // narrow layouts too: without them a phone-width
+          // player could move (the default mode) but never
+          // switch to WALL mode or confirm a staged wall.
+          // The local game screen's mobile layout includes
+          // both for the same reason.
+          _buildModeToggle(),
+          const SizedBox(height: AppSpacing.sm),
+          _buildActions(),
+          const SizedBox(height: AppSpacing.sm),
+          // The banner is built twice on the narrow layout
+          // (above the board and below the actions); the
+          // presence notice rides only on the first, to keep
+          // the minimum height above as low as it is.
+          _buildBanner(context, presenceNotice: false),
+          _buildStrip(PlayerId.red),
+        ],
+      ),
+    ),
+  );
 
   // --- App bar: code, connection chip, and back -----------------------------
 
