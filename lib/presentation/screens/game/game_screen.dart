@@ -186,8 +186,15 @@ class GameScreen extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final reservedHeight = pendingFailure == null ? 0.0 : AppSpacing.xxl;
-        final boardSize = (constraints.biggest.shortestSide - reservedHeight)
-            .clamp(280.0, 640.0);
+        final offered = constraints.biggest.shortestSide - reservedHeight;
+        // The 280 floor keeps the board playable — but it must never
+        // overflow the slot (Phase 14: in the landscape-phone rails
+        // layout the center column is height-constrained and forcing
+        // 280 overflowed it by exactly the difference). Below the
+        // floor, the board takes what the slot offers.
+        final boardSize = offered < 280.0
+            ? offered.clamp(0.0, 640.0)
+            : offered.clamp(280.0, 640.0);
         return Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,

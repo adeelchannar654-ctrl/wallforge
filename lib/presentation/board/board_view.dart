@@ -183,7 +183,14 @@ class _BoardViewState extends State<BoardView>
         // caps the board below it (Home's small visual, Phase 11) means the
         // cap, not the floor — clamp() would throw for lower > upper.
         final floor = widget.maxSize >= 280.0 ? 280.0 : 0.0;
-        final boardSize = available.clamp(floor, widget.maxSize);
+        // Phase 14: the floor must never overflow the slot — in a
+        // height-constrained landscape layout the offered side can be
+        // shorter than the floor, and forcing 280 there overflowed
+        // the column by exactly the difference. Below the floor, the
+        // board takes the slot it is offered.
+        final boardSize = available < floor
+            ? available
+            : available.clamp(floor, widget.maxSize);
 
         final geometry = BoardGeometry(
           boardSize: widget.state.boardConfig.size,

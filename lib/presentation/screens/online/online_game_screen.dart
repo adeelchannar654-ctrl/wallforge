@@ -472,10 +472,14 @@ class OnlineGameScreen extends StatelessWidget {
     builder: (context, constraints) {
       final pendingFailure = controller.pendingWallFailure;
       final reserved = pendingFailure == null ? 0.0 : AppSpacing.xxl;
-      final size = (constraints.biggest.shortestSide - reserved).clamp(
-        240.0,
-        640.0,
-      );
+      final offered = constraints.biggest.shortestSide - reserved;
+      // The 240 floor keeps the board playable — but it must never
+      // overflow the slot (Phase 14: in the landscape-phone rails
+      // layout the center column is height-constrained and forcing
+      // 240 overflowed it). Below the floor, take what is offered.
+      final size = offered < 240.0
+          ? offered.clamp(0.0, 640.0)
+          : offered.clamp(240.0, 640.0);
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
