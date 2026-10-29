@@ -74,3 +74,7 @@ key.properties
 
 # Phase 10 rules-test harness (tool/rules_tests) dependencies
 tool/rules_tests/node_modules/
+
+# Golden-test failure diagnostics (generated on every failing run;
+# swept into two phase commits by broad git adds — never track them).
+test/**/failures/
