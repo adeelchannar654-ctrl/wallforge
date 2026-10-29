@@ -1444,6 +1444,23 @@ golden-master regeneration remains outstanding, no new golden
 failures added); web build OK; spec checker OK; oracle untouched;
 mojibake clean. No rule, engine, sync or security change.
 
+**Correction (2026-10-29, test-failure resolution — supersedes the
+failure accounting above and in the Phase 13 Result):** the 2
+pre-existing `online_game_presence_test` failures are **fixed**. Their
+cause was not the claim flow (verified working end to end) but stale
+expectations: the tests asserted Phase 10's in-screen `MATCH
+ABANDONED` banner, which Phase 11 deliberately replaced with the
+shared Result screen. The tests now assert the Result-screen
+presentation; all contract assertions (stored abandoned status,
+cancellation, not-a-win) are unchanged. The 11 golden failures were
+individually re-measured: every difference is a documented Phase 13
+rendering change (pawn B/R letters, current-player ghost tint, banner
+text colour) over a cross-platform rasterization floor — the renderer
+is correct and the masters are stale. They are **not** regenerated in
+the Linux VM: the masters are the owner's Windows reference, and
+regenerating off-reference would relocate the same measured delta to
+his machine. Full suite after the fix: **1,693 tests — 1,682 passed, 11 failed**, the 11 being exactly those documented goldens. Full record: `memory.md` §13x.
+
 ---
 
 # Phase 15 — Performance

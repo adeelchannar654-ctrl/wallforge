@@ -170,7 +170,11 @@ void main() {
     await tester.tap(find.text('CLAIM'));
     await tester.pumpAndSettle();
 
-    expect(find.text('MATCH ABANDONED'), findsWidgets);
+    // Phase 11 moved the terminal presentation to the shared Result
+    // screen: the abandoned state shows as the Result row 'Abandoned'
+    // with the claimant's sentence in the room subtitle. (Phase 10's
+    // in-screen 'MATCH ABANDONED' banner no longer exists.)
+    expect(find.text('Abandoned'), findsWidgets);
     expect(
       find.textContaining('You claimed this match as abandoned'),
       findsWidgets,
@@ -204,9 +208,13 @@ void main() {
     await matchesFor(redUid).claimAbandonment(code: match.code);
     await pump(tester, match.blue, const Size(390, 844));
 
-    expect(find.text('MATCH ABANDONED'), findsWidgets);
+    // Phase 11's Result screen (see the claim test above): the Result
+    // row reads 'Abandoned' and the opponent-claimed sentence sits in
+    // the room subtitle ('Room <code> · …'), so it is matched as a
+    // substring. It must not read as a win for either side.
+    expect(find.text('Abandoned'), findsWidgets);
     expect(
-      find.text('Your opponent claimed this match as abandoned.'),
+      find.textContaining('Your opponent claimed this match as abandoned.'),
       findsWidgets,
     );
     expect(find.textContaining('WINS!'), findsNothing);

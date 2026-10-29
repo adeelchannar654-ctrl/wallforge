@@ -3993,3 +3993,81 @@ wording assertions are unchanged.
   presence-test failures, `firebase deploy --only firestore:rules`
   pending the owner's Firebase login, and the full live online
   match to a winner (never run). Phase 15 was not started.
+
+## 13x. The 13 failing tests — diagnosed and resolved (2026-10-29, post-Phase 14)
+
+- **Baseline actually observed** (this VM: Linux x86_64, Flutter 3.47.8 /
+  Dart 3.13.7): the documented set reproduces exactly — 1,693 tests,
+  1,680 passed, **13 failed** (11 goldens + 2 presence). Environment
+  record kept because everything below depends on it: the golden
+  masters were generated on the owner's Windows machine with an
+  earlier engine, and have never been regenerated since.
+- **The 2 presence failures — ROOT CAUSE FOUND, and it is not the
+  claim flow.** Diagnostic tests (temporary, deleted after use) drove
+  both scenarios end to end: the claim transaction returns `claimed`,
+  the stored document lands `status: abandoned, abandonedById` set,
+  both controllers adopt it (`isAbandoned` / `claimedByMe` true), and
+  the screen renders the abandoned result with the correct
+  claimant / claimed wording and no win text. What the two tests
+  asserted was the **Phase 10 terminal presentation** — an in-screen
+  `MATCH ABANDONED` banner and the claimed sentence as a standalone
+  `Text`. **Phase 11 deliberately replaced that presentation** with
+  the shared Result screen (the early return in
+  `online_game_screen.dart`'s `_build`, commented as such): heading
+  `Match complete.`, the sentence embedded in the room subtitle
+  (`Room <code> · …`), and the Result row value `Abandoned`. The two
+  Phase 10 tests were never updated to the new presentation — which is
+  why they fail on every tree from Phase 11 onward (the §13u pristine-
+  tree checks), and why Phase 11/12's original gate figures, which
+  reported goldens only, were wrong. The `_buildBanner` abandoned
+  branch that still computes a `MATCH ABANDONED` label is unreachable
+  (the `_build` early return pre-empts it) — vestigial, left as is.
+- **Fix (tests only, no app code):** the two tests now assert the
+  Phase 11 presentation — `find.text('Abandoned')` plus the claimed /
+  opponent-claimed sentence via `textContaining` (it lives inside the
+  subtitle) — with a comment recording why. Every contract assertion
+  is untouched: the stored document's `RoomStatus.abandoned`, the
+  cancellation test's still-`started`, and the claimed player's
+  explicit not-a-win check. Result: the presence file passes 5/5,
+  each previously-failing test also passes individually.
+- **The 11 goldens — renderer verified correct; masters stale plus a
+  platform rasterization floor; NOT regenerated here.** Every failure
+  image pair was measured pixel-wise (diff %, per-pixel delta
+  distribution, connected-component clusters of large deltas, sampled
+  colours) and representative renders reviewed visually:
+  *Structural board goldens (5):* the only large-delta clusters are
+  two ~60 px glyphs at the pawn centres — the **B/R pawn letters
+  Phase 13 added** (masters predate them; the sampled centre pixel
+  goes from flat pawn colour in the master to the dark glyph in the
+  render). Everything else is ≤16-delta anti-aliasing on circle and
+  goal-row edges (0.15–0.40 % of pixels).
+  *Ghost goldens (2):* large deltas concentrated in the preview —
+  the **Phase 13 current-player ghost tint** (sampled tint
+  191,245,255 → 230,252,255) — plus the same pawn letters.
+  *Game-screen goldens (4):* pawn letters, the ghost tint (the three
+  ghost scenarios), the **Phase 13 banner text-colour fix** in the
+  top banner glyphs, and one 1-px hairline (the mode toggle's
+  indicator) that rasterizes one pixel lower in the master — sampled
+  rows show identical colours, shifted coverage.
+  The residual class is engine rasterization of the painter's
+  gradient shaders, `withValues` alpha blends and hairlines across
+  platforms/engine builds; both golden files already load the bundled
+  Inter font explicitly, so text is not the variable. No rendering
+  regression was found anywhere; game rules and engine untouched.
+- **Why not `--update-goldens` here:** this work's brief reserves
+  regeneration to the reference environment, and this project's
+  masters are Windows-born — masters regenerated in this Linux VM
+  would pass here and fail on the owner's machine by the same
+  measured noise floor, relocating the failure rather than resolving
+  it. The remaining step is one command on the owner's machine —
+  `flutter test --update-goldens` on the two golden files, review,
+  commit the PNGs — after which the masters carry the Phase 13
+  rendering and this VM keeps only its documented rasterization
+  delta. If the owner prefers this VM declared the reference instead,
+  regeneration here is a single instruction away.
+- **Gates after the fix:** presence file 5/5 (and each fixed test
+  individually); board goldens +0 −7 and game goldens +0 −4 (the
+  documented 11, unchanged signatures); `dart format` 157 files
+  0 changed; `flutter analyze` clean; full suite **1,693 tests —
+  1,682 passed, 11 failed**, the failing set being exactly the 11
+  documented goldens (both presence tests pass in-suite).
