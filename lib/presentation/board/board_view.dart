@@ -36,6 +36,7 @@ class BoardView extends StatefulWidget {
     this.maxSize = 640,
     this.onCellTap,
     this.onWallSlotTap,
+    this.hoverWallPreviewFor,
   });
 
   /// The game state to render.
@@ -70,6 +71,14 @@ class BoardView extends StatefulWidget {
   /// Called when a wall slot is tapped.
   final void Function(Cell anchor, WallOrientation orientation)? onWallSlotTap;
 
+  /// Builds the ghost preview for a wall slot under the mouse
+  /// (Phase 14, design.md §28 "Mouse: hover highlights"). When
+  /// provided, hovering a wall slot shows this preview until the
+  /// pointer leaves or a wall is staged ([wallPreview] always wins).
+  /// Touch input never triggers it. Null disables hover entirely.
+  final WallPreview? Function(Cell anchor, WallOrientation orientation)?
+  hoverWallPreviewFor;
+
   @override
   State<BoardView> createState() => _BoardViewState();
 }
@@ -77,6 +86,10 @@ class BoardView extends StatefulWidget {
 class _BoardViewState extends State<BoardView>
     with SingleTickerProviderStateMixin {
   late final BoardAnimator _animator = BoardAnimator(this);
+
+  /// The mouse-hover ghost, tracked here so the (stateless) game
+  /// screens need no hover state of their own.
+  WallPreview? _hoverPreview;
 
   @override
   void dispose() {
@@ -193,7 +206,7 @@ class _BoardViewState extends State<BoardView>
                   geometry: geometry,
                   legalMoveTargets: widget.legalMoveTargets,
                   pathCells: widget.pathCells,
-                  wallPreview: widget.wallPreview,
+                  wallPreview: widget.wallPreview ?? _hoverPreview,
                   selectedCell: widget.selectedCell,
                   showCoordinates: widget.showCoordinates,
                   activeGlow: widget.activeGlow,
@@ -210,11 +223,46 @@ class _BoardViewState extends State<BoardView>
             onTapUp: (details) => _handleTap(details.localPosition, geometry),
             child: board,
           );
+          if (widget.hoverWallPreviewFor != null) {
+            board = MouseRegion(
+              onHover: (event) => _handleHover(event.localPosition, geometry),
+              onExit: (_) {
+                if (_hoverPreview != null) {
+                  setState(() => _hoverPreview = null);
+                }
+              },
+              child: board,
+            );
+          }
         }
 
         return board;
       },
     );
+  }
+
+  /// Mouse hover: the same wall-slot hit-test as a tap, resolved to
+  /// a ghost preview through the widget's builder. Moving within one
+  /// slot does not rebuild (the preview value is compared by field).
+  void _handleHover(Offset position, BoardGeometry geometry) {
+    final wallAnchor = geometry.wallAnchorAt(position);
+    final next = wallAnchor == null
+        ? null
+        : widget.hoverWallPreviewFor!(
+            Cell(row: wallAnchor.row, column: wallAnchor.col),
+            wallAnchor.orientation,
+          );
+    final current = _hoverPreview;
+    final unchanged =
+        (next == null && current == null) ||
+        (next != null &&
+            current != null &&
+            next.anchor == current.anchor &&
+            next.orientation == current.orientation &&
+            next.isValid == current.isValid);
+    if (!unchanged) {
+      setState(() => _hoverPreview = next);
+    }
   }
 
   void _handleTap(Offset position, BoardGeometry geometry) {

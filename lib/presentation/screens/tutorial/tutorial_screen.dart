@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../domain/engine/game_engine.dart';
+import '../../../domain/models/game_action.dart';
+
 import '../../../app/theme/app_breakpoints.dart';
 
 import '../../../app/application/game_interaction.dart';
@@ -360,6 +363,23 @@ class _TutorialScreenState extends State<TutorialScreen> {
                                         _step.interaction == _Interaction.wall
                                         ? controller.tapWallSlot
                                         : null,
+                                    hoverWallPreviewFor:
+                                        _step.interaction == _Interaction.wall
+                                        ? (anchor, orientation) => WallPreview(
+                                            anchor: anchor,
+                                            orientation: orientation,
+                                            isValid:
+                                                GameEngine.validate(
+                                                  controller.state,
+                                                  controller.currentPlayer,
+                                                  GameAction.wall(
+                                                    orientation: orientation,
+                                                    anchor: anchor,
+                                                  ),
+                                                ) ==
+                                                null,
+                                          )
+                                        : null,
                                   ),
                                 ),
                               ),
@@ -413,6 +433,23 @@ class _TutorialScreenState extends State<TutorialScreen> {
                             onWallSlotTap:
                                 _step.interaction == _Interaction.wall
                                 ? controller.tapWallSlot
+                                : null,
+                            hoverWallPreviewFor:
+                                _step.interaction == _Interaction.wall
+                                ? (anchor, orientation) => WallPreview(
+                                    anchor: anchor,
+                                    orientation: orientation,
+                                    isValid:
+                                        GameEngine.validate(
+                                          controller.state,
+                                          controller.currentPlayer,
+                                          GameAction.wall(
+                                            orientation: orientation,
+                                            anchor: anchor,
+                                          ),
+                                        ) ==
+                                        null,
+                                  )
                                 : null,
                           ),
                         ),

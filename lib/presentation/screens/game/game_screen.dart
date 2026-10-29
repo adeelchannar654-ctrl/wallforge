@@ -12,6 +12,8 @@ import '../../../app/theme/app_elevation.dart';
 import '../../../app/theme/app_radii.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
+import '../../../domain/engine/game_engine.dart';
+import '../../../domain/models/game_action.dart';
 import '../../../domain/models/game_status.dart';
 import '../../../domain/models/player_id.dart';
 import '../../board/board.dart';
@@ -227,6 +229,26 @@ class GameScreen extends StatelessWidget {
                       : null,
                   onWallSlotTap: controller.mode == InteractionMode.wall
                       ? controller.tapWallSlot
+                      : null,
+                  // Phase 14 (§28): mouse users get the ghost preview
+                  // on hover, before committing to a click. Validity
+                  // is the engine's own validate — the same call the
+                  // staged preview makes, so they can never disagree.
+                  hoverWallPreviewFor: controller.mode == InteractionMode.wall
+                      ? (anchor, orientation) => WallPreview(
+                          anchor: anchor,
+                          orientation: orientation,
+                          isValid:
+                              GameEngine.validate(
+                                controller.state,
+                                controller.currentPlayer,
+                                GameAction.wall(
+                                  orientation: orientation,
+                                  anchor: anchor,
+                                ),
+                              ) ==
+                              null,
+                        )
                       : null,
                 ),
               ),

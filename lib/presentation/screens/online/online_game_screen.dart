@@ -515,6 +515,26 @@ class OnlineGameScreen extends StatelessWidget {
                 onWallSlotTap: controller.mode == InteractionMode.wall
                     ? controller.tapWallSlot
                     : null,
+                // Phase 14 (§28): hover ghost on this player's turn,
+                // validity from the engine's validate, as locally.
+                hoverWallPreviewFor:
+                    controller.mode == InteractionMode.wall &&
+                        controller.isMyTurn
+                    ? (anchor, orientation) => WallPreview(
+                        anchor: anchor,
+                        orientation: orientation,
+                        isValid:
+                            GameEngine.validate(
+                              controller.state,
+                              controller.currentPlayer,
+                              GameAction.wall(
+                                orientation: orientation,
+                                anchor: anchor,
+                              ),
+                            ) ==
+                            null,
+                      )
+                    : null,
               ),
             ),
             if (pendingFailure != null)
