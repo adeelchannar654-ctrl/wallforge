@@ -374,7 +374,19 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
   void _cancelAiTurn() {
     _aiTimer?.cancel();
     _aiTimer = null;
+    // Phase 16: every cancellation also invalidates any search
+    // already in flight, via the generation token below.
+    _aiGeneration++;
   }
+
+  /// Cancellation token for AI searches (Phase 16). _runAiTurn
+  /// captures the current value when it starts; _cancelAiTurn —
+  /// called on schedule, restart, new match and dispose — increments
+  /// it, so a search that finishes after any of those events finds
+  /// its generation stale and drops its result. The turn-number
+  /// check alone could not tell two different matches that happen to
+  /// share a turn number apart; the generation can.
+  int _aiGeneration = 0;
 
   /// Queues the AI's move when it is the AI's turn.
   ///
@@ -402,6 +414,7 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
   /// result must never land.
   Future<void> _runAiTurn() async {
     final turnAtStart = _state.turnNumber;
+    final generationAtStart = _aiGeneration;
     final action = await AiOpponent.chooseActionAsync(
       _state,
       _aiDifficulty,
@@ -409,7 +422,12 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
       previousCell: _aiPreviousCell,
       visitOrder: _aiVisitOrder,
     );
-    if (_disposed || !isAiTurn || _state.turnNumber != turnAtStart) return;
+    if (_disposed ||
+        _aiGeneration != generationAtStart ||
+        !isAiTurn ||
+        _state.turnNumber != turnAtStart) {
+      return;
+    }
     if (action == null) return;
     _playAiAction(action);
   }

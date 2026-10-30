@@ -326,12 +326,18 @@ class GameScreen extends StatelessWidget {
         children: [
           liveBanner,
           const SizedBox(height: AppSpacing.xs),
-          Text(
-            'AI is thinking…',
-            key: const ValueKey('ai-thinking'),
-            style: AppTypography.bodyBase.copyWith(
-              color: AppColors.onSurfaceVariant,
-              fontSize: 12,
+          // Phase 16: the thinking state is its own live region, so
+          // its appearance is announced; the cue is text, never
+          // colour alone.
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              'AI is thinking…',
+              key: const ValueKey('ai-thinking'),
+              style: AppTypography.bodyBase.copyWith(
+                color: AppColors.onSurfaceVariant,
+                fontSize: 12,
+              ),
             ),
           ),
         ],
