@@ -17,9 +17,10 @@ A wall may never remove the last route to either player's goal.
 
 ## Status
 
-**Phases 0–14 are complete; Phase 15 (Performance) is complete except
-owner-run device/browser checks.** See [`phase.md`](phase.md) for the
-full plan and the per-phase results.
+**Phases 0–15 are complete (Phase 15 except owner-run device/browser
+checks); Phase 16 (Testing and QA) is complete except owner-run
+manual testing.** See [`phase.md`](phase.md) for the full plan and
+the per-phase results.
 
 - **Phase 0 — Project Foundation.** Flutter project, platform targets, folder
   structure, lint/format standards and test structure in place.
@@ -269,6 +270,39 @@ lib/
 flutter pub get
 flutter run            # choose a connected device or Chrome
 ```
+
+## Getting the code (and keeping it current)
+
+Always run the app from a `git clone` of this repository — **never
+from a Google Drive copy**. Drive snapshots drift behind `main`
+within days (the last mirrored copy predates two whole phases), and
+bugs found in a stale copy may already be fixed here.
+
+```bash
+git clone https://github.com/adeelchannar654-ctrl/wallforge.git
+cd wallforge
+flutter pub get
+```
+
+To update an existing checkout before running or testing:
+
+```bash
+git pull
+flutter pub get
+```
+
+Every run should state its build. Pass the current commit when you
+launch, and read the same value back in **Settings → Account →
+Build**:
+
+```bash
+flutter run --profile -d chrome --dart-define=GIT_SHA=$(git rev-parse --short HEAD)
+```
+
+A build showing `Build dev` was launched without the define — which
+build it is cannot be determined from inside the app. Performance
+judgements (especially AI move speed) are only meaningful in
+`--profile` or `--release`, never in a debug run.
 
 ## Running with online play from a clean `git clone`
 

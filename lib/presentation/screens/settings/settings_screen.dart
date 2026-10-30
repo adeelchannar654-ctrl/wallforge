@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_breakpoints.dart';
 
+import '../../../app/build_info.dart';
 import '../../../app/router/app_router.dart';
 import '../../../core/feedback/feedback_scope.dart';
 import '../../../app/theme/app_colors.dart';
@@ -322,6 +323,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onPressed: _signOut,
           ),
         ],
+        const SizedBox(height: AppSpacing.md),
+        // Phase 16 A.1: the exact build, for bug reports.
+        Text(
+          BuildInfo.label,
+          key: const ValueKey('build-id'),
+          style: AppTypography.bodyBase.copyWith(
+            color: AppColors.onSurfaceVariant,
+            fontSize: 12,
+          ),
+        ),
       ],
     ),
   ];
