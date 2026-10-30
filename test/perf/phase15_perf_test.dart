@@ -264,6 +264,48 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       expect(counting.activeWatchers, 0);
     });
+
+    test('Phase 16 long-run: repeated online sessions accumulate '
+        'nothing', () async {
+      // Eight full sessions — create, join, ready, start, connect,
+      // resync, dispose — and after every single one the watcher
+      // count must be back at zero and no write may have leaked from
+      // presence or teardown.
+      for (var cycle = 0; cycle < 8; cycle++) {
+        final hostUid = 'uid-host-$cycle';
+        final guestUid = 'uid-guest-$cycle';
+        final hostRooms = roomsFor(hostUid);
+        final created = await hostRooms.create(
+          config: const BoardConfig(size: 5),
+        );
+        final code = (created as RoomSuccess).room.code;
+        await roomsFor(guestUid).join(code);
+        await hostRooms.setReady(code: code, ready: true);
+        await roomsFor(guestUid).setReady(code: code, ready: true);
+        await hostRooms.start(code);
+
+        counting.reset();
+        final controller = OnlineGameController(
+          rooms: roomsFor(guestUid),
+          matches: matchesFor(guestUid),
+          uid: guestUid,
+          code: code,
+        );
+        await controller.connect();
+        expect(counting.activeWatchers, 1, reason: 'cycle $cycle');
+        await controller.resync();
+        controller.dispose();
+        await Future<void>.delayed(Duration.zero);
+        await Future<void>.delayed(Duration.zero);
+        expect(
+          counting.activeWatchers,
+          0,
+          reason: 'cycle $cycle leaked a listener',
+        );
+        expect(counting.plainWrites, 0, reason: 'cycle $cycle');
+        expect(counting.txnSets, 0, reason: 'cycle $cycle');
+      }
+    });
   });
 
   group('local game notifications and frames', () {
