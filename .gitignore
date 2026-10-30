@@ -58,6 +58,10 @@ google-services.json
 **/google-services.json
 GoogleService-Info.plist
 **/GoogleService-Info.plist
+# The flutterfire-generated web options file (Phase 15, A.4): generated
+# locally, never committed — web builds can instead pass the same values
+# as --dart-define flags (see README, "Running with online play").
+lib/firebase_options.dart
 
 # Service accounts / private keys
 *serviceAccount*.json

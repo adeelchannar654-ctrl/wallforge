@@ -17,8 +17,9 @@ A wall may never remove the last route to either player's goal.
 
 ## Status
 
-**Phases 0–12 are complete in code, with one owner-side caveat.** See
-[`phase.md`](phase.md) for the full plan and the per-phase results.
+**Phases 0–14 are complete; Phase 15 (Performance) is complete except
+owner-run device/browser checks.** See [`phase.md`](phase.md) for the
+full plan and the per-phase results.
 
 - **Phase 0 — Project Foundation.** Flutter project, platform targets, folder
   structure, lint/format standards and test structure in place.
@@ -268,6 +269,47 @@ lib/
 flutter pub get
 flutter run            # choose a connected device or Chrome
 ```
+
+## Running with online play from a clean `git clone`
+
+Local play (pass-and-play and vs AI) works from a fresh clone with no
+setup. Online play needs Firebase client configuration, which this
+repository deliberately does **not** commit (see `.gitignore` and
+`rules.md` §14). How the options reach the app depends on the
+platform:
+
+- **Android / iOS** — the Firebase SDK reads the platform config file
+  at startup. Place your project's `google-services.json` in
+  `android/app/` (or `GoogleService-Info.plist` in `ios/Runner/`).
+  Both paths are git-ignored; never commit them.
+- **Web** — there is no config file. Pass the project's web config as
+  build-time defines (values are in the Firebase console under
+  Project settings → Your apps → Web app):
+
+  ```bash
+  flutter run -d chrome \
+    --dart-define=FIREBASE_API_KEY=<apiKey> \
+    --dart-define=FIREBASE_APP_ID=<appId> \
+    --dart-define=FIREBASE_PROJECT_ID=<projectId> \
+    --dart-define=FIREBASE_MESSAGING_SENDER_ID=<messagingSenderId> \
+    --dart-define=FIREBASE_AUTH_DOMAIN=<authDomain> \
+    --dart-define=FIREBASE_STORAGE_BUCKET=<storageBucket>
+  ```
+
+  The last two are optional. `lib/main.dart` hands these to
+  `FirebaseBootstrap` via `FirebaseOptionsFromDefines`; if the
+  required values are absent the app starts with Firebase
+  unavailable and online play stays off — local play is unaffected.
+
+- **Alternative (FlutterFire CLI)** — `flutterfire configure`
+  generates `lib/firebase_options.dart` locally. That file is also
+  git-ignored in this project; the committed `main.dart` does not
+  import it, so prefer the `--dart-define` path above unless you are
+  maintaining a local variant.
+
+Deploying the security rules to a live project is separate:
+`firebase deploy --only firestore:rules` from a machine signed in to
+the project's Firebase account.
 
 ## Quality checks
 

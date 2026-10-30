@@ -1,10 +1,12 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import 'app/app.dart';
 import 'core/logging/app_logger.dart';
 import 'data/remote/firebase_bootstrap.dart';
+import 'data/remote/firebase_options_from_defines.dart';
 
 /// Application entry point.
 ///
@@ -20,7 +22,13 @@ void main() {
   const logger = AppLogger('main');
   logger.log('Launching Wallforge');
   unawaited(
-    FirebaseBootstrap.initialize().then((result) {
+    FirebaseBootstrap.initialize(
+      // Web has no native config file: its options come from
+      // --dart-define values when the build supplies them (Phase 15,
+      // A.4; see FirebaseOptionsFromDefines). Native platforms read
+      // their own git-ignored config files, so they pass null.
+      options: kIsWeb ? FirebaseOptionsFromDefines.maybe() : null,
+    ).then((result) {
       if (result.isUsable) {
         logger.log('Firebase ready: ${result.detail}');
       } else {
