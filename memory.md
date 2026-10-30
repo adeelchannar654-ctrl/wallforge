@@ -1544,9 +1544,17 @@ pre-existing wall-victory branch and the AI's defensive `!SuccessResult` guard.
   minimal and consistent with the existing HUD. A real AI mode screen is Phase 11
   UI work and was not invented here.
 - **Q-5.3 (new)** — no time budget per move. Expert takes ~1.3 s of synchronous
-  search on a 9x9 mid-game position (measured), run on a timer so no frame blocks.
-  On a much slower device that could become user-visible; if so the fix is a node
-  budget or a Web Worker, not a change to the evaluation.
+  search on a 9x9 mid-game position (measured). **Correction (Phase 15,
+  §13y):** the original wording "run on a timer so no frame blocks" was
+  wrong — a timer only delays when synchronous work starts; once the
+  search began, no frame could be produced until it returned (measured
+  worst event-loop block 1.58 s on 9×9, 3.30 s on 11×11). Fixed in
+  Phase 15: the search now yields between root candidates
+  (`AiOpponent.chooseActionAsync`), bounding the worst block to one
+  candidate's subtree (~150 ms / ~346 ms on the same VM), with choices
+  bit-identical to the synchronous search. A node budget remains the
+  fallback if owner device measurements ever demand one; the
+  evaluation itself is unchanged.
 - Q-4.1 … Q-4.10 and Q-2.1 remain open and unaffected.
 - No Phase 6 work was started.
 
@@ -4071,3 +4079,282 @@ wording assertions are unchanged.
   0 changed; `flutter analyze` clean; full suite **1,693 tests —
   1,682 passed, 11 failed**, the failing set being exactly the 11
   documented goldens (both presence tests pass in-suite).
+
+## 13y. Phase 15 Record — Performance (2026-10-30)
+
+Status: **complete except owner-run device/browser checks** (the Phase 9
+honest pattern). Everything measurable in the headless VM was measured;
+real frame timing, low-end Android behaviour and browser load metrics
+were not faked — the owner measurement script is at the end of this
+record.
+
+### Source ledger and targets
+
+- No document sets numeric performance targets (verified again by
+  search of `PRD.md`, `architecture.md`, `design.md`): every target
+  below is a recorded decision of this phase. Targets chosen: (T1) the
+  UI thread must never be blocked by one AI search for its full
+  duration — the event loop must turn between root candidates;
+  (T2) no Firestore operation may be spent that a document already in
+  hand proves unnecessary; (T3) counts and invariants are asserted in
+  tests, wall-clock numbers are printed and reported, never asserted
+  (shared-VM timing is noise); (T4) nothing is optimized without a
+  measured problem, and an after-number that is not better reverts
+  the change.
+- Baseline confusion resolved first: the Phase 15 brief expected
+  1,693 tests / 13 failures, but the 2 presence failures were already
+  fixed on 2026-10-29 (commit `0959d0b`, §13x). The true Phase 15
+  baseline at `0959d0b` is **1,693 tests — 1,682 passed, 11 failed**,
+  all 11 being golden masters (format 157 files 0 changed; analyze
+  clean; spec OK; oracle SHA-256 `6f1e3c05…94ba96`, 1,229,568 bytes;
+  mojibake clean).
+
+### Part A
+
+- **A.2 presence failures — closed with the full evidence chain.** The
+  §13x diagnosis (stale Phase 10 expectations vs Phase 11's Result
+  screen; claim flow proven working) was re-verified three ways:
+  (i) the fixed presence file passes **20/20 isolation runs** —
+  deterministic, not flaky; (ii) the first-failing-state bracket: at
+  Phase 10 HEAD `f989d07` the original file passes 5/5, at Phase 11
+  HEAD `d132be9` the same 2 tests fail — the regression window is
+  exactly Phase 11, whose UI change orphaned them; (iii) the Phase 11
+  record's "presence timer needs addTearDown" note is a harness
+  property the tests already handle by explicit disposal, unrelated
+  to the failures. The suite's only failures are now the golden
+  masters awaiting the owner's reference machine
+  (`flutter test --update-goldens` — still NOT done here, by design).
+- **A.3 real-app resize regression** —
+  `test/presentation/screens/game/real_app_resize_regression_test.dart`:
+  boots the real `WallforgeApp` (router + feedback scope +
+  persistence), plays real taps at 390×844, resizes phone → tablet →
+  desktop → landscape phone → phone between taps, and after every
+  resize asserts the screen holds the **identical controller
+  instance** and the **identical state object**, finishing at exactly
+  4 plies for 4 taps. Passes.
+- **A.4 clean-clone documentation + hardening.** How options reach the
+  app today (read from `main.dart`, `FirebaseBootstrap`, `web/`,
+  `pubspec.yaml`): the committed `main.dart` passed NO options, so a
+  clean clone could never initialise Firebase on web (native
+  platforms read their git-ignored config files); the owner's working
+  copies carry an edited `main.dart` importing a local
+  `firebase_options.dart` — i.e. there was **no supported way without
+  editing tracked files**. Smallest supported mechanism added:
+  `lib/data/remote/firebase_options_from_defines.dart` — web options
+  built from `--dart-define` values (`FIREBASE_API_KEY`, …), null
+  unless all required values are present, with `main.dart` passing
+  them on web only; the pure mapping is unit-tested with fake values
+  (`test/data/firebase_options_from_defines_test.dart`, 4 tests). No
+  new packages, no committed credentials. `lib/firebase_options.dart`
+  is now in `.gitignore` alongside `google-services.json` and the
+  plist (it was missing — verified). README gained the exact
+  "Running with online play from a clean `git clone`" section.
+
+### The AI (B.2.1) — the phase's headline fix
+
+Measured with `tool/bench_engine_ai.dart` on seeded mid-game
+positions (move-biased self-play — uniformly random play spends all
+walls within plies and collapses the branching factor; the first
+bench run made exactly that mistake and reported a flattering
+Expert-9×9 of 19 ms; the corrected positions reproduce Q-5.3's 1.3 s):
+
+| Difficulty | 7×7 | 9×9 | 11×11 |
+|---|---|---|---|
+| Easy | ~10–16 ms | ~17–22 ms | ~48–50 ms |
+| Medium | ~8 ms | ~17–22 ms | ~48–49 ms |
+| Hard | ~46–48 ms | ~95–101 ms | ~253–265 ms |
+| Expert | ~565–569 ms | **~1,284–1,357 ms** | **~3,208–3,256 ms** |
+
+The cost driver is `GameEngine.legalActions` (3.5–5.5 ms per call at
+9×9, 10–17 ms at 11×11 in wall-rich positions — every wall slot is
+path-validated), paid at every search node; route-length BFS is
+negligible (0.03–0.10 ms). The engine is frozen and legality is never
+re-implemented in the AI, so the fix is scheduling, not search
+surgery:
+
+- **`AiOpponent.chooseActionAsync`** — identical shortlist, identical
+  per-candidate search, identical tie-breaking; it yields to the
+  event loop between root candidates. `LocalGameController` now runs
+  it (the think-delay timer only schedules the start) and drops the
+  result if the match was restarted/disposed or the turn changed
+  while the search was in flight.
+- **Measured effect** (event-loop probe in the bench: a self-requeuing
+  task records the longest gap between its turns): worst event-loop
+  block for an Expert search fell from **1,578 ms → 150 ms** (9×9)
+  and **3,299 ms → 346 ms** (11×11) — bounded by one root candidate's
+  subtree instead of the whole search. Total CPU per search is
+  unchanged (it is the same search); what changed is that frames,
+  input and timers interleave with it.
+- **Determinism/strength evidence:** `test/ai/ai_async_test.dart` —
+  async == sync choices on seeded positions for every difficulty at
+  7×7 and 9×9 plus 11×11 Expert; a probe test proving event-loop work
+  completes mid-search; a restart-during-search test proving stale
+  results never land. The pre-existing AI suite (legality, strength
+  ordering, AI-vs-AI games) passes unchanged. No AI behaviour change:
+  same evaluation, same search, same choices.
+- **Evaluated and reverted:** alpha-beta pruning inside `_search`
+  measured only −1…−5% (Expert 9×9 1,284 → 1,214 ms) because the cost
+  sits in shortlist generation at each visited node, not in leaf
+  count. Per T4 it was reverted — a wider equivalence-proof surface
+  for a noise-level gain. **Evaluated and rejected:** background
+  isolates — web (this phase's platform) has no true parallel
+  isolates in this Flutter version, so an isolate path would still
+  need the chunked path for web; chunking alone met T1 on every
+  platform with zero serialization or determinism surface. The
+  remaining known lever, if owner device numbers ever demand it, is
+  finer-grained yielding inside the search or a deterministic node
+  budget (Q-5.3 keeps that note).
+
+### Firestore recount (B.2.2) — including the rules lookups Phase 9 predicted
+
+Counted through the real repositories over a `CountingFirestoreClient`
+decorator (`test/perf/phase15_perf_test.dart`, exact-count asserts):
+
+- Happy-path action, BEFORE: **2 transaction reads** (match + move
+  record) + 2 writes. AFTER: **1 transaction read** + 2 writes.
+- The saved read: `submitAction`'s idempotency read of the move
+  record. It is provably unnecessary when the match document shows
+  the expected turn AND version on every signal — the record and the
+  match update commit in the same transaction, so a record for the
+  expected turn can exist only if the document already advanced past
+  it. When the document does not prove freshness, the read runs
+  exactly as before; every outcome (applied / alreadyApplied /
+  staleTurn / conflictingDuplicate) is preserved, and `match_sync`,
+  the online controller tests and the presence suite all pass
+  unchanged. (One corrupt-corner note: a started room whose snapshot
+  is missing AND has a same-action record previously threw inside the
+  transaction and surfaced as `networkUnavailable`; it now rejects
+  cleanly as `invalidRemoteData` — unreachable in real data.)
+- Security-rule lookups, counted statically from `firestore.rules`:
+  the move-record create calls `parent()` = one `get()` of the match
+  document (cached within the evaluation) → **+1 billed read per
+  action** — the cost Phase 9's arithmetic explicitly deferred
+  ("future security-rule lookups add reads") and Phase 10 introduced.
+  The match update itself uses only `before()`/`after()` (0 lookups).
+  Quick-match room creation costs 2 `getAfter` reads (one-time per
+  matchmaking, not per action); room create/join/ready/start and the
+  abandonment claim cost 0.
+- **Recount per action: 4 reads / 2 writes** — 1 transaction read +
+  2 listener deliveries (one per client) + 1 rules read; 2 writes
+  (match + move record). The headline matches Phase 9's "~4 and 2",
+  but the composition is now fully accounted: Phase 10's rules read
+  replaced the transaction read Phase 15 removed.
+- Presence verified zero-write by construction and by measurement:
+  the 5-second timer only re-derives presence from `updatedAt` and
+  notifies on a flip (no repository call in the handler); the
+  counting test asserts 0 writes across connect + resyncs. Exactly
+  **one** match listener per controller, cancelled on dispose
+  (asserted: active watchers 1 → 0).
+- Quotas re-checked against current Firebase documentation
+  (2026-10-30): Spark no-cost = 50,000 reads/day, 20,000 writes/day,
+  20,000 deletes/day, 1 GiB stored — **unchanged** from Phase 9's
+  check. Games/day recomputed: at Phase 9's 811-ply accounting case,
+  reads ≈ 3,254/game → ~15 games/day by reads; writes ≈ 1,627/game
+  → **12 games/day, writes still limiting** (unchanged headline;
+  reads moved from co-limiting to comfortable). At a typical ~60-ply
+  game: ~160 games/day by writes, ~200 by reads.
+- The emulator rules suite was NOT re-run: `firestore.rules` and
+  `tool/rules_tests` are byte-identical to the verified Phase 11
+  state (`git diff` empty) and the JS-SDK suite cannot observe a
+  Dart-client read pattern; two attempts here also stalled before
+  emulator boot (empty log — the CLI never started in this VM).
+
+### Rendering, rebuilds, startup, web weight (B.2.3/B.2.4)
+
+- Painter record cost (PictureRecorder, dense-wall boards, this VM):
+  5×5 1.31 ms, 7×7 1.60 ms, 9×9 1.83 ms, 11×11 0.93 ms per paint —
+  ≈1–2 ms with no size blow-up (CPU record cost only; GPU frame time
+  is owner-measured). Board sits under a `RepaintBoundary` (Phase 3).
+- Notifications: one human move produces a small bounded count
+  (asserted ≤6 synchronously, ≤8 after settle — against Phase 12's
+  unbounded loop); a pure resize fires **zero** controller
+  notifications (asserted across all three tiers + landscape).
+- Idle board: after settle, `hasScheduledFrame` is false and a
+  1-second pump schedules at most the pump's own frame — the Phase 12
+  ticker discipline holds; animations tick only while an effect is
+  in flight.
+- Startup: `FirebaseBootstrap.initialize()` is `unawaited` and
+  `runApp` is called immediately — first paint is never blocked on
+  Firebase (code-verified; in the unconfigured case init fails fast
+  and locally). Lazy initialization was evaluated and **not**
+  implemented: the only saving would be deferring Firebase's share
+  of `main.dart.js` parsing, which cannot be isolated without a
+  deferred-import refactor of the whole online subtree — Phase
+  7/8's `FirebaseStatus` behaviour is built on the startup attempt,
+  and no measurement available here condemns it. The owner-run
+  Lighthouse pass is the arbiter if that ever changes.
+- Web release build (`flutter build web --release`): succeeds;
+  `main.dart.js` 2.89 MB; `build/web` totals 42 MB on disk but ships
+  six renderer WASM variants (~29 MB) of which a browser downloads
+  exactly one (3.6–7.3 MB) plus `.symbols` files that are never
+  fetched in normal serving. Assets: one variable font
+  `InterVariable.ttf` 843 KB (all weights in a single file — already
+  the efficient pattern; no unused weights exist to remove);
+  MaterialIcons tree-shaken to 9.7 KB (from ~1.6 MB unshaken);
+  audio 137 KB total. Nothing measured as wasteful was found to
+  remove; renderer/compile options in this Flutter version were
+  checked — the default release build already emits the
+  multi-renderer output, and no flag was changed without a measured
+  problem.
+
+### Memory and lifecycle (B.2.5/B.2.6)
+
+- `test/perf/phase15_perf_test.dart` lifecycle group: disposing a
+  vs-AI controller cancels the pending AI move (no ply lands, no
+  throw, past the think delay); five full 5×5 local games play to
+  completion through the real controller and dispose cleanly; online
+  controllers release their listener on dispose (above). Q-8.6
+  (controller disposal from the route) was already resolved in
+  Phase 11 via `GameScreen.ownsController`; these tests extend the
+  same discipline to the AI timer and the Firestore subscription,
+  the two remaining timer/subscription owners.
+- Engine hot paths (bench): `legalActions` 0.9 ms (empty 9×9) rising
+  to 3.5–5.5 ms (wall-rich 9×9) and 10–17 ms (wall-rich 11×11) —
+  the search's dominant cost, reported, and deliberately NOT
+  optimized: the engine's behaviour is frozen, its numbers are
+  healthy for UI-rate calls (one per human action at most), and the
+  only consumer that called it in a hot loop was the AI search,
+  whose blocking is fixed by scheduling. Oracle vectors
+  byte-identical; spec checker OK; all domain tests pass.
+
+### Owner measurement script (device/browser — not measurable here)
+
+Run on the owner's Windows machine, from a clean clone of `main`:
+
+1. Web profile build + frame chart:
+   `flutter run --profile -d chrome` — open DevTools → Performance,
+   record while: (a) playing on an 11×11 board with dense walls,
+   (b) taking an Expert-AI turn on 9×9 and 11×11, (c) placing walls
+   rapidly (animation flurry), (d) dragging the window across the
+   768/1024 breakpoints repeatedly. Note the longest frame and any
+   dropped frames per scenario; the AI turn should show activity
+   spread over many frames, never one ~1.3 s (9×9) block.
+2. Web load metrics: `flutter build web --release`, then
+   `python -m http.server 8080 --directory build\web`, open
+   `http://localhost:8080` in Chrome → DevTools → Lighthouse
+   (mobile emulation, Performance) and record FCP, LCP, total
+   blocking time and total transfer size.
+3. Android: connect a low-end device, `flutter run --profile -d
+   <device id>`, enable the performance overlay (DevTools → 
+   Performance → frame chart) and repeat scenarios (a)–(c); watch
+   the UI-thread (top) chart during the Expert turn specifically.
+4. A full online match on two sessions, watching the Firestore
+   usage dashboard: expect ≈4 reads + 2 writes per applied action.
+Report the numbers back; Phase 15's status upgrades from "complete
+except owner-run device/browser checks" when they land.
+
+### Phase 15 gates (real output, 2026-10-30)
+
+`dart format --set-exit-if-changed lib test`: 162 files, 0 changed.
+`flutter analyze`: no issues. `flutter test`: **1,717 tests — 1,706
+passed, 11 failed**, the 11 being exactly the golden masters awaiting
+the owner's reference machine (baseline 1,693/1,682/11; +24 new tests
+— 1 real-app resize, 4 defines, 11 AI async/determinism, 8 perf —
+all passing). One casualty found and fixed on the way: the Firestore
+integration test "a resumed AI match keeps its opponent and
+difficulty" waited a fixed `kAiThinkDelay + 50 ms` for the AI reply —
+a sleep that encoded the synchronous search's timing; it now polls
+for the reply with a 10 s bound (the assertion itself is unchanged)
+and passes 5/5 repeat runs. `flutter build web --release`: built.
+Spec checker: OK. Oracle: SHA-256 `6f1e3c05…94ba96`, unchanged.
+Mojibake scan: clean.

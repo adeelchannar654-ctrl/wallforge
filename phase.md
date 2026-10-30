@@ -1483,6 +1483,41 @@ Optimize after the feature set is stable.
 
 No obvious rendering, memory, or network bottlenecks.
 
+### Result
+
+**Complete except owner-run device/browser checks** (2026-10-30,
+`memory.md` §13y). Part A: the two presence failures closed with a
+full evidence chain (20/20 isolation passes; first failing state
+bracketed to Phase 11 — the file passes 5/5 at Phase 10 HEAD); a
+real-app mid-match resize regression test (identical controller and
+state object across every tier) added and passing; clean-clone
+online setup documented in `README.md` with a supported
+`--dart-define` web-options mechanism (no tracked-file edits, no
+committed credentials) and `lib/firebase_options.dart` added to
+`.gitignore`. Part B: the Expert-AI UI-thread block — the phase's
+headline — is eliminated by an event-loop-yielding search
+(`chooseActionAsync`): worst measured event-loop block fell from
+1,578 ms → 150 ms (9×9) and 3,299 ms → 346 ms (11×11), with AI
+choices bit-identical to the synchronous search (determinism corpus
++ unchanged AI suite); an alpha-beta variant measured −1…−5% and was
+reverted. Firestore recounted end-to-end including the security-rule
+lookups Phase 9 predicted: 4 reads / 2 writes per action (one
+transaction read removed where the match document provably makes it
+redundant); quotas re-verified unchanged; 811-ply accounting case
+still 12 games/day, writes limiting. Presence writes nothing; one
+match listener per client. Painter ≈1–2 ms per dense board; idle
+board schedules no frames; resize fires zero notifications. Web
+release build audited (main.dart.js 2.89 MB; single variable font;
+icons tree-shaken to 9.7 KB) — nothing measured as wasteful.
+Lifecycle/long-run tests pass. Gates: format 162 files 0 changed;
+analyze clean; **1,717 tests — 1,706 passed, 11 failed** (the 11
+golden masters only; +24 new tests over the 1,693 baseline, all
+passing); web release build OK; spec OK; oracle unchanged.
+Not measurable in the headless VM:
+real frame timing, low-end Android, browser load metrics — the
+owner measurement script is in `memory.md` §13y, and this status
+line stands until those numbers return.
+
 ---
 
 # Phase 16 — Testing and QA
