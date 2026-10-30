@@ -378,24 +378,40 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
 
   /// Queues the AI's move when it is the AI's turn.
   ///
-  /// The search runs on a timer rather than inline so a slow Expert search
-  /// cannot block a frame, and so the UI shows whose turn it is first.
+  /// The timer sets WHEN the search starts (so the UI shows whose turn
+  /// it is first); it cannot make the search itself non-blocking —
+  /// Phase 15 (Q-5.3 corrected): a synchronous Expert search blocked
+  /// the UI thread for ~1.3 s on 9×9 and ~3.2 s on 11×11 regardless of
+  /// the timer. The search therefore runs through
+  /// [AiOpponent.chooseActionAsync], which yields to the event loop
+  /// between root candidates, and the result is applied only if the
+  /// match is still exactly where the search started.
   void _scheduleAiTurn() {
     _cancelAiTurn();
     if (!isAiTurn) return;
     _aiTimer = Timer(kAiThinkDelay, () {
       _aiTimer = null;
       if (!isAiTurn) return;
-      final action = AiOpponent.chooseAction(
-        _state,
-        _aiDifficulty,
-        kAiPlayer,
-        previousCell: _aiPreviousCell,
-        visitOrder: _aiVisitOrder,
-      );
-      if (action == null) return;
-      _playAiAction(action);
+      unawaited(_runAiTurn());
     });
+  }
+
+  /// Runs the AI search for the current position and applies its
+  /// choice, unless the match moved on while the search was yielding
+  /// (restart, dispose, or the turn otherwise changed) — a stale
+  /// result must never land.
+  Future<void> _runAiTurn() async {
+    final turnAtStart = _state.turnNumber;
+    final action = await AiOpponent.chooseActionAsync(
+      _state,
+      _aiDifficulty,
+      kAiPlayer,
+      previousCell: _aiPreviousCell,
+      visitOrder: _aiVisitOrder,
+    );
+    if (_disposed || !isAiTurn || _state.turnNumber != turnAtStart) return;
+    if (action == null) return;
+    _playAiAction(action);
   }
 
   /// Applies the AI's chosen action through the shared interaction layer,

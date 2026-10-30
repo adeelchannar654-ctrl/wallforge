@@ -185,6 +185,56 @@ class AiOpponent {
     return best.action;
   }
 
+  /// The asynchronous twin of [chooseAction] (Phase 15): identical
+  /// shortlist, identical per-candidate search, identical tie-breaking —
+  /// the only difference is that it yields to the event loop between
+  /// root candidates, so a long Expert search no longer blocks the UI
+  /// thread for its full duration (Q-5.3's "run on a timer so no frame
+  /// blocks" was wrong: a timer delays the start of synchronous work,
+  /// it does not make it non-blocking). The chosen action is the same
+  /// one [chooseAction] returns for the same position and difficulty;
+  /// the Phase 15 determinism corpus proves that on seeded positions
+  /// for every difficulty.
+  static Future<GameAction?> chooseActionAsync(
+    GameState state,
+    AiDifficulty difficulty,
+    PlayerId aiPlayer, {
+    Cell? previousCell,
+    Map<String, int> visitOrder = const {},
+  }) async {
+    if (state.status == GameStatus.finished) return null;
+    if (state.currentPlayer != aiPlayer) return null;
+
+    final root = _shortlist(
+      state,
+      aiPlayer,
+      difficulty.candidateWidth,
+      previousCell,
+      visitOrder,
+    );
+    if (root.isEmpty) return null;
+
+    var best = root.first;
+    var bestScore = double.negativeInfinity;
+
+    for (final candidate in root) {
+      // One yield per root candidate: frames, input and timers run
+      // between candidate evaluations instead of after all of them.
+      await Future<void>.delayed(Duration.zero);
+      final value = -_search(
+        candidate.next,
+        difficulty.searchDepth - 1,
+        difficulty.candidateWidth,
+      );
+      if (value > bestScore) {
+        bestScore = value;
+        best = candidate;
+      }
+    }
+
+    return best.action;
+  }
+
   /// Negamax value of [state] **for the player to move in it**.
   ///
   /// One recursion serves both sides because the sign flips each ply, so the
