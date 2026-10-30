@@ -1,0 +1,2134 @@
+{
+  "comment": "AI choices recorded at Phase 16 start (HEAD d34cc53) from the unoptimized search. The optimized implementation must reproduce every choice unless a change is recorded as intentional.",
+  "entries": [
+    {
+      "size": 7,
+      "kind": "early",
+      "seed": 38031,
+      "state": {
+        "schemaVersion": 1,
+        "boardConfig": {
+          "size": 7,
+          "wallsPerPlayer": 10
+        },
+        "players": [
+          "blue",
+          "red"
+        ],
+        "currentPlayer": "blue",
+        "pawnPositions": {
+          "blue": {
+            "row": 5,
+            "column": 2
+          },
+          "red": {
+            "row": 0,
+            "column": 3
+          }
+        },
+        "walls": [],
+        "remainingWalls": {
+          "blue": 10,
+          "red": 10
+        },
+        "turnNumber": 4,
+        "status": "inProgress",
+        "winner": null
+      },
+      "choices": {
+        "easy": "M 4,2",
+        "medium": "M 4,2",
+        "hard": "M 4,2",
+        "expert": "M 4,2"
+      }
+    },
+    {
+      "size": 7,
+      "kind": "early",
+      "seed": 38032,
+      "state": {
+        "schemaVersion": 1,
+        "boardConfig": {
+          "size": 7,
+          "wallsPerPlayer": 10
+        },
+        "players": [
+          "blue",
+          "red"
+        ],
+        "currentPlayer": "blue",
+        "pawnPositions": {
+          "blue": {
+            "row": 6,
+            "column": 2
+          },
+          "red": {
+            "row": 0,
+            "column": 3
+          }
+        },
+        "walls": [
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 0,
+              "column": 1
+            }
+          }
+        ],
+        "remainingWalls": {
+          "blue": 9,
+          "red": 10
+        },
+        "turnNumber": 4,
+        "status": "inProgress",
+        "winner": null
+      },
+      "choices": {
+        "easy": "M 5,2",
+        "medium": "M 5,2",
+        "hard": "M 5,2",
+        "expert": "W H 0,3"
+      }
+    },
+    {
+      "size": 7,
+      "kind": "mid",
+      "seed": 38036,
+      "state": {
+        "schemaVersion": 1,
+        "boardConfig": {
+          "size": 7,
+          "wallsPerPlayer": 10
+        },
+        "players": [
+          "blue",
+          "red"
+        ],
+        "currentPlayer": "blue",
+        "pawnPositions": {
+          "blue": {
+            "row": 3,
+            "column": 0
+          },
+          "red": {
+            "row": 0,
+            "column": 2
+          }
+        },
+        "walls": [
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 4,
+              "column": 4
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 3,
+              "column": 2
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 5,
+              "column": 3
+            }
+          }
+        ],
+        "remainingWalls": {
+          "blue": 9,
+          "red": 8
+        },
+        "turnNumber": 30,
+        "status": "inProgress",
+        "winner": null
+      },
+      "choices": {
+        "easy": "W H 0,1",
+        "medium": "W H 0,1",
+        "hard": "W H 2,1",
+        "expert": "W H 2,1"
+      }
+    },
+    {
+      "size": 7,
+      "kind": "mid",
+      "seed": 38037,
+      "state": {
+        "schemaVersion": 1,
+        "boardConfig": {
+          "size": 7,
+          "wallsPerPlayer": 10
+        },
+        "players": [
+          "blue",
+          "red"
+        ],
+        "currentPlayer": "blue",
+        "pawnPositions": {
+          "blue": {
+            "row": 6,
+            "column": 6
+          },
+          "red": {
+            "row": 4,
+            "column": 3
+          }
+        },
+        "walls": [
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 1,
+              "column": 1
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 2,
+              "column": 2
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 1,
+              "column": 1
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 5,
+              "column": 2
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 1,
+              "column": 3
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 0,
+              "column": 3
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 1,
+              "column": 3
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 3,
+              "column": 5
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 3,
+              "column": 1
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 0,
+              "column": 0
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 2,
+              "column": 3
+            }
+          }
+        ],
+        "remainingWalls": {
+          "blue": 4,
+          "red": 5
+        },
+        "turnNumber": 30,
+        "status": "inProgress",
+        "winner": null
+      },
+      "choices": {
+        "easy": "M 5,6",
+        "medium": "M 5,6",
+        "hard": "M 5,6",
+        "expert": "W H 4,2"
+      }
+    },
+    {
+      "size": 7,
+      "kind": "dense",
+      "seed": 38014,
+      "state": {
+        "schemaVersion": 1,
+        "boardConfig": {
+          "size": 7,
+          "wallsPerPlayer": 10
+        },
+        "players": [
+          "blue",
+          "red"
+        ],
+        "currentPlayer": "blue",
+        "pawnPositions": {
+          "blue": {
+            "row": 4,
+            "column": 5
+          },
+          "red": {
+            "row": 3,
+            "column": 4
+          }
+        },
+        "walls": [
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 0,
+              "column": 1
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 3,
+              "column": 0
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 1,
+              "column": 5
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 1,
+              "column": 4
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 3,
+              "column": 2
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 3,
+              "column": 0
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 5,
+              "column": 3
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 0,
+              "column": 5
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 2,
+              "column": 5
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 5,
+              "column": 2
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 1,
+              "column": 0
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 2,
+              "column": 2
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 5,
+              "column": 0
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 4,
+              "column": 4
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 5,
+              "column": 1
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 0,
+              "column": 5
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 1,
+              "column": 2
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 5,
+              "column": 1
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 2,
+              "column": 5
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 0,
+              "column": 0
+            }
+          }
+        ],
+        "remainingWalls": {
+          "blue": 0,
+          "red": 0
+        },
+        "turnNumber": 44,
+        "status": "inProgress",
+        "winner": null
+      },
+      "choices": {
+        "easy": "M 3,5",
+        "medium": "M 3,5",
+        "hard": "M 3,5",
+        "expert": "M 3,5"
+      }
+    },
+    {
+      "size": 7,
+      "kind": "dense",
+      "seed": 38015,
+      "state": {
+        "schemaVersion": 1,
+        "boardConfig": {
+          "size": 7,
+          "wallsPerPlayer": 10
+        },
+        "players": [
+          "blue",
+          "red"
+        ],
+        "currentPlayer": "blue",
+        "pawnPositions": {
+          "blue": {
+            "row": 5,
+            "column": 2
+          },
+          "red": {
+            "row": 0,
+            "column": 1
+          }
+        },
+        "walls": [
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 4,
+              "column": 0
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 4,
+              "column": 3
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 4,
+              "column": 5
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 1,
+              "column": 0
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 3,
+              "column": 0
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 3,
+              "column": 3
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 1,
+              "column": 3
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 1,
+              "column": 2
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 1,
+              "column": 1
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 5,
+              "column": 5
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 5,
+              "column": 5
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 0,
+              "column": 3
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 3,
+              "column": 5
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 0,
+              "column": 0
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 5,
+              "column": 0
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 4,
+              "column": 4
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 5,
+              "column": 0
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 0,
+              "column": 5
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 2,
+              "column": 1
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 3,
+              "column": 1
+            }
+          }
+        ],
+        "remainingWalls": {
+          "blue": 0,
+          "red": 0
+        },
+        "turnNumber": 44,
+        "status": "inProgress",
+        "winner": null
+      },
+      "choices": {
+        "easy": "M 4,2",
+        "medium": "M 4,2",
+        "hard": "M 4,2",
+        "expert": "M 4,2"
+      }
+    },
+    {
+      "size": 9,
+      "kind": "early",
+      "seed": 40031,
+      "state": {
+        "schemaVersion": 1,
+        "boardConfig": {
+          "size": 9,
+          "wallsPerPlayer": 10
+        },
+        "players": [
+          "blue",
+          "red"
+        ],
+        "currentPlayer": "blue",
+        "pawnPositions": {
+          "blue": {
+            "row": 8,
+            "column": 5
+          },
+          "red": {
+            "row": 1,
+            "column": 3
+          }
+        },
+        "walls": [
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 6,
+              "column": 4
+            }
+          }
+        ],
+        "remainingWalls": {
+          "blue": 9,
+          "red": 10
+        },
+        "turnNumber": 4,
+        "status": "inProgress",
+        "winner": null
+      },
+      "choices": {
+        "easy": "W H 1,2",
+        "medium": "W H 1,2",
+        "hard": "W H 1,2",
+        "expert": "W H 1,2"
+      }
+    },
+    {
+      "size": 9,
+      "kind": "early",
+      "seed": 40032,
+      "state": {
+        "schemaVersion": 1,
+        "boardConfig": {
+          "size": 9,
+          "wallsPerPlayer": 10
+        },
+        "players": [
+          "blue",
+          "red"
+        ],
+        "currentPlayer": "blue",
+        "pawnPositions": {
+          "blue": {
+            "row": 6,
+            "column": 4
+          },
+          "red": {
+            "row": 1,
+            "column": 5
+          }
+        },
+        "walls": [],
+        "remainingWalls": {
+          "blue": 10,
+          "red": 10
+        },
+        "turnNumber": 4,
+        "status": "inProgress",
+        "winner": null
+      },
+      "choices": {
+        "easy": "M 5,4",
+        "medium": "M 5,4",
+        "hard": "M 5,4",
+        "expert": "M 5,4"
+      }
+    },
+    {
+      "size": 9,
+      "kind": "mid",
+      "seed": 40036,
+      "state": {
+        "schemaVersion": 1,
+        "boardConfig": {
+          "size": 9,
+          "wallsPerPlayer": 10
+        },
+        "players": [
+          "blue",
+          "red"
+        ],
+        "currentPlayer": "blue",
+        "pawnPositions": {
+          "blue": {
+            "row": 7,
+            "column": 8
+          },
+          "red": {
+            "row": 0,
+            "column": 1
+          }
+        },
+        "walls": [
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 5,
+              "column": 6
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 0,
+              "column": 2
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 4,
+              "column": 3
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 4,
+              "column": 5
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 3,
+              "column": 4
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 4,
+              "column": 7
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 6,
+              "column": 6
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 1,
+              "column": 6
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 2,
+              "column": 7
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 6,
+              "column": 1
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 7,
+              "column": 3
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 7,
+              "column": 5
+            }
+          }
+        ],
+        "remainingWalls": {
+          "blue": 4,
+          "red": 4
+        },
+        "turnNumber": 30,
+        "status": "inProgress",
+        "winner": null
+      },
+      "choices": {
+        "easy": "W H 0,0",
+        "medium": "W H 0,0",
+        "hard": "W H 0,0",
+        "expert": "W H 0,0"
+      }
+    },
+    {
+      "size": 9,
+      "kind": "mid",
+      "seed": 40037,
+      "state": {
+        "schemaVersion": 1,
+        "boardConfig": {
+          "size": 9,
+          "wallsPerPlayer": 10
+        },
+        "players": [
+          "blue",
+          "red"
+        ],
+        "currentPlayer": "blue",
+        "pawnPositions": {
+          "blue": {
+            "row": 6,
+            "column": 2
+          },
+          "red": {
+            "row": 1,
+            "column": 4
+          }
+        },
+        "walls": [
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 3,
+              "column": 3
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 1,
+              "column": 2
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 4,
+              "column": 6
+            }
+          }
+        ],
+        "remainingWalls": {
+          "blue": 7,
+          "red": 10
+        },
+        "turnNumber": 30,
+        "status": "inProgress",
+        "winner": null
+      },
+      "choices": {
+        "easy": "W H 1,4",
+        "medium": "W H 1,4",
+        "hard": "W H 1,4",
+        "expert": "M 5,2"
+      }
+    },
+    {
+      "size": 9,
+      "kind": "dense",
+      "seed": 40014,
+      "state": {
+        "schemaVersion": 1,
+        "boardConfig": {
+          "size": 9,
+          "wallsPerPlayer": 10
+        },
+        "players": [
+          "blue",
+          "red"
+        ],
+        "currentPlayer": "blue",
+        "pawnPositions": {
+          "blue": {
+            "row": 7,
+            "column": 7
+          },
+          "red": {
+            "row": 1,
+            "column": 3
+          }
+        },
+        "walls": [
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 0,
+              "column": 1
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 3,
+              "column": 7
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 6,
+              "column": 2
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 2,
+              "column": 5
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 2,
+              "column": 0
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 7,
+              "column": 2
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 7,
+              "column": 1
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 4,
+              "column": 7
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 2,
+              "column": 3
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 0,
+              "column": 7
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 0,
+              "column": 5
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 4,
+              "column": 2
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 1,
+              "column": 0
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 7,
+              "column": 7
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 0,
+              "column": 1
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 7,
+              "column": 4
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 1,
+              "column": 1
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 2,
+              "column": 3
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 3,
+              "column": 4
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 5,
+              "column": 0
+            }
+          }
+        ],
+        "remainingWalls": {
+          "blue": 0,
+          "red": 0
+        },
+        "turnNumber": 44,
+        "status": "inProgress",
+        "winner": null
+      },
+      "choices": {
+        "easy": "M 6,7",
+        "medium": "M 6,7",
+        "hard": "M 6,7",
+        "expert": "M 6,7"
+      }
+    },
+    {
+      "size": 9,
+      "kind": "dense",
+      "seed": 40015,
+      "state": {
+        "schemaVersion": 1,
+        "boardConfig": {
+          "size": 9,
+          "wallsPerPlayer": 10
+        },
+        "players": [
+          "blue",
+          "red"
+        ],
+        "currentPlayer": "blue",
+        "pawnPositions": {
+          "blue": {
+            "row": 8,
+            "column": 4
+          },
+          "red": {
+            "row": 1,
+            "column": 5
+          }
+        },
+        "walls": [
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 1,
+              "column": 3
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 2,
+              "column": 4
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 7,
+              "column": 1
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 1,
+              "column": 4
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 2,
+              "column": 2
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 0,
+              "column": 0
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 7,
+              "column": 5
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 4,
+              "column": 7
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 7,
+              "column": 2
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 2,
+              "column": 6
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 2,
+              "column": 0
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 5,
+              "column": 7
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 6,
+              "column": 3
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 5,
+              "column": 1
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 6,
+              "column": 5
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 7,
+              "column": 7
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 1,
+              "column": 3
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 0,
+              "column": 2
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 0,
+              "column": 7
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 4,
+              "column": 4
+            }
+          }
+        ],
+        "remainingWalls": {
+          "blue": 0,
+          "red": 0
+        },
+        "turnNumber": 44,
+        "status": "inProgress",
+        "winner": null
+      },
+      "choices": {
+        "easy": "M 7,4",
+        "medium": "M 7,4",
+        "hard": "M 7,4",
+        "expert": "M 7,4"
+      }
+    },
+    {
+      "size": 11,
+      "kind": "early",
+      "seed": 42031,
+      "state": {
+        "schemaVersion": 1,
+        "boardConfig": {
+          "size": 11,
+          "wallsPerPlayer": 10
+        },
+        "players": [
+          "blue",
+          "red"
+        ],
+        "currentPlayer": "blue",
+        "pawnPositions": {
+          "blue": {
+            "row": 9,
+            "column": 5
+          },
+          "red": {
+            "row": 0,
+            "column": 3
+          }
+        },
+        "walls": [
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 1,
+              "column": 0
+            }
+          }
+        ],
+        "remainingWalls": {
+          "blue": 9,
+          "red": 10
+        },
+        "turnNumber": 4,
+        "status": "inProgress",
+        "winner": null
+      },
+      "choices": {
+        "easy": "M 8,5",
+        "medium": "M 8,5",
+        "hard": "M 8,5",
+        "expert": "W H 0,2"
+      }
+    },
+    {
+      "size": 11,
+      "kind": "early",
+      "seed": 42032,
+      "state": {
+        "schemaVersion": 1,
+        "boardConfig": {
+          "size": 11,
+          "wallsPerPlayer": 10
+        },
+        "players": [
+          "blue",
+          "red"
+        ],
+        "currentPlayer": "blue",
+        "pawnPositions": {
+          "blue": {
+            "row": 10,
+            "column": 5
+          },
+          "red": {
+            "row": 1,
+            "column": 4
+          }
+        },
+        "walls": [],
+        "remainingWalls": {
+          "blue": 10,
+          "red": 10
+        },
+        "turnNumber": 4,
+        "status": "inProgress",
+        "winner": null
+      },
+      "choices": {
+        "easy": "M 9,5",
+        "medium": "M 9,5",
+        "hard": "M 9,5",
+        "expert": "M 9,5"
+      }
+    },
+    {
+      "size": 11,
+      "kind": "mid",
+      "seed": 42036,
+      "state": {
+        "schemaVersion": 1,
+        "boardConfig": {
+          "size": 11,
+          "wallsPerPlayer": 10
+        },
+        "players": [
+          "blue",
+          "red"
+        ],
+        "currentPlayer": "blue",
+        "pawnPositions": {
+          "blue": {
+            "row": 10,
+            "column": 6
+          },
+          "red": {
+            "row": 0,
+            "column": 4
+          }
+        },
+        "walls": [
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 0,
+              "column": 7
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 9,
+              "column": 8
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 9,
+              "column": 9
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 7,
+              "column": 6
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 8,
+              "column": 7
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 8,
+              "column": 2
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 4,
+              "column": 3
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 1,
+              "column": 3
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 4,
+              "column": 5
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 9,
+              "column": 1
+            }
+          }
+        ],
+        "remainingWalls": {
+          "blue": 6,
+          "red": 4
+        },
+        "turnNumber": 30,
+        "status": "inProgress",
+        "winner": null
+      },
+      "choices": {
+        "easy": "W H 4,3",
+        "medium": "W H 4,3",
+        "hard": "W H 4,3",
+        "expert": "W H 0,3"
+      }
+    },
+    {
+      "size": 11,
+      "kind": "mid",
+      "seed": 42037,
+      "state": {
+        "schemaVersion": 1,
+        "boardConfig": {
+          "size": 11,
+          "wallsPerPlayer": 10
+        },
+        "players": [
+          "blue",
+          "red"
+        ],
+        "currentPlayer": "blue",
+        "pawnPositions": {
+          "blue": {
+            "row": 7,
+            "column": 5
+          },
+          "red": {
+            "row": 1,
+            "column": 5
+          }
+        },
+        "walls": [
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 7,
+              "column": 9
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 2,
+              "column": 0
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 1,
+              "column": 9
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 5,
+              "column": 2
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 0,
+              "column": 3
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 9,
+              "column": 3
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 3,
+              "column": 8
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 2,
+              "column": 9
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 1,
+              "column": 8
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 3,
+              "column": 6
+            }
+          }
+        ],
+        "remainingWalls": {
+          "blue": 4,
+          "red": 6
+        },
+        "turnNumber": 30,
+        "status": "inProgress",
+        "winner": null
+      },
+      "choices": {
+        "easy": "W H 7,5",
+        "medium": "W H 7,5",
+        "hard": "W H 3,4",
+        "expert": "W H 7,5"
+      }
+    },
+    {
+      "size": 11,
+      "kind": "dense",
+      "seed": 42014,
+      "state": {
+        "schemaVersion": 1,
+        "boardConfig": {
+          "size": 11,
+          "wallsPerPlayer": 10
+        },
+        "players": [
+          "blue",
+          "red"
+        ],
+        "currentPlayer": "blue",
+        "pawnPositions": {
+          "blue": {
+            "row": 10,
+            "column": 7
+          },
+          "red": {
+            "row": 0,
+            "column": 5
+          }
+        },
+        "walls": [
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 7,
+              "column": 5
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 0,
+              "column": 5
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 1,
+              "column": 9
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 3,
+              "column": 8
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 9,
+              "column": 4
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 1,
+              "column": 7
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 9,
+              "column": 3
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 5,
+              "column": 5
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 2,
+              "column": 1
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 5,
+              "column": 3
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 7,
+              "column": 6
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 2,
+              "column": 2
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 7,
+              "column": 3
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 3,
+              "column": 5
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 7,
+              "column": 6
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 6,
+              "column": 1
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 6,
+              "column": 2
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 4,
+              "column": 0
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 2,
+              "column": 7
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 3,
+              "column": 3
+            }
+          }
+        ],
+        "remainingWalls": {
+          "blue": 0,
+          "red": 0
+        },
+        "turnNumber": 44,
+        "status": "inProgress",
+        "winner": null
+      },
+      "choices": {
+        "easy": "M 9,7",
+        "medium": "M 9,7",
+        "hard": "M 9,7",
+        "expert": "M 9,7"
+      }
+    },
+    {
+      "size": 11,
+      "kind": "dense",
+      "seed": 42015,
+      "state": {
+        "schemaVersion": 1,
+        "boardConfig": {
+          "size": 11,
+          "wallsPerPlayer": 10
+        },
+        "players": [
+          "blue",
+          "red"
+        ],
+        "currentPlayer": "blue",
+        "pawnPositions": {
+          "blue": {
+            "row": 6,
+            "column": 3
+          },
+          "red": {
+            "row": 3,
+            "column": 4
+          }
+        },
+        "walls": [
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 9,
+              "column": 5
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 8,
+              "column": 4
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 9,
+              "column": 6
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 3,
+              "column": 9
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 8,
+              "column": 3
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 9,
+              "column": 3
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 3,
+              "column": 3
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 4,
+              "column": 0
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 9,
+              "column": 1
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 6,
+              "column": 1
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 5,
+              "column": 2
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 1,
+              "column": 4
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 4,
+              "column": 7
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 5,
+              "column": 6
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "H",
+            "anchor": {
+              "row": 7,
+              "column": 1
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 5,
+              "column": 6
+            }
+          },
+          {
+            "owner": "red",
+            "orientation": "V",
+            "anchor": {
+              "row": 7,
+              "column": 6
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 2,
+              "column": 9
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "H",
+            "anchor": {
+              "row": 0,
+              "column": 4
+            }
+          },
+          {
+            "owner": "blue",
+            "orientation": "V",
+            "anchor": {
+              "row": 1,
+              "column": 3
+            }
+          }
+        ],
+        "remainingWalls": {
+          "blue": 0,
+          "red": 0
+        },
+        "turnNumber": 44,
+        "status": "inProgress",
+        "winner": null
+      },
+      "choices": {
+        "easy": "M 6,4",
+        "medium": "M 6,4",
+        "hard": "M 6,4",
+        "expert": "M 6,4"
+      }
+    }
+  ]
+}

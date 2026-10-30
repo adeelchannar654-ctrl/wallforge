@@ -1,14 +1,127 @@
+import 'dart:collection';
+
+import '../../../domain/engine/blocked_edges.dart';
 import '../../../domain/engine/game_engine.dart';
+import '../../../domain/engine/pathfinder.dart';
 import '../../../domain/models/cell.dart';
 import '../../../domain/models/game_action.dart';
 import '../../../domain/models/game_state.dart';
 import '../../../domain/models/player_id.dart';
+
+import '../../../domain/models/wall_orientation.dart';
 import 'ai_difficulty.dart';
 import '../../../domain/models/game_status.dart';
 import 'ai_evaluator.dart';
 
-/// A candidate action together with the position it leads to.
-typedef _Candidate = ({GameAction action, GameState next});
+/// A candidate action together with the position it leads to, and the
+/// two route lengths of that position (for the mover and for the
+/// opponent), computed once while shortlisting so the depth-1 leaf
+/// evaluation can reuse them instead of running more pathfinding
+/// (Phase 16).
+typedef _Candidate = ({
+  GameAction action,
+  GameState next,
+  int routeMover,
+  int routeOpponent,
+});
+
+/// Goal-distance fields for one position: for each player, the exact
+/// shortest-route length from every cell to that player's goal row,
+/// over the position's walls.
+///
+/// This is what makes candidate scoring cheap (Phase 16). The old code
+/// ran two BFS pathfinds for *every* candidate (~130 per node); a
+/// search node now runs exactly two BFS total and answers most
+/// candidates in O(1):
+///
+/// * a pawn move never changes the opponent's route (the pathfinder
+///   ignores pawn positions), and the mover's new route is a field
+///   lookup at the pawn's new cell, because the walls are unchanged;
+/// * a wall can only lengthen a player's route if it blocks an edge
+///   that *descends* that player's distance field — every shortest
+///   path descends the field by exactly one per step, so if no
+///   descending edge is blocked, an old shortest path survives and the
+///   length is unchanged. Otherwise the route is recomputed exactly
+///   with [Pathfinder].
+///
+/// Every number produced is identical to what [AiEvaluator.score]
+/// computes; this class only avoids recomputing them. The Phase 16
+/// choices fixture (test/fixtures/ai_choices_v1.json) and the field
+/// cross-check test prove the equivalence.
+class _GoalFields {
+  _GoalFields(GameState state)
+    : size = state.boardConfig.size,
+      _toBlueGoal = _distances(state, PlayerId.blue),
+      _toRedGoal = _distances(state, PlayerId.red);
+
+  final int size;
+  final List<int> _toBlueGoal;
+  final List<int> _toRedGoal;
+
+  static List<int> _distances(GameState state, PlayerId player) {
+    final size = state.boardConfig.size;
+    final goalRow = player == PlayerId.blue
+        ? state.boardConfig.blueGoalRow
+        : state.boardConfig.redGoalRow;
+    final board = BlockedEdges.fromWalls(state.walls, size);
+    final dist = List<int>.filled(size * size, -1);
+    final queue = Queue<Cell>();
+    for (var column = 0; column < size; column++) {
+      dist[goalRow * size + column] = 0;
+      queue.add(Cell(row: goalRow, column: column));
+    }
+    while (queue.isNotEmpty) {
+      final cell = queue.removeFirst();
+      final next = dist[cell.row * size + cell.column] + 1;
+      for (final neighbor in board.neighborsOf(cell)) {
+        if (board.isBlocked(cell, neighbor)) continue;
+        final index = neighbor.row * size + neighbor.column;
+        if (dist[index] != -1) continue;
+        dist[index] = next;
+        queue.add(neighbor);
+      }
+    }
+    return dist;
+  }
+
+  List<int> _field(PlayerId player) =>
+      player == PlayerId.blue ? _toBlueGoal : _toRedGoal;
+
+  /// The route length for [player] standing on [cell] — exactly
+  /// [Pathfinder.shortestRouteLength]'s answer, with [AiEvaluator]'s
+  /// size fallback for a sealed cell (unreachable in legal play).
+  int routeFrom(Cell cell, PlayerId player) {
+    final d = _field(player)[cell.row * size + cell.column];
+    return d < 0 ? size : d;
+  }
+
+  /// Whether a wall with the given orientation and anchor could
+  /// lengthen [player]'s shortest route from the position these
+  /// fields were built for. Conservative: any doubt (an unreachable
+  /// cell beside the wall) answers true, and the caller recomputes
+  /// exactly.
+  bool wallMayLengthen(
+    WallOrientation orientation,
+    int anchorRow,
+    int anchorColumn,
+    PlayerId player,
+  ) {
+    final field = _field(player);
+    bool descends(int r1, int c1, int r2, int c2) {
+      final a = field[r1 * size + c1];
+      final b = field[r2 * size + c2];
+      if (a < 0 || b < 0) return true;
+      return (a - b).abs() == 1;
+    }
+
+    final r = anchorRow;
+    final c = anchorColumn;
+    if (orientation == WallOrientation.h) {
+      return descends(r, c, r + 1, c) || descends(r, c + 1, r + 1, c + 1);
+    }
+    return descends(r, c, r, c + 1) || descends(r + 1, c, r + 1, c + 1);
+  }
+}
 
 /// Depth-limited negamax search over the domain's own legal-action API.
 ///
@@ -171,10 +284,19 @@ class AiOpponent {
     var bestScore = double.negativeInfinity;
 
     for (final candidate in root) {
+      // Alpha-beta at the root: each later candidate only has to
+      // prove it beats the current best, so its subtree is searched
+      // with beta = -bestScore. A candidate is adopted only when the
+      // returned value lies strictly inside the window, where
+      // fail-soft alpha-beta is exact — so the chosen action and the
+      // tie-breaking are identical to a full-window search (proven by
+      // the Phase 16 choices fixture).
       final value = -_search(
         candidate.next,
         difficulty.searchDepth - 1,
         difficulty.candidateWidth,
+        double.negativeInfinity,
+        -bestScore,
       );
       if (value > bestScore) {
         bestScore = value;
@@ -221,10 +343,13 @@ class AiOpponent {
       // One yield per root candidate: frames, input and timers run
       // between candidate evaluations instead of after all of them.
       await Future<void>.delayed(Duration.zero);
+      // Same alpha-beta window discipline as chooseAction.
       final value = -_search(
         candidate.next,
         difficulty.searchDepth - 1,
         difficulty.candidateWidth,
+        double.negativeInfinity,
+        -bestScore,
       );
       if (value > bestScore) {
         bestScore = value;
@@ -242,7 +367,13 @@ class AiOpponent {
   /// version scored leaves from the AI's fixed perspective and negated that at
   /// the root, which made the AI maximise the *opponent's* score and therefore
   /// pick its worst move at every depth.)
-  static double _search(GameState state, int depth, int candidateWidth) {
+  static double _search(
+    GameState state,
+    int depth,
+    int candidateWidth,
+    double alpha,
+    double beta,
+  ) {
     final mover = state.currentPlayer;
 
     if (state.status == GameStatus.finished) {
@@ -270,15 +401,84 @@ class AiOpponent {
 
     var best = double.negativeInfinity;
     for (final candidate in candidates) {
-      final value = -_search(
-        candidate.next,
-        depth - 1,
-        progressiveWidening(candidateWidth),
-      );
+      final double value;
+      if (depth == 1) {
+        // The child is a leaf: its value is its static score, whose
+        // two route lengths are exactly the pair _shortlist already
+        // computed for this candidate (Phase 16) — no second
+        // pathfinding pass per leaf.
+        value = -_leafScore(candidate, state, mover);
+      } else {
+        value = -_search(
+          candidate.next,
+          depth - 1,
+          progressiveWidening(candidateWidth),
+          -beta,
+          -alpha,
+        );
+      }
       if (value > best) best = value;
+      if (best > alpha) alpha = best;
+      if (alpha >= beta) break; // the opponent will not allow this line
     }
     return best;
   }
+
+  /// [AiEvaluator.score] of [candidate]'s position from the point of
+  /// view of the player to move in it (the opponent of [mover]),
+  /// reusing the candidate's route lengths. The opponent's pawn and
+  /// wall count do not change during [mover]'s action, so their terms
+  /// come from [state] directly.
+  static double _leafScore(
+    _Candidate candidate,
+    GameState state,
+    PlayerId mover,
+  ) {
+    final next = candidate.next;
+    final opponent = mover.opponent;
+    if (next.status == GameStatus.finished) {
+      // Only the mover's action can finish a match, so the side to
+      // move in [next] has lost.
+      return AiEvaluator.lossScore;
+    }
+    return -AiEvaluator.progressWeight * AiEvaluator.progress(next, opponent) -
+        AiEvaluator.ownRouteWeight * candidate.routeOpponent +
+        AiEvaluator.opponentRouteWeight * candidate.routeMover -
+        AiEvaluator.wallCost * AiEvaluator.wallsOwnedBy(state, opponent);
+  }
+
+  /// [AiEvaluator.score] with the two route lengths supplied instead
+  /// of recomputed — arithmetically the same expression.
+  static double _staticScore(
+    GameState state,
+    PlayerId player,
+    int ownRoute,
+    int opponentRoute,
+  ) {
+    if (AiEvaluator.hasImmediateWin(state, player)) {
+      return AiEvaluator.winScore;
+    }
+    if (AiEvaluator.hasImmediateLoss(state, player)) {
+      return AiEvaluator.lossScore;
+    }
+    return -AiEvaluator.progressWeight * AiEvaluator.progress(state, player) -
+        AiEvaluator.ownRouteWeight * ownRoute +
+        AiEvaluator.opponentRouteWeight * opponentRoute -
+        AiEvaluator.wallCost * AiEvaluator.wallsOwnedBy(state, player);
+  }
+
+  /// The exact route length for [player] in [state], via the domain
+  /// pathfinder, with [AiEvaluator]'s size fallback.
+  static int _exactRoute(GameState state, PlayerId player) =>
+      Pathfinder.shortestRouteLength(
+        from: state.pawnPosition(player),
+        goalRow: player == PlayerId.blue
+            ? state.boardConfig.blueGoalRow
+            : state.boardConfig.redGoalRow,
+        walls: state.walls,
+        size: state.boardConfig.size,
+      ) ??
+      state.boardConfig.size;
 
   /// The top [width] legal actions for the side to move, best first.
   ///
@@ -297,6 +497,16 @@ class AiOpponent {
     final legal = GameEngine.legalActions(state);
     if (legal.isEmpty) return const [];
 
+    // Phase 16: two BFS for the whole node, then O(1) route answers
+    // per candidate (see _GoalFields). The scores produced are
+    // identical to AiEvaluator.score's; only the recomputation is gone.
+    final fields = _GoalFields(state);
+    final parentRouteMover = fields.routeFrom(state.pawnPosition(mover), mover);
+    final parentRouteOpponent = fields.routeFrom(
+      state.pawnPosition(mover.opponent),
+      mover.opponent,
+    );
+
     final scored =
         <({_Candidate candidate, double score, int order, int lastSeen})>[];
     var wallsScanned = 0;
@@ -309,16 +519,49 @@ class AiOpponent {
       final result = GameEngine.apply(state, mover, action);
       if (result is! SuccessResult) continue;
       final next = result.state;
+      final int routeMover;
+      final int routeOpponent;
+      if (action is MoveAction) {
+        routeMover = fields.routeFrom(next.pawnPosition(mover), mover);
+        routeOpponent = parentRouteOpponent;
+      } else if (action is WallAction) {
+        routeMover =
+            fields.wallMayLengthen(
+              action.orientation,
+              action.anchor.row,
+              action.anchor.column,
+              mover,
+            )
+            ? _exactRoute(next, mover)
+            : parentRouteMover;
+        routeOpponent =
+            fields.wallMayLengthen(
+              action.orientation,
+              action.anchor.row,
+              action.anchor.column,
+              mover.opponent,
+            )
+            ? _exactRoute(next, mover.opponent)
+            : parentRouteOpponent;
+      } else {
+        routeMover = _exactRoute(next, mover);
+        routeOpponent = _exactRoute(next, mover.opponent);
+      }
       // Score each candidate exactly once. Recomputing the score inside the
       // comparator costs two BFS per comparison, which measured ~3x slower than
       // caching it.
-      var score = AiEvaluator.score(next, mover);
+      var score = _staticScore(next, mover, routeMover, routeOpponent);
       if (next.pawnPosition(mover) == tabooCell) {
         score -= backtrackPenalty;
       }
       final lastSeen = visitOrder[positionKey(next)];
       scored.add((
-        candidate: (action: action, next: next),
+        candidate: (
+          action: action,
+          next: next,
+          routeMover: routeMover,
+          routeOpponent: routeOpponent,
+        ),
         score: score,
         order: i,
         // -1 means "never seen", which must outrank any previously seen ply.
