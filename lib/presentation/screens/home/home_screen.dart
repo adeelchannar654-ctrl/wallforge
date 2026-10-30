@@ -46,7 +46,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with RouteAware {
   AppSettings _settings = AppSettings.defaults;
   MatchStatistics _statistics = MatchStatistics.empty;
   UnfinishedMatch? _unfinished;
@@ -55,6 +55,31 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is ModalRoute<void>) {
+      AppRouter.routeObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void dispose() {
+    AppRouter.routeObserver.unsubscribe(this);
+    super.dispose();
+  }
+
+  /// Phase 16 fix: Home's data was loaded once in [initState] and
+  /// never refreshed, so returning from the tutorial, a match or the
+  /// settings left the tutorial card, the statistics summary and the
+  /// resume card showing pre-navigation state until an app restart.
+  /// Reload whenever a route above Home pops.
+  @override
+  void didPopNext() {
     _load();
   }
 

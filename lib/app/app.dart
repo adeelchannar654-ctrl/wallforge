@@ -88,6 +88,7 @@ class _WallforgeAppState extends State<WallforgeApp> {
             theme: AppTheme.dark,
             initialRoute: AppRoutes.root,
             onGenerateRoute: AppRouter.onGenerateRoute,
+            navigatorObservers: [AppRouter.routeObserver],
             builder: (context, child) {
               final media = MediaQuery.of(context);
               return MediaQuery(

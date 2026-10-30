@@ -106,6 +106,12 @@ class ResultRouteArgs {
 class AppRouter {
   const AppRouter._();
 
+  /// Shared route observer (Phase 16): screens that display stored
+  /// data (Home) subscribe to learn when a route above them pops, so
+  /// they can refresh instead of showing pre-navigation state.
+  static final RouteObserver<ModalRoute<void>> routeObserver =
+      RouteObserver<ModalRoute<void>>();
+
   static Route<void> onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
       case AppRoutes.root:
