@@ -1555,6 +1555,14 @@ pre-existing wall-victory branch and the AI's defensive `!SuccessResult` guard.
   bit-identical to the synchronous search. A node budget remains the
   fallback if owner device measurements ever demand one; the
   evaluation itself is unchanged.
+  **Phase 16 addendum:** time-to-move is now solved by measurement,
+  not by a budget: alpha-beta pruning with root windows over the
+  best-first shortlist, plus exact evaluation reuse (see §13z),
+  cut Expert from ~1.9 s to ~0.31 s (9×9) and ~4.5 s to ~0.71 s
+  (11×11) in AOT on the VM, with every AI choice bit-identical to
+  the unpruned search (choices fixture). No node budget was needed;
+  Q-5.3 is closed in substance. What remains is the owner2019s
+  device confirmation in the Part D script (§13z).
 - Q-4.1 … Q-4.10 and Q-2.1 remain open and unaffected.
 - No Phase 6 work was started.
 
@@ -4358,3 +4366,387 @@ for the reply with a 10 s bound (the assertion itself is unchanged)
 and passes 5/5 repeat runs. `flutter build web --release`: built.
 Spec checker: OK. Oracle: SHA-256 `6f1e3c05…94ba96`, unchanged.
 Mojibake scan: clean.
+
+---
+
+## 13z. Phase 16 Record — Testing and QA (2026-10-30)
+
+**Status: complete except owner-run manual testing** (Part D below).
+Android, iOS, tablet hardware, real-browser and live two-device
+checks cannot run in this headless VM and are not claimed.
+
+### Ledger (what was verified, not assumed)
+
+Remote `main` verified at phase start: `d34cc53` (Phase 15). The
+brief's claim that the Drive fresh copy was last mirrored at Phase
+13 is stale: it holds Phase 14's `6ccead9` (mirrored 2026-10-29) —
+still two phases behind after this one; the drift warning stands.
+Baseline gates at `d34cc53` before any Phase 16 edit: format 162
+files 0 changed; spec OK; oracle SHA-256 `6f1e3c05…94ba96`;
+mojibake clean; suite baseline is Phase 15's verified final
+1,717 / 1,706 / 11 (goldens only). (A baseline suite started this
+phase was contaminated by mid-run edits and discarded; the final
+suite below is the authoritative gate.)
+
+### Part A — Expert AI time-to-move (owner-reported defect)
+
+The owner was right, and the numbers were worse than Phase 15's
+mid-game spot checks suggested: the expensive case is **early/mid
+game with walls in hand**, not dense boards. BEFORE (AOT, this VM;
+JIT within ~10% — debug-vs-release is not the story for this
+workload; judge on device in `--profile` per Part D):
+
+| Expert, experienced (300 ms delay incl.) | before | after |
+|---|---|---|
+| 9×9 early p95 | 2,315 ms | **672 ms** |
+| 9×9 mid p95 | 3,144 ms | **610 ms** |
+| 11×11 early p95 | 4,597 ms | **1,000 ms** |
+| 11×11 mid p95 | 4,490 ms | **1,231 ms** |
+
+Search-only: Expert 9×9 1,920→303 ms (p50), 11×11 4,519→699 ms;
+Hard 11×11 ~390→~230 ms; Easy/Medium unchanged in feel (≤ ~80 ms +
+the deliberate 300 ms think delay). Dense boards were already fast
+(≤ 170 ms) and stayed fast.
+
+**Target (recorded decision; no document sets one):** experienced
+time-to-move in a release/profile build — Easy/Medium p95 ≤ 0.6 s,
+Hard ≤ 1.0 s, Expert p95 ≤ 2.0 s (9×9) and ≤ 3.0 s (11×11), max
+≤ 4 s. ~2 s reads as "thinking" in a turn-based game; the owner's
+complaint arrived at ~4.5 s. **Met on every measured case**, worst
+observed 1.27 s (JIT, 11×11 mid).
+
+**Why it was slow (measured breakdown, one Expert 9×9 search):**
+`GameEngine.legalActions` ≈ 6–22 ms per call and the search called
+it **157 times** (root + 12 + 144) ≈ 85–90% of the total; candidate
+evaluation (the Phase 15 suspect) was only ~30 ms of ~1,900 ms.
+
+**What fixed it — alpha-beta, done with the breakdown in hand.**
+Fail-soft alpha-beta through the negamax, with root windows
+(beta = −bestScore): a candidate is adopted only on a value
+strictly inside its window, where fail-soft is exact, so choices
+and tie-breaking are *provably* the full search's. The shortlist's
+best-first ordering is what makes the cutoffs fire (most sibling
+subtrees — the 144 — are never expanded). Phase 15's alpha-beta
+measured −1…−5% and was reverted; with per-node cost now known to
+be node *count*, the same technique is worth **5–6×**. Both facts
+are recorded so the contradiction is explained, not hidden.
+
+**Evaluation reuse (landed first, kept, worth ~5–10%):**
+`_GoalFields` computes both players' goal-distance fields once per
+node (2 BFS); a move candidate's routes are then O(1) (a pawn move
+cannot change the opponent's route — the pathfinder ignores pawns —
+and the mover's is a field lookup), and a wall candidate recomputes
+exactly only if the wall blocks an edge descending a player's
+field (a shortest path descends its field by exactly one per step,
+so otherwise an old shortest path survives). Depth-1 leaves reuse
+the candidate's route pair instead of re-scoring. Every number is
+identical to `AiEvaluator.score`'s.
+
+**Determinism / strength proof:** the choices fixture
+(`test/fixtures/ai_choices_v1.json`, generated from the
+*unoptimized* search at `d34cc53`: 18 seeded early/mid/dense
+positions × 4 difficulties) — `test/ai/ai_choices_fixture_test.dart`
+asserts every one of the 72 decisions is reproduced exactly, sync
+and async. The Phase 5 AI suite (self-play pairings, strength
+ordering, crossing walls) passes unchanged. **Expert did not get
+weaker; it plays the identical moves, sooner.**
+
+**Measured and left alone:** a deterministic node budget /
+iterative deepening (unnecessary — the tree's shape is fixed by the
+widths; cost was per-node count, now pruned; a budget would only
+change choices on positions the target already meets); background
+isolates (unnecessary at ≤ ~0.9 s worst case, and web has no true
+parallel isolates in this Flutter version — `Isolate.run` on web
+does not give a second thread for this workload); lowering Expert's
+depth/width (not needed — no strength was traded).
+
+**A.1 build identity:** `BuildInfo` (lib/app/build_info.dart) reads
+`--dart-define=GIT_SHA=...` (fallback `dev`), shown in Settings →
+Account as `Build <sha>` (key `build-id`), unit-tested with fakes.
+README gained "Getting the code (and keeping it current)":
+clone/`git pull`, never Drive, the GIT_SHA launch line, and
+"judge performance only in --profile/--release".
+
+**A.5 thinking + cancellation:** the Phase 11 "AI is thinking…"
+indicator already existed; it is now its own live region so screen
+readers announce it (text cue, never colour). Cancellation was
+hardened from a turn-number check to a **generation token**:
+`_cancelAiTurn` (called on schedule, restart, new match, dispose)
+increments `_aiGeneration`; a search applies its result only if
+its captured generation is unchanged — closing the case a turn
+check cannot see (a *different* match at the *same* turn number).
+Proof: `test/ai/ai_cancel_test.dart` (real async: dispose
+mid-search drops the result; restart mid-search with a different
+first move at the same turn number lands exactly the new match's
+own reply, state-compared against an independently computed
+continuation) and `test/presentation/screens/game/
+ai_cancel_on_leave_test.dart` (real app: leave during the think
+delay; after the screen is gone the match is frozen, no exception,
+no pending timer — the fake-async binding enforces the last one).
+
+**Minor finding (recorded, not fixed):** if the think delay expires
+during the ~300 ms route-exit transition — after the user has
+pressed Back but before the screen disposes — that one AI move
+still lands and is saved with the match (it was computed for a live
+screen; post-dispose application is impossible, as proven above).
+On resume the player simply sees the AI already replied. Fixing it
+would mean intercepting navigation intent for all exits; recorded
+as an Open Question instead of rewiring navigation in a QA phase.
+
+### A.6 — the Q-01 stalemate in human-vs-AI play (finding)
+
+Method: `tool/bench_stalemate.dart` — 106 seeded games, the AI
+driven exactly as `LocalGameController` drives it (previousCell +
+visitOrder), the human side under three policies (random, pure
+race, wall-heavy), sizes 5/7/9/11, all difficulties, 400-ply cap.
+**Result: 106 finished, 0 stalled** (longest average 47 plies).
+The 9×9 Hard-vs-Hard stall is an AI-vs-AI symmetry artifact: both
+sides run the same unseen-first loop-avoidance with mirrored
+incentives. Against any human policy tested, the AI's ranking
+always finds progress. A human can of course *choose* to shuffle
+forever in a wall-less endgame — that is a player declining to
+finish, true of any game without a repetition rule, and the AI
+will still win or progress in every line we could construct.
+**Severity: minor / theoretical for human-vs-AI** (it remains
+systematic for AI-vs-AI spectating and for a *deliberate* online
+replayer — Q-5.1's Phase 9 point stands). **No rule changed.**
+Owner options, with costs: (a) **3-fold repetition draw**
+(game_spec Q-01's recommended default) — spec change + oracle
+fixture regeneration + engine repetition tracking + online claim
+path; the only option that also settles deliberate online
+replay. (b) **Move cap** (e.g. 200 plies = draw) — smaller spec
+change, cruder: can cut off legitimate long endgames. (c)
+**Forced-progress rule** (a pawn must shorten its route every K
+turns) — largest change, alters strategy and every AI/search
+assumption; not recommended. Awaiting the owner's decision.
+
+### Defects found and fixed
+
+1. **MAJOR — Home showed stale data after in-session navigation.**
+   `_HomeScreenState._load()` ran only in `initState`: after the
+   tutorial, Home still offered "Learn to play"; after a match,
+   the statistics summary was pre-match and the resume card
+   reflected app-start state (a mid-session saved match never
+   appeared; the resume feature only worked after a restart).
+   Failing test first: the tutorial journey failed at the final
+   assertion ("Tutorial" card absent) and a resume test variant
+   failed likewise. Fix: a shared `AppRouter.routeObserver`
+   (registered in `MaterialApp.navigatorObservers`); Home is now
+   `RouteAware` and reloads in `didPopNext`. Passing tests:
+   `tutorial_journey_test.dart`,
+   `resume_after_restart_test.dart` (both journeys), with the full
+   real-app regression set green (the Phase 12 lesson applied:
+   router-adjacent change, real-app tests rerun).
+2. Minor: the exit-transition AI move above (recorded, Open
+   Question).
+3. Nothing else in Part C's sweeps reproduced a defect. Two
+   suspicions were checked and cleared as correct behaviour: the
+   Phase 15-era "AI replies during exit" is the transition window
+   (item 2), and dense-board Expert speed (fast because the wall
+   inventory is spent — branching collapses) is genuine.
+
+### Part B — carried items
+
+- **B.2 rules deploy status, stated plainly:** the committed
+  `firestore.rules` (Phase 10, byte-identical since; emulator
+  suite 34/34 at Phase 11) have **never been deployed from this
+  environment** — no deploy is recorded anywhere in the repo or
+  this log, and whether the live `wallforge-efdb3` project
+  currently enforces them is **unknown**. Deployment needs the
+  owner's Firebase login; exact steps are in Part D item 8.
+- **B.3** Android/iOS configuration: the `flutterfire configure`
+  steps are in Part D item 3; the repository still ships no client
+  config by design, and `.gitignore` covers
+  `lib/firebase_options.dart`, `google-services.json` and
+  `GoogleService-Info.plist` (verified this phase).
+- **Goldens:** the 11 failures are exactly the documented set
+  (7 board + 4 game-screen, §13x). Not regenerated here; the
+  owner's command is Part D item 9.
+- **Rules emulator suite (C.6):** attempted again this phase —
+  the Firestore emulator did not finish booting within 7 minutes
+  in this VM (third recorded stall; the run produced no test
+  output). `firestore.rules` and `tool/rules_tests` are
+  byte-identical to the state that passed 34/34, so the suite's
+  standing result is unchanged; a real-client pass against the
+  emulator (the C.6 evaluation) is likewise impossible here and
+  is folded into Part D item 10 for an owner-side run.
+
+### Part C — validation added
+
+- **C.2 coverage** (`flutter test --coverage` on the pre-Phase-16
+  tree + Part A): **89.2% lines overall** (5,350/5,999, 86 files).
+  Decisions per gap: `cloud_firestore_client.dart` 2.1% — the
+  live-SDK adapter; cannot be tested without a platform/emulator
+  (see C.6), its behaviour contract is carried by the in-memory
+  twin's suite — accepted, owner-side emulator item.
+  `firebase_auth_gateway.dart` 64.7% — the fake-able surface is
+  covered by its test file; the remainder is the same SDK seam —
+  accepted. `online_lobby_factory.dart` 75% — not a real gap at
+  this size (12 lines). `app/application/shortest_path.dart` **0%
+  → tested** (`test/app/shortest_route_test.dart`: agreement with
+  Pathfinder on seeded positions, wall/step legality, goal-row
+  termination). `online_rematch_section.dart` **0% → tested**
+  (`rematch_section_test.dart`: propose/wait/matched and
+  accept-proposal flows). No dead code was found to delete — the
+  one 0% candidate (`shortestRoute`) is live in both game screens.
+- **C.3 engine stress:** `test/domain/phase16_stress_test.dart` —
+  60 seeded 11×11 games with the full invariant battery after
+  every ply (path preservation both players, wall accounting,
+  strict alternation, non-empty legal actions, serialization
+  round-trip equality of every live state, finished matches
+  refusing further actions with `matchFinished`). The adversarial
+  catalog (jumps at edges/walls, "+" crossings, sealed pockets)
+  already exists in the domain suite and was not duplicated.
+- **C.4 journeys (real app):** tutorial completion end-to-end
+  (`tutorial_journey_test.dart`), resume after a simulated
+  restart and resume offered immediately after leaving mid-match
+  (`resume_after_restart_test.dart`), cancel-on-leave
+  (A.5). Already covered and re-verified green: full pass-and-play
+  and vs-AI matches by taps, mid-match resize, settings
+  persistence across restart, profile statistics.
+- **C.5 online reliability:** the brief's scenario list was
+  inventoried against the existing suites — offline hold +
+  idempotent resubmission, lost-ack duplicates, stale snapshot
+  resync, abandonment claim and both race orders, finished-match
+  lockout, host/guest pre-start leaves, one-open-room guard,
+  Quick Match simultaneity and stale-queue reaping, rematch
+  consent, plain-language sign-in failure and the
+  Firebase-unavailable state are all already tested (Phases
+  8–11 + 15 op counts). No gaps required new tests; all re-run
+  green in the final suite.
+- **C.7 responsive/accessibility matrix:**
+  `test/presentation/phase16_matrix_test.dart` adds the sixth
+  viewport (1024×768) for Splash, Home, Game Modes, AI
+  Difficulty, Tutorial, Profile, Settings, Result, Online Lobby
+  and the local Game screen (Phase 14 covered five viewports),
+  and boots the real app under each accessibility setting
+  (UI scale 1.5, high contrast, colour assistance, reduced
+  motion), navigating Home → Settings → a game at phone size with
+  no overflow. Sampling recorded: a full 13×6×5 grid (~390
+  renders) exceeds a sane suite budget; every screen now has all
+  six viewports at default settings, and the settings variants
+  are verified on the most layout-sensitive flows plus Phase
+  13's widget-level checks.
+- **C.8 long-run:** an 8-cycle online session loop in
+  `test/perf/phase15_perf_test.dart` (create → join → ready →
+  start → connect → resync → dispose) asserting the watcher
+  count returns to 0 and zero writes leak in every cycle, on top
+  of Phase 15's local long-run and dispose tests.
+
+### Part D — owner manual-test script (Windows)
+
+Bug reports: use the template at the end. Times are wall-clock;
+use a phone stopwatch or screen recording timestamps.
+
+1. **Setup.** `git clone https://github.com/adeelchannar654-ctrl/wallforge.git`
+   (or `git pull` in an existing checkout) → `flutter pub get`.
+   Never run from a Drive copy. Launch with the build id:
+   `flutter run --profile -d chrome --dart-define=GIT_SHA=$(git rev-parse --short HEAD)`
+   (PowerShell: `--dart-define=GIT_SHA=$(git rev-parse --short HEAD)` works the same).
+   Open Settings → Account: the **Build** line must show that short
+   hash, not `dev`.
+2. **Expert AI speed (the Phase 16 fix).** In `--profile` (never
+   debug): start a vs-AI Expert game on 9×9, time five AI moves
+   from your move landing to the AI's move landing; repeat on
+   11×11; repeat both on a real Android device
+   (`flutter run --profile -d <device>`). Expected from VM
+   measurements: ~0.6–0.7 s typical on 9×9, ~1.0–1.3 s on 11×11 —
+   device numbers will differ; report p50 and max of your five.
+   Confirm: the UI never freezes, "AI is thinking…" appears during
+   the wait, and pressing Back mid-wait, then resuming the match,
+   shows a consistent game.
+3. **Android configuration + checks.** `dart pub global activate flutterfire_cli`
+   (once), `flutterfire configure` (select project
+   `wallforge-efdb3`; this writes `lib/firebase_options.dart`,
+   `android/app/google-services.json` — all git-ignored; verify
+   with `git status`: none of them may appear as committable).
+   `flutter build apk --release`, install, and check: local game,
+   vs-AI game, online quick match; rotate mid-match;
+   background/foreground mid-match; kill the app mid-match and
+   resume from Home's resume card.
+4. **iOS.** Requires a Mac: `flutterfire configure` (writes
+   `ios/Runner/GoogleService-Info.plist`, git-ignored), open
+   `ios/Runner.xcworkspace` in Xcode, set your signing team, run
+   on a device, repeat the Android checks. **If no Mac is
+   available, iOS stays UNVERIFIED — say so rather than assuming.**
+5. **Chrome/Web.** `flutter run --profile -d chrome` with the
+   GIT_SHA define. Check the five sizes (DevTools device toolbar):
+   320×568, 390×844, 768×1024, 1024×768, 1440×900 — every screen,
+   no overflow, no unreachable control. Hover a wall slot (ghost
+   preview follows the mouse). Navigate the menus keyboard-only
+   (Tab/Enter). Resize the browser mid-match: the game must not
+   reset. Reload mid-match: Home offers the resume.
+6. **Tablet.** Portrait and landscape, every screen; game screens
+   show the capped column (portrait) / rails (landscape).
+7. **Full live online match to a winner, two devices (never run
+   end-to-end yet).** Both devices signed in (anonymous is fine).
+   Device A: Online → Create Room → share the code. Device B:
+   Join with the code. Both Ready → Start. Play to a finish.
+   Then in the Firebase Console → Firestore, open
+   `matches/<CODE>`: confirm `status: finished`, `winnerId` set,
+   and `moves/` contains one document per ply (000000, 000001, …)
+   with no gaps or duplicates.
+8. **Rules deploy + verification.** `firebase login --reauth` →
+   `firebase use wallforge-efdb3` →
+   `firebase deploy --only firestore:rules`. In the Console →
+   Firestore → Rules, confirm the deployed text matches the
+   repo's `firestore.rules`. Sanity: a third account (or the
+   second device signed out/in fresh) must not be able to read a
+   match it is not a member of (the match simply never loads).
+   **Abandonment:** start an online match, close one client
+   entirely, wait 120 s on the other, claim the win — the Result
+   screen must show the abandonment outcome.
+9. **Golden masters.** On this Windows machine (the reference):
+   `flutter test --update-goldens test/presentation/board/board_golden_test.dart test/presentation/screens/game/game_screen_golden_test.dart`
+   then review each changed PNG against the Phase 13 documented
+   changes (pawn B/R letters, current-player ghost tint, banner
+   text colour — §13x/§13v) and commit the masters with a message
+   saying so.
+10. **Rules + emulator suites (optional, owner-side).**
+    `cd tool/rules_tests && npm test` (needs the Firestore
+    emulator; expected 34/34). This also unblocks the C.6
+    real-client evaluation that the VM could not run.
+
+**Bug-report template**
+
+```text
+Build: <Settings → Account → Build value>
+Device / browser: <model, OS, browser + version>
+Mode: <local / vs AI (difficulty) / online>
+Steps: <what you tapped, in order>
+Expected: <what should have happened>
+Actual: <what happened — screenshot if visual>
+```
+
+### Open Questions after Phase 16
+
+- Q-5.1 / Q-01: still the owner's decision — Phase 16 evidence
+  (§13z A.6) narrows it: minor/theoretical for human-vs-AI,
+  systematic only for AI-vs-AI and deliberate online replay.
+  Options and costs are in A.6.
+- Q-5.3: closed in substance (see the addendum at Q-5.3); the
+  Part D device timings are confirmation, not a blocker.
+- Q-8.6: closed — cancellation is generation-token based and
+  proven at controller and app level (A.5).
+- New (minor): the exit-transition AI move (A.5) — accept as-is,
+  or commission navigation-intent cancellation in a later phase.
+- Rules deploy to live `wallforge-efdb3`: pending the owner's
+  Firebase login (Part D item 8). Live enforcement is unknown
+  until then.
+- Golden masters: pending regeneration on the owner's Windows
+  machine (Part D item 9).
+
+### Phase 16 gates (real output, 2026-10-30)
+
+`dart format --set-exit-if-changed lib test`: 173 files, 0 changed.
+`flutter analyze`: no issues. `flutter test`: **1,767 tests —
+1,756 passed, 11 failed**, the 11 being exactly the documented
+golden masters (baseline 1,717/1,706/11; +50 new tests, all
+passing: 20 choices fixture, 3 build-id, 3 cancel, 14 matrix,
+1 engine stress, 3 resume/tutorial journeys + 1 in-session resume,
+3 shortest-route, 2 rematch-section, 1 long-run cycles).
+`flutter build web --release`: built; main.dart.js 2,896,568
+bytes. Spec checker: OK. Oracle SHA-256 `6f1e3c05…94ba96`,
+unchanged. Mojibake scan: clean. Rules suite: attempted; the
+emulator stalled pre-boot in this VM (see C.6); rules files are
+byte-identical to the verified 34/34 state.

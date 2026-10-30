@@ -1555,6 +1555,40 @@ No known game-breaking bugs.
 
 Prepare production builds.
 
+### Result
+
+**Complete except owner-run manual testing** (2026-10-30; full
+record in `memory.md` §13z). Part A fixed the owner-reported
+Expert-AI latency: the search was spending 85–90% of its time in
+157 `legalActions` calls, so alpha-beta pruning with root windows
+over the best-first shortlist — plus exact evaluation reuse via
+goal-distance fields — cut Expert's experienced time-to-move from
+~2.3 s to ~0.67 s (9×9 p95) and ~4.6 s to ~1.0 s (11×11 p95, AOT
+on the VM), with **every AI choice identical** to the unpruned
+search (72-decision fixture recorded before the change). The
+recorded targets (Expert p95 ≤ 2 s / ≤ 3 s) are met with margin.
+Cancellation of an in-flight search is now generation-token based
+and proven at controller and app level; the thinking indicator is
+a live region. One **major defect** was found and fixed: Home
+never refreshed its data after in-session navigation (stale
+tutorial card, statistics and resume card) — now `RouteAware`
+with a shared route observer, with failing-then-passing journey
+tests. The Q-01 stalemate was characterized for human-vs-AI play
+(106 seeded games, 0 stalls — an AI-vs-AI symmetry artifact;
+severity minor/theoretical there) and handed to the owner with
+options; no rule changed. Coverage: 89.2% lines; the two 0%
+files found (movement-assistance route, rematch section) are now
+tested; the Firestore SDK adapter remains platform-bound (the
+emulator does not boot in the VM — attempted again). Added:
+11×11 per-ply engine stress with serialization round-trips,
+tutorial and resume real-app journeys, the sixth-viewport +
+accessibility-settings matrix, and an 8-cycle online long-run.
+Gates: format clean, analyze clean, full suite recorded in §13z
+(only the 11 documented golden masters fail, awaiting the
+owner's Windows machine), web release built, spec OK, oracle
+unchanged. The Part D owner script (device/browser checks,
+two-device live match, rules deploy, goldens) is in §13z.
+
 ### Tasks
 
 - App icon.
