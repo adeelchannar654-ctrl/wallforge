@@ -122,9 +122,17 @@ void main() {
       aiDifficulty: AiDifficulty.hard,
     );
     first.controller.tapCell(const Cell(row: 8, column: 3));
-    await Future<void>.delayed(
-      kAiThinkDelay + const Duration(milliseconds: 50),
-    );
+    // Wait for the AI's reply, however long the search takes: the
+    // contract is that the reply lands, not that it lands inside a
+    // fixed sleep. (Phase 15: the search yields to the event loop
+    // between candidates, so its wall-clock span varies with machine
+    // load; the old fixed kAiThinkDelay + 50 ms sleep encoded the
+    // synchronous search's timing and flaked under load.)
+    final deadline = DateTime.now().add(const Duration(seconds: 10));
+    while (first.controller.state.turnNumber != 2 &&
+        DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 25));
+    }
     expect(first.controller.state.turnNumber, 2);
     first.controller.dispose();
 

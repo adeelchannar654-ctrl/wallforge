@@ -155,29 +155,47 @@ class FirestoreMatchRepository implements MatchRepository {
           return _reject(MatchSyncFailureReason.roomNotStarted);
         }
 
-        // --- idempotency, before staleness -----------------------------------
-        final existingMove = await txn.get(movePath);
-        if (existingMove != null) {
-          if (_isSameAction(existingMove, uid, action)) {
-            // Non-null: a `started` room with a missing snapshot was already
-            // refused below, and this path is reached only for started rooms.
-            return MoveSubmission.alreadyApplied(room, room.boardState!);
-          }
-          // Something is already recorded for this turn. If the match has moved
-          // on, this submission is simply stale; if it has not, two different
-          // actions are competing for the same ply, which is a real conflict.
-          return _reject(
-            room.turnNumber > expectedTurnNumber
-                ? MatchSyncFailureReason.staleTurn
-                : MatchSyncFailureReason.conflictingDuplicate,
-          );
-        }
-
-        // --- staleness and consistency ---------------------------------------
+        // --- staleness pre-check (document only) -----------------------------
         final state = room.boardState;
         if (state == null) {
           return _reject(MatchSyncFailureReason.invalidRemoteData);
         }
+
+        // --- idempotency, before the staleness verdicts ----------------------
+        // The move-record read exists for one case: a submission whose
+        // first attempt committed but whose acknowledgement was lost, so
+        // the client retries the same action. That case is provably
+        // impossible when the match document itself shows the expected
+        // turn and version: the move record and the match update commit
+        // in the SAME transaction, so a record for this turn can only
+        // exist if the document has already advanced past it. When the
+        // document proves freshness on all three signals, the read is
+        // skipped (Phase 15: one billed read saved on every happy-path
+        // action); in every other case the read runs exactly as before
+        // and duplicate protection is unchanged.
+        final documentProvesFresh =
+            state.turnNumber == expectedTurnNumber &&
+            room.turnNumber == expectedTurnNumber &&
+            (expectedVersion == null || room.version == expectedVersion);
+        if (!documentProvesFresh) {
+          final existingMove = await txn.get(movePath);
+          if (existingMove != null) {
+            if (_isSameAction(existingMove, uid, action)) {
+              return MoveSubmission.alreadyApplied(room, state);
+            }
+            // Something is already recorded for this turn. If the match has
+            // moved on, this submission is simply stale; if it has not, two
+            // different actions are competing for the same ply, which is a
+            // real conflict.
+            return _reject(
+              room.turnNumber > expectedTurnNumber
+                  ? MatchSyncFailureReason.staleTurn
+                  : MatchSyncFailureReason.conflictingDuplicate,
+            );
+          }
+        }
+
+        // --- staleness and consistency ---------------------------------------
         if (expectedVersion != null && room.version != expectedVersion) {
           return _reject(MatchSyncFailureReason.staleTurn);
         }
