@@ -4750,3 +4750,19 @@ bytes. Spec checker: OK. Oracle SHA-256 `6f1e3c05…94ba96`,
 unchanged. Mojibake scan: clean. Rules suite: attempted; the
 emulator stalled pre-boot in this VM (see C.6); rules files are
 byte-identical to the verified 34/34 state.
+
+### Addendum 2026-10-30 — golden masters regenerated in the VM (owner's word)
+
+The owner directed the golden regeneration to be done in this
+Linux VM instead of on his Windows machine (the Part D item 9
+alternative). `flutter test --update-goldens` on the two golden
+files (`board_golden_test.dart`, `game_screen_golden_test.dart`)
+rewrote exactly the 11 stale masters — 7 board + 4 game-screen
+PNGs; no other files changed. Verified in this VM: both golden
+files pass without `--update-goldens` (11/11), and the full
+suite is **1,767 tests — 1,767 passed, 0 failed**. Caveat: the
+masters are now Linux-rendered; the cross-platform rasterization
+delta measured in §13x may make them fail on the owner's Windows
+machine, where regeneration would need repeating if his machine
+is to remain the reference. Part D item 9 is closed for the VM
+reference; the other Part D items are unchanged.
