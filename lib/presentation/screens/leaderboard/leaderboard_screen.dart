@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/application/account/account_controller.dart';
 import '../../../app/application/achievements/achievements_service.dart';
 import '../../../app/application/online/leaderboard_controller.dart';
+import '../../../app/build_info.dart';
+import '../../../app/router/app_router.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_radii.dart';
 import '../../../app/theme/app_spacing.dart';
@@ -13,9 +16,11 @@ import '../../../data/local/shared_preferences_statistics_repository.dart';
 import '../../../data/remote/cloud_firestore_client.dart';
 import '../../../data/remote/firebase_auth_gateway.dart';
 import '../../../data/remote/firestore_leaderboard_repository.dart';
+import '../../../domain/repositories/auth.dart';
 import '../../../domain/repositories/leaderboard.dart';
 import '../../widgets/app_chrome.dart';
 import '../../widgets/responsive_content.dart';
+import '../account/account_copy.dart';
 
 /// The weekly leaderboard screen (Phase 16.5, Part H).
 ///
@@ -43,9 +48,25 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   bool _ownController = false;
   bool _failedToStart = false;
 
+  /// Phase 16.6: the gentle sign-in prompt's audience — a guest,
+  /// an unverified email account, or nobody (accounts off, or an
+  /// eligible account).
+  _ViewerPrompt _prompt = _ViewerPrompt.none;
+  bool _promptDismissed = false;
+  AccountController? _account;
+
   @override
   void initState() {
     super.initState();
+    // The account controller, when the app installed one, is the
+    // identity authority for the prompt; it is also what makes
+    // the prompt follow a sign-in that happens while this screen
+    // is open.
+    if (kFeatureAccounts) {
+      _account = AccountService.shared;
+      _account?.addListener(_syncPrompt);
+      _prompt = _promptFor(_account?.state);
+    }
     final injected = widget.controller;
     if (injected != null) {
       _controller = injected;
@@ -55,9 +76,30 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     }
   }
 
+  static _ViewerPrompt _promptFor(AuthState? state) {
+    if (state == null) return _ViewerPrompt.none;
+    if (state.isGuest) return _ViewerPrompt.guest;
+    if (state.isAccount &&
+        state.providerId == AuthProviders.password &&
+        !state.emailVerified) {
+      return _ViewerPrompt.unverified;
+    }
+    return _ViewerPrompt.none;
+  }
+
+  void _syncPrompt() {
+    if (!mounted) return;
+    setState(() => _prompt = _promptFor(_account?.state));
+  }
+
   Future<void> _buildLive() async {
     final auth = FirebaseAuthGateway();
-    await auth.signInAnonymously();
+    final session = await auth.signInAnonymously();
+    if (kFeatureAccounts && _account == null) {
+      // No account controller installed: fall back to the session
+      // this screen's own sign-in reused or created.
+      _prompt = _promptFor(session);
+    }
     final uid = await auth.currentUid();
     if (!mounted) return;
     if (uid == null) {
@@ -87,6 +129,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 
   @override
   void dispose() {
+    _account?.removeListener(_syncPrompt);
     if (_ownController) _controller?.dispose();
     super.dispose();
   }
@@ -153,6 +196,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
       LeaderboardStatus.empty => Column(
         children: [
           _header(controller),
+          if (_showPrompt) _guestPrompt(horizontal: AppSpacing.marginMobile),
           const Expanded(
             child: _MessageState(
               icon: Icons.leaderboard_outlined,
@@ -170,6 +214,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         ),
         children: [
           _header(controller),
+          if (_showPrompt) _guestPrompt(horizontal: 0),
           const SizedBox(height: AppSpacing.md),
           for (var i = 0; i < controller.entries.length; i++)
             _row(controller, i, controller.entries[i]),
@@ -293,6 +338,52 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     );
   }
 
+  /// Whether the Phase 16.6 sign-in prompt shows: the feature is
+  /// on, the viewer is a guest or an unverified email account,
+  /// and it has not been dismissed this session.
+  bool get _showPrompt => _prompt != _ViewerPrompt.none && !_promptDismissed;
+
+  /// The gentle prompt card: an offer, never a blocking modal.
+  /// [horizontal] compensates for the host layout: the ready
+  /// list already pads horizontally, the empty column does not.
+  Widget _guestPrompt({required double horizontal}) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(horizontal, AppSpacing.md, horizontal, 0),
+      child: AppCard(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.info_outline, color: AppColors.onSurfaceVariant),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _prompt == _ViewerPrompt.guest
+                        ? AccountCopy.leaderboardGuestPrompt
+                        : AccountCopy.leaderboardUnverifiedPrompt,
+                    style: AppTypography.bodyBase,
+                  ),
+                  TextButton(
+                    onPressed: () =>
+                        Navigator.of(context).pushNamed(AppRoutes.account),
+                    child: const Text('OPEN ACCOUNT'),
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close),
+              tooltip: 'Dismiss',
+              onPressed: () => setState(() => _promptDismissed = true),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _footer() {
     return Text(
       'Wins score 3, losses 1. Only online matches of 10+ plies '
@@ -300,7 +391,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
       'opponent. Scores are submitted by players\' own apps and '
       'checked against the match records, but two accounts '
       'colluding can still inflate them within those caps; '
-      'preventing that entirely would need a game server.',
+      'preventing that entirely would need a game server.'
+      '${kFeatureAccounts ? AccountCopy.leaderboardAccountRule : ''}',
       style: AppTypography.bodyBase.copyWith(
         color: AppColors.onSurfaceVariant,
         fontSize: 12,
@@ -317,6 +409,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   static String _waitText(Duration d) =>
       d.inMinutes >= 1 ? '${d.inMinutes + 1} min' : '${d.inSeconds} s';
 }
+
+/// Who the Phase 16.6 leaderboard prompt is for.
+enum _ViewerPrompt { none, guest, unverified }
 
 class _MessageState extends StatelessWidget {
   const _MessageState({

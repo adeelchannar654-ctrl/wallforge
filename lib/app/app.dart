@@ -6,7 +6,15 @@ import '../core/constants/app_info.dart';
 import '../core/feedback/feedback_backends.dart';
 import '../core/feedback/feedback_controller.dart';
 import '../core/feedback/feedback_scope.dart';
+import '../data/local/shared_preferences_achievements_repository.dart';
+import '../data/local/shared_preferences_history_repository.dart';
 import '../data/local/shared_preferences_settings_repository.dart';
+import '../data/local/shared_preferences_statistics_repository.dart';
+import '../data/local/shared_preferences_unfinished_match_repository.dart';
+import 'application/account/account_controller.dart';
+import 'application/account/account_factory.dart';
+import 'application/account/identity_guard.dart';
+import 'build_info.dart';
 import 'router/app_router.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_theme.dart';
@@ -30,6 +38,8 @@ class WallforgeApp extends StatefulWidget {
 
 class _WallforgeAppState extends State<WallforgeApp> {
   late final FeedbackController _feedback;
+  IdentityGuard? _identityGuard;
+  AccountController? _account;
 
   @override
   void initState() {
@@ -39,7 +49,41 @@ class _WallforgeAppState extends State<WallforgeApp> {
       const PlatformHapticsBackend(),
     );
     FeedbackService.install(_feedback);
+    // Phase 16.6: with the accounts feature compiled in, the app
+    // owns one IdentityGuard and one AccountController, installed
+    // the way FeedbackService is, and started immediately — its
+    // guest session is the same anonymous sign-in the app has
+    // always created, just owned in one place now. With the flag
+    // off, nothing is installed and the app behaves exactly as
+    // it did before the phase. Tests may pre-install their own
+    // controller; the root respects an existing install.
+    if (kFeatureAccounts && AccountService.shared == null) {
+      final guard = IdentityGuard();
+      _identityGuard = guard;
+      IdentityGuard.install(guard);
+      final account = AccountFactory.firebase(
+        guard: guard,
+        clearLocalProgress: _clearDeviceProgress,
+      );
+      _account = account;
+      AccountService.install(account);
+      unawaited(account.start());
+    }
     unawaited(_loadSettings());
+  }
+
+  /// The device-progress clearer (D16.6-6): the local stores are
+  /// device-owned, so clearing them is a local-only operation
+  /// over the same `shared_preferences` repositories the game
+  /// uses. History's finish gate is retained by that store's own
+  /// contract (records are removed; the "already counted" memory
+  /// is not progress to clear). Settings are preferences, not
+  /// progress, and are kept.
+  static Future<void> _clearDeviceProgress() async {
+    await const SharedPreferencesHistoryRepository().clear();
+    await const SharedPreferencesAchievementsRepository().saveUnlocks(const {});
+    await const SharedPreferencesStatisticsRepository().clear();
+    await const SharedPreferencesUnfinishedMatchRepository().clear();
   }
 
   Future<void> _loadSettings() async {
@@ -51,6 +95,13 @@ class _WallforgeAppState extends State<WallforgeApp> {
   @override
   void dispose() {
     FeedbackService.install(null);
+    if (identical(AccountService.shared, _account)) {
+      AccountService.install(null);
+    }
+    if (identical(IdentityGuard.shared, _identityGuard)) {
+      IdentityGuard.install(null);
+    }
+    _account?.dispose();
     _feedback.dispose();
     super.dispose();
   }

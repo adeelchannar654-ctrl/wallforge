@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/application/account/account_controller.dart';
 import '../../../app/application/ai/ai_difficulty.dart';
+import '../../../app/build_info.dart';
 import '../../../app/router/app_router.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
@@ -8,6 +10,7 @@ import '../../../app/theme/app_typography.dart';
 import '../../../data/local/shared_preferences_statistics_repository.dart';
 import '../../../data/remote/firebase_auth_gateway.dart';
 import '../../../domain/repositories/repositories.dart';
+import '../../widgets/account_section.dart';
 import '../../widgets/app_chrome.dart';
 import '../../widgets/responsive_content.dart';
 
@@ -21,8 +24,9 @@ import '../../widgets/responsive_content.dart';
 /// are not recorded in that repository, and the screen says so rather than
 /// letting the numbers imply coverage they do not have.
 ///
-/// No accounts, ranking or avatars (PRD §10 non-goals): the account line is
-/// the anonymous sign-in state, exactly as it is.
+/// The account card shows the anonymous sign-in state, or — with
+/// the Phase 16.6 accounts feature on — the shared account
+/// section. Ranking and avatars remain non-goals (PRD §10).
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
     super.key,
@@ -87,20 +91,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     children: [
                       const SectionTitle('ACCOUNT'),
                       const SizedBox(height: AppSpacing.sm),
-                      Text(
-                        _authState.isSignedIn
-                            ? 'Signed in anonymously (Guest)'
-                            : 'Not signed in',
-                        style: AppTypography.bodyBase,
-                      ),
-                      if (_authState.isSignedIn && _authState.uid != null)
-                        Text(
-                          'Player ID ${_authState.uid}',
-                          style: AppTypography.bodyBase.copyWith(
-                            color: AppColors.onSurfaceVariant,
-                            fontSize: 12,
+                      // Phase 16.6: the shared account section,
+                      // when the feature is on — the same one
+                      // Settings shows. Otherwise the anonymous-
+                      // era summary, unchanged.
+                      if (kFeatureAccounts &&
+                          AccountService.shared != null) ...[
+                        AccountSection(controller: AccountService.shared!),
+                        if (_authState.isSignedIn && _authState.uid != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: AppSpacing.sm),
+                            child: Text(
+                              'Player ID ${_authState.uid}',
+                              style: AppTypography.bodyBase.copyWith(
+                                color: AppColors.onSurfaceVariant,
+                                fontSize: 12,
+                              ),
+                            ),
                           ),
+                      ] else ...[
+                        Text(
+                          _authState.isSignedIn
+                              ? 'Signed in anonymously (Guest)'
+                              : 'Not signed in',
+                          style: AppTypography.bodyBase,
                         ),
+                        if (_authState.isSignedIn && _authState.uid != null)
+                          Text(
+                            'Player ID ${_authState.uid}',
+                            style: AppTypography.bodyBase.copyWith(
+                              color: AppColors.onSurfaceVariant,
+                              fontSize: 12,
+                            ),
+                          ),
+                      ],
                     ],
                   ),
                 ),

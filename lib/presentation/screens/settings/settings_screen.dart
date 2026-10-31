@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/application/account/account_controller.dart';
 import '../../../app/theme/app_breakpoints.dart';
 
 import '../../../app/build_info.dart';
@@ -12,6 +13,7 @@ import '../../../data/local/shared_preferences_settings_repository.dart';
 import '../../../domain/models/time_control.dart';
 import '../../../data/remote/firebase_auth_gateway.dart';
 import '../../../domain/repositories/repositories.dart';
+import '../../widgets/account_section.dart';
 import '../../widgets/app_chrome.dart';
 import '../../widgets/responsive_content.dart';
 
@@ -301,30 +303,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _group(
       'ACCOUNT',
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Account information', style: AppTypography.bodyBase),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              _authState.isSignedIn
-                  ? 'Signed in anonymously (Guest). No email or '
-                        'password is attached to this account.'
-                  : 'Not signed in. Online play signs you in '
-                        'anonymously.',
-              style: AppTypography.bodyBase.copyWith(
-                color: AppColors.onSurfaceVariant,
+        // Phase 16.6: with the accounts feature on and a
+        // controller installed, the shared account section
+        // replaces the anonymous-era summary. Flag off (or no
+        // controller, as in older tests) renders exactly what
+        // this group rendered before the phase.
+        if (kFeatureAccounts && AccountService.shared != null)
+          AccountSection(controller: AccountService.shared!)
+        else ...[
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Account information', style: AppTypography.bodyBase),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                _authState.isSignedIn
+                    ? 'Signed in anonymously (Guest). No email or '
+                          'password is attached to this account.'
+                    : 'Not signed in. Online play signs you in '
+                          'anonymously.',
+                style: AppTypography.bodyBase.copyWith(
+                  color: AppColors.onSurfaceVariant,
+                ),
               ),
+            ],
+          ),
+          if (_authState.isSignedIn) ...[
+            const SizedBox(height: AppSpacing.md),
+            SecondaryActionButton(
+              label: 'SIGN OUT',
+              icon: Icons.logout,
+              onPressed: _signOut,
             ),
           ],
-        ),
-        if (_authState.isSignedIn) ...[
-          const SizedBox(height: AppSpacing.md),
-          SecondaryActionButton(
-            label: 'SIGN OUT',
-            icon: Icons.logout,
-            onPressed: _signOut,
-          ),
         ],
         const SizedBox(height: AppSpacing.md),
         // Phase 16 A.1: the exact build, for bug reports.
