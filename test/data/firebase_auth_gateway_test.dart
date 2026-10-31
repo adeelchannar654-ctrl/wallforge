@@ -128,6 +128,51 @@ void main() {
       expect(() => gateway.authStateChanges(), returnsNormally);
       await expectLater(gateway.authStateChanges().drain<void>(), completes);
     });
+
+    test('every Phase 16.6 account operation resolves to a typed rejection, '
+        'never throwing', () async {
+      // On an unconfigured build there is no Firebase app, so each
+      // operation must degrade to AuthRejected — the account surface
+      // inherits the Phase 8 degradation contract verbatim.
+      final results = <String, AuthResult>{
+        'signInWithGoogle': await gateway.signInWithGoogle(),
+        'linkWithGoogle': await gateway.linkWithGoogle(),
+        'signUpWithEmail': await gateway.signUpWithEmail(
+          email: 'a@b.c',
+          password: 'password-1',
+        ),
+        'signInWithEmail': await gateway.signInWithEmail(
+          email: 'a@b.c',
+          password: 'password-1',
+        ),
+        'linkWithEmail': await gateway.linkWithEmail(
+          email: 'a@b.c',
+          password: 'password-1',
+        ),
+        'sendVerificationEmail': await gateway.sendVerificationEmail(),
+        'sendPasswordReset': await gateway.sendPasswordReset(email: 'a@b.c'),
+        'reauthenticateWithPassword': await gateway.reauthenticateWithPassword(
+          password: 'password-1',
+        ),
+        'reauthenticateWithGoogle': await gateway.reauthenticateWithGoogle(),
+        'deleteCurrentUser': await gateway.deleteCurrentUser(),
+      };
+      for (final entry in results.entries) {
+        expect(
+          entry.value,
+          isA<AuthRejected>(),
+          reason: '${entry.key} must reject, not succeed or throw',
+        );
+        final failure = (entry.value as AuthRejected).failure;
+        expect(
+          failure.error,
+          anyOf(AuthError.unavailable, AuthError.unknown),
+          reason: '${entry.key} degraded with ${failure.error}',
+        );
+        // The typed model never leaks a raw provider message.
+        expect(failure.detail ?? '', isNot(contains('Exception:')));
+      }
+    });
   });
 
   group('logging and timestamps stay safe without Firebase', () {

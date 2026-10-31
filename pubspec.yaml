@@ -53,6 +53,16 @@ dependencies:
   firebase_core: ^4.15.0
   cloud_firestore: ^6.10.0
   firebase_auth: ^6.7.0
+  # Phase 16.6 (Part B): Google Sign-In on mobile. firebase_auth
+  # cannot obtain a Google ID token on Android/iOS by itself —
+  # its popup/redirect flows are web-only — so the official
+  # google_sign_in plugin supplies the token the gateway turns
+  # into a Firebase credential. On web the gateway uses
+  # Firebase's own popup flow and never calls this package
+  # (google_sign_in_web cannot authenticate programmatically).
+  # Version 7.2.0, BSD-3-Clause, Dart/Flutter team; evaluated
+  # against rules.md §3.3/§2.3 in memory.md §13ab.
+  google_sign_in: ^7.2.0
   audioplayers: ^6.8.1
 
 dev_dependencies:

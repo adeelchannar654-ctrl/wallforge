@@ -54,6 +54,104 @@ void main() {
     });
   });
 
+  group('account fields (Phase 16.6)', () {
+    test('a plain signedIn is a guest on the anonymous provider', () {
+      const state = AuthState.signedIn('uid-1');
+      expect(state.isGuest, isTrue);
+      expect(state.isAccount, isFalse);
+      expect(state.providerId, AuthProviders.anonymous);
+      expect(state.emailVerified, isFalse);
+    });
+
+    test('an account state carries provider and verification', () {
+      const state = AuthState.signedIn(
+        'uid-1',
+        kind: AuthIdentityKind.account,
+        providerId: AuthProviders.google,
+        email: 'player@gmail.com',
+        emailVerified: true,
+      );
+      expect(state.isAccount, isTrue);
+      expect(state.isGuest, isFalse);
+      expect(state.email, 'player@gmail.com');
+    });
+
+    test('equality distinguishes kind, provider and verification', () {
+      const guest = AuthState.signedIn('uid-1');
+      const account = AuthState.signedIn(
+        'uid-1',
+        kind: AuthIdentityKind.account,
+        providerId: AuthProviders.password,
+        email: 'a@b.c',
+      );
+      const verified = AuthState.signedIn(
+        'uid-1',
+        kind: AuthIdentityKind.account,
+        providerId: AuthProviders.password,
+        email: 'a@b.c',
+        emailVerified: true,
+      );
+      expect(guest, isNot(account));
+      expect(account, isNot(verified));
+      expect(
+        verified,
+        const AuthState.signedIn(
+          'uid-1',
+          kind: AuthIdentityKind.account,
+          providerId: AuthProviders.password,
+          email: 'a@b.c',
+          emailVerified: true,
+        ),
+      );
+    });
+
+    test('toString never contains the email address', () {
+      const state = AuthState.signedIn(
+        'uid-1',
+        kind: AuthIdentityKind.account,
+        providerId: AuthProviders.password,
+        email: 'secret-person@example.com',
+      );
+      expect(state.toString(), isNot(contains('secret-person@example.com')));
+      expect(state.toString(), contains('account'));
+    });
+
+    test('leaderboard writability follows the rules gate', () {
+      // Guest: never.
+      expect(const AuthState.signedIn('u').canWriteLeaderboard, isFalse);
+      // Google account: yes.
+      expect(
+        const AuthState.signedIn(
+          'u',
+          kind: AuthIdentityKind.account,
+          providerId: AuthProviders.google,
+          emailVerified: true,
+        ).canWriteLeaderboard,
+        isTrue,
+      );
+      // Email account: only once verified.
+      expect(
+        const AuthState.signedIn(
+          'u',
+          kind: AuthIdentityKind.account,
+          providerId: AuthProviders.password,
+        ).canWriteLeaderboard,
+        isFalse,
+      );
+      expect(
+        const AuthState.signedIn(
+          'u',
+          kind: AuthIdentityKind.account,
+          providerId: AuthProviders.password,
+          emailVerified: true,
+        ).canWriteLeaderboard,
+        isTrue,
+      );
+      // Signed out: never.
+      expect(const AuthState.signedOut().canWriteLeaderboard, isFalse);
+    });
+  });
+
   group('currentUid contract', () {
     test('is the shape the Phase 6/7 repositories expect', () async {
       // The repositories take `UserIdResolver = Future<String?> Function()`.
