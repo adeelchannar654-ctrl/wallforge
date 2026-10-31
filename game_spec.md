@@ -1084,7 +1084,19 @@ Items explicitly deferred from Phase 1. These are NOT resolved and must be revis
 |----|----------|--------|
 | Q-01 | Should a draw/repetition rule be added? Options: 50-move, 3-fold repetition. Consequences: prevents stalling, adds memory. Recommended default: 3-fold repetition. Decide before Phase 5 (AI) and Phase 9 (online). | Unresolved |
 | Q-02 | ~~Board edge behavior for wall anchors at N-2: should the system enforce stricter anchor bounds for small boards?~~ Resolved: R-WALL-04 enforces anchors 0..size-2. No further action. | Resolved |
-| Q-03 | Should a turn limit or game clock be added to prevent infinite games? Options: Turn limit (e.g. 200), Clock. Consequences: prevents griefing. Recommended default: 200 turn limit. Decide before Phase 5 (AI) and Phase 9 (online). | Unresolved |
+| Q-03 | Should a turn limit or game clock be added to prevent infinite games? Options: Turn limit (e.g. 200), Clock. Consequences: prevents griefing. Recommended default: 200 turn limit. Decide before Phase 5 (AI) and Phase 9 (online). | **Adopted (Phase 16.5, 2026-10-31): the Clock option, as an application-layer rule — see the decision record below. The engine and this spec's rules are unchanged.** |
+
+**Phase 16.5 decision record (2026-10-31, owner-commissioned).**
+Q-03's "Clock" option is adopted as a **per-move game clock at
+the application/match layer**: time controls (Off / 15 s / 30 s /
+60 s per move) live in the match and client layers; a timeout is
+an application-layer finish (the opponent wins), recorded with
+the finish reason `timeout`. The engine, `GameState`, the rule
+catalogue and the oracle are **unchanged** — no rule in §1–§11
+is altered, and the clock is not part of move legality. Q-01
+(draw/repetition) **remains an open owner decision**: the clock
+bounds how long a single turn may take but does not prevent
+indefinite games and does **not** solve Q-01.
 
 ---
 

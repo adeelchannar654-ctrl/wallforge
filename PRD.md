@@ -337,6 +337,12 @@ Do not make these prerequisites for the first playable release:
 
 These may be considered after the core game is stable.
 
+**Owner decision, 2026-10-31 (Phase 16.5):** a weekly,
+unranked leaderboard, a per-move game clock, resign, match
+history, local achievements and shareable results are now in
+scope as post-MVP features (see §12). Ranked matches and
+ranked/skill-based matchmaking remain out of scope.
+
 ---
 
 ## 11. MVP Definition
@@ -364,10 +370,15 @@ The MVP is complete when:
 
 Potential future features:
 
-- Ranked online matches.
-- Ranked or skill-based matchmaking (beyond the current random Quick Match).
-- Leaderboards.
-- Player progression.
+- Ranked online matches. *(Still out of scope — Phase 18 at
+  the earliest; the Phase 16.5 weekly leaderboard is unranked
+  and points-based, not a rating.)*
+- Ranked or skill-based matchmaking (beyond the current random Quick Match). *(Still out of scope.)*
+- ~~Leaderboards.~~ **Done in Phase 16.5 (owner decision,
+  2026-10-31): a weekly, unranked leaderboard behind a feature
+  flag; no Elo or rating.**
+- Player progression. *(Still out of scope; Phase 16.5
+  achievements are local and cosmetic only.)*
 - Cosmetics.
 - Seasonal boards.
 - Additional board sizes.

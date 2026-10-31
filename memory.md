@@ -4734,17 +4734,26 @@ Actual: <what happened — screenshot if visual>
   Firebase login (Part D item 8). Live enforcement is unknown
   until then.
 - Golden masters: pending regeneration on the owner's Windows
-  machine (Part D item 9).
+  machine (Part D item 9). **Superseded the same evening — see
+  the addendum below: regenerated in this Linux VM at the
+  owner's instruction (commit d0d4cbf); the item now reads
+  "may need regenerating on Windows because the masters are
+  Linux-rendered".**
 
 ### Phase 16 gates (real output, 2026-10-30)
 
 `dart format --set-exit-if-changed lib test`: 173 files, 0 changed.
 `flutter analyze`: no issues. `flutter test`: **1,767 tests —
-1,756 passed, 11 failed**, the 11 being exactly the documented
-golden masters (baseline 1,717/1,706/11; +50 new tests, all
-passing: 20 choices fixture, 3 build-id, 3 cancel, 14 matrix,
-1 engine stress, 3 resume/tutorial journeys + 1 in-session resume,
-3 shortest-route, 2 rematch-section, 1 long-run cycles).
+1,756 passed, 11 failed** at the Phase 16 commit, the 11 being
+exactly the documented golden masters (baseline 1,717/1,706/11;
++50 new tests, all passing: 20 choices fixture, 3 build-id,
+3 cancel, 14 matrix, 1 engine stress, 3 resume/tutorial journeys
++ 1 in-session resume, 3 shortest-route, 2 rematch-section,
+1 long-run cycles). **Final state (see the addendum below): the
+11 masters were regenerated at the owner's instruction and the
+suite now stands at 1,767 tests, 1,767 passed, 0 failed; the
+regenerated masters are Linux-rendered and may need regenerating
+again on the owner's Windows reference machine.**
 `flutter build web --release`: built; main.dart.js 2,896,568
 bytes. Spec checker: OK. Oracle SHA-256 `6f1e3c05…94ba96`,
 unchanged. Mojibake scan: clean. Rules suite: attempted; the
@@ -4766,3 +4775,204 @@ delta measured in §13x may make them fail on the owner's Windows
 machine, where regeneration would need repeating if his machine
 is to remain the reference. Part D item 9 is closed for the VM
 reference; the other Part D items are unchanged.
+
+## 13aa. Phase 16.5 — source ledger, audit and decisions (2026-10-31)
+
+Phase 16.5 (owner-commissioned feature phase between 16 and 17):
+game clock, resign, rematch completion, match history,
+achievements, shareable results, weekly leaderboard. Phase 17
+is NOT started. Baseline for this phase: remote `main` verified
+at `d0d4cbf`; the working tree additionally carries two
+owner-requested change sets committed immediately before Part A
+as their own focused commits — `1affb85` (custom badge button
+icons on Home/Modes, verified 1,767/1,767 on 2026-10-31) and
+`a0bf802` (Firebase native wiring: google-services plugin +
+iOS plist reference; the config files themselves stay
+git-ignored and out of git). Baseline gates at phase start:
+format 174 files 0 changed; analyze no issues; oracle SHA-256
+`6f1e3c05…94ba96` unchanged; mojibake clean; spec checker OK;
+full suite re-run recorded with Part A's commit.
+
+### What already existed (audited in code, not from memory)
+
+- **Finish reasons: none.** No `FinishReason` type exists. A
+  local win is the engine's `GameStatus.finished` + winner; an
+  online win is the room doc's `winnerId`; abandonment is
+  `RoomStatus.abandoned` with `abandonedById` and no winner.
+  The room repository's `leave` refuses started rooms with the
+  comment that a live-match leave "stays a plain refusal rather
+  than a half-implemented forfeit" (Part B replaces this).
+- **Rematch, local:** `LocalGameController.rematch()` is
+  identical to `restart()` — same config, **no side swap**
+  (the human is always Blue in vs-AI; in pass-and-play the two
+  humans simply stay). **Rematch, online:** `RematchController`
+  over the matchmaking queue — propose = `joinQueue` under the
+  finished match's board key; accept = `claimPlayer` (proposer
+  hosts as Blue, acceptor takes Red, so seats follow who
+  proposed, **not** a swap of the previous game); expiry is the
+  queue's 60 s staleness; there is **no `rematchOf` link** and
+  no time control exists yet to carry.
+- **Result screen:** one shared component; heading, pawn disc,
+  turns played, walls used per side, result text; REMATCH
+  button (local/AI) or the online consent section; no finish
+  reason, no duration, no move list.
+- **Statistics:** local modes only. `MatchStatistics`
+  (played/wins/losses + by-size/by-difficulty buckets) in
+  SharedPreferences under `wallforge.statistics.v1` (version in
+  the key; tolerant `fromJson`). Online matches are **not**
+  recorded. Written exactly once per local finish by
+  `LocalGameController.recordFinishedMatch`.
+- **Persistence:** SharedPreferences JSON blobs with versioned
+  keys (settings, statistics, unfinished match); the unfinished
+  match is a single saved slot; corruption falls back to
+  defaults everywhere.
+- **Rules (Phase 10 state):** match docs are full-document
+  sets with a shape-locked field list (`validRoomShape`);
+  timestamps are client-written epoch-ms ints with a
+  not-from-the-future band against `request.time`; the
+  abandonment claim requires `request.time - updatedAt >=
+  120000`, claimant != player to move, and declares **no
+  winner**. Moves live in `matches/{code}/moves/{turnId}`.
+  Quick Match queue: `matchmaking/{boardKey}` with
+  `boardKey = 's{size}w{walls}'` — keyed by board config only,
+  so a fixed Quick Match clock cannot split the pool.
+  `users/{uid}/**` is owner-only; `playerRooms/{uid}` is the
+  one-open-room pointer (client-enforced, documented limit).
+
+### Decisions recorded for this phase (D16.5-*)
+
+- **D16.5-1 Finish reasons.** One application-layer set used
+  everywhere: `goal` (engine win), `resign`, `timeout`,
+  `abandon`. Modelled outside the engine (`FinishReason` in the
+  domain layer); the match doc gains an optional `finishReason`
+  field, additive like `abandonedById` was — `schemaVersion`
+  stays 2.
+- **D16.5-2 Clock values.** Off / 15 s / 30 s / 60 s per move.
+  Local and vs-AI default Off (plus a Settings default for
+  local/vs-AI). Code rooms choose at creation; **Quick Match is
+  fixed at 60 s** (queue key unchanged). Only human turns are
+  clocked; the AI is never on the clock.
+- **D16.5-3 Server-time enforcement.** The match doc gains
+  optional `timeControlSeconds` (int, 0/absent = off),
+  `turnDeadline` (epoch-ms int or null) and `serverUpdatedAt`
+  (written with the server-timestamp sentinel on every
+  turn-advancing or terminal write, same write — no extra
+  writes). Rules require `serverUpdatedAt == request.time` on
+  those writes and bound `turnDeadline` to
+  `[request.time + limit - 2s, request.time + limit + 15s]`:
+  the lower bound stops a mover shrinking the opponent's clock
+  (the abuse that matters — the mover is the waiting player
+  after moving and could otherwise claim instantly); the upper
+  slack absorbs honest clients' server-offset estimation error
+  (a mover can gift the opponent at most ~15 s, which harms
+  only the mover). A timeout claim requires
+  `request.time > turnDeadline + 2s` (2 s grace, recorded:
+  covers snapshot delivery latency so a move already in flight
+  at the deadline is not stolen), claimant != player to move,
+  active match. Clock skew on clients is estimated from
+  `serverUpdatedAt` in snapshots (server time paired with local
+  receipt time). For clocked matches the timeout claim replaces
+  the 120 s abandonment heuristic (rules: the abandonment
+  transition requires an unclocked match); unclocked matches
+  keep Phase 10 behaviour bit-for-bit.
+- **D16.5-4 Local clock semantics.** Injected time source;
+  1 Hz timer only while a clocked human turn is in flight;
+  backgrounding freezes the countdown (remaining time is kept
+  and restored on resume); a cold-resumed unfinished clocked
+  match restarts the current turn at a full clock (the saved
+  slot stores no deadline — simplest honest choice).
+- **D16.5-5 Resign online.** One transaction on the match doc:
+  member, own side, active match only → status `finished`,
+  `winnerId` = opponent, `finishReason = 'resign'`, board
+  frozen. The room repository keeps refusing `leave` on a
+  started room, but the refusal now points at the real resign
+  path (the game screen's Resign action), replacing the
+  "half-implemented forfeit" comment.
+- **D16.5-6 History.** New `MatchRecord` + history repository
+  (SharedPreferences, key `wallforge.history.v1`, internal
+  `schemaVersion: 1` with tolerant readers and a tested upgrade
+  path). Bounded at the most recent **100** records (a record
+  with a full move list is a few KB; 100 keeps the blob well
+  under SharedPreferences comfort while covering months of
+  play). A persisted finish gate (set of recorded match ids,
+  same bound) makes finish recording write-once across
+  restarts and guards **both** the history append and the
+  statistics bump, so nothing double-counts. Online matches
+  append history only (they were never in the local statistics;
+  silently changing the counters' meaning would corrupt the
+  existing aggregates — the existing stats are kept as-is,
+  i.e. migrated by preservation, and Profile states the split).
+  Online move lists are reconstructed in memory by diffing
+  consecutive snapshots (one action per turn makes the diff
+  exact); no extra online reads or writes. History is
+  per-device and lost on uninstall — stated in the UI.
+- **D16.5-7 Achievements.** Local catalogue of 15 (Part F
+  ledger), pure predicates over history + a stats snapshot;
+  unlocks stored under `wallforge.achievements.v1`
+  ({id: unlockedAtMs}); evaluation after each record save;
+  idempotent. "Comeback" is computed by replaying the stored
+  move list through the engine as a library (winner's
+  goal-distance was >= 3 worse than the opponent's at some
+  ply). Achievements never feed the leaderboard.
+- **D16.5-8 Share.** No new package. `share_plus` was evaluated
+  against `rules.md` §3.3 (BSD-3, actively maintained, all
+  platforms) but **deferred**: its native halves cannot be
+  build-verified in this VM (no JVM networking for the Android
+  build — see §13aa baseline note in TOOLS), and this phase
+  ships the fallbacks the prompt allows: on-device PNG card
+  (existing painter), text summary via the system clipboard
+  (Flutter built-in), and on web a PNG download via SDK JS
+  interop. What is missing, plainly: the native OS share sheet.
+- **D16.5-9 Leaderboard.** Flag:
+  `bool.fromEnvironment('FEATURE_LEADERBOARD',
+  defaultValue: kDebugMode)` — on in debug, off in release
+  unless explicitly defined. Buckets:
+  `leaderboards/{weekId}/entries/{uid}` where `weekId` is the
+  epoch-day number of the week's Monday 00:00 UTC (rules can
+  verify it arithmetically against `request.time`; the ISO
+  label is a client-side rendering of the same day). Points:
+  win 3 / loss 1; minimum 10 plies; <= 20 counted matches per
+  player per week; <= 3 counted matches vs the same opponent
+  per week; abandonment finishes never count (no winner /
+  finishReason gate). Display names are generated
+  (Adjective + Noun + number, seeded by uid, regenerable) and
+  rules-validated by pattern. Reads per view: 50 (top list) +
+  1 (own row) + 3 (last week's podium, cached) = ~54 worst
+  case, 5-minute in-memory cache + manual refresh.
+
+### Part A — done (2026-10-31)
+
+- phase.md: the Phase 16 `### Result` moved from under Phase
+  17's heading to directly under Phase 16's own heading
+  (re-read and confirmed: Phase 16 at the section head, its
+  Result following its Exit criteria; Phase 17 now runs
+  Goal → Tasks with no stray Result).
+- memory.md: the Phase 16 gates paragraph now states the
+  interim count in context and the final state (1,767/1,767
+  after the owner's-word golden regeneration; masters
+  Linux-rendered), and the stale "golden masters pending" item
+  is marked superseded.
+- PRD.md: the ranked/leaderboard lines actually live in §12
+  (Future Expansion), not §10 — §12 now removes "Leaderboards"
+  as future work (done here, weekly and unranked), keeps
+  ranked matches and skill-based matchmaking out of scope, and
+  §10 carries the dated owner-decision pointer. Spec checker
+  OK after every edit.
+- game_spec.md §12: Q-03's status records the adoption, and a
+  Phase 16.5 decision record states the clock is an
+  application-layer rule (engine, catalogue and oracle
+  unchanged) and that Q-01 remains an open owner decision the
+  clock does not solve.
+- phase.md: a "Phase 16.5" section (goal, tasks, exit
+  criteria) now sits between Phases 16 and 17.
+- Baseline gates (phase start tree = d0d4cbf + `1affb85` +
+  `a0bf802` + these doc edits): format 174 files 0 changed;
+  analyze no issues; **flutter test 1,767/1,767 passed**;
+  spec checker OK; oracle SHA-256 `6f1e3c05…94ba96`;
+  mojibake clean. Rules suite: not run — the Firestore
+  emulator does not boot in this VM (recorded attempts in
+  Phases 15/16; it stalls pre-boot), so all rules changes in
+  this phase are proven by Dart-side tests against the
+  in-memory double plus rules tests written for the owner to
+  run where the emulator works. That gap is stated wherever
+  it matters, never papered over.

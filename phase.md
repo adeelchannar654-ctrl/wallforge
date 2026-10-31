@@ -1547,14 +1547,6 @@ Validate the complete product.
 
 No known game-breaking bugs.
 
----
-
-# Phase 17 — Release Preparation
-
-## Goal
-
-Prepare production builds.
-
 ### Result
 
 **Complete except owner-run manual testing** (2026-10-30; full
@@ -1588,6 +1580,47 @@ Gates: format clean, analyze clean, full suite recorded in §13z
 owner's Windows machine), web release built, spec OK, oracle
 unchanged. The Part D owner script (device/browser checks,
 two-device live match, rules deploy, goldens) is in §13z.
+
+---
+
+# Phase 16.5 — Game Clock, Resign, Rematch, Match History, Achievements, Shareable Results and Weekly Leaderboard
+
+## Goal
+
+Add the owner-commissioned feature set between Phase 16 and
+Phase 17 without touching the engine or the rules of play:
+resign and one finish-reason set, a per-move game clock
+(application-layer, server-time enforced online), completed
+rematch (side swap, carried settings), local match history,
+local deterministic achievements, shareable result cards, and
+a weekly unranked leaderboard behind a compile-time flag.
+
+### Tasks
+
+- Part A: documentation fixes and decision records.
+- Part B: resign and finish reasons (all modes + rules).
+- Part C: per-move game clock (client, server-time rules).
+- Part D: rematch completion (swap sides, carry time control).
+- Part E: match history (idempotent records, screens).
+- Part F: achievements (local, deterministic).
+- Part G: shareable result card.
+- Part H: weekly leaderboard (flag-gated, rules-validated).
+- Part I: Firestore recount, security model, regression,
+  owner manual-test script.
+
+### Exit criteria
+
+Every part's exit criteria met and gated with real output;
+engine, oracle and spec unchanged; pushed to GitHub. Phase 17
+(Release Preparation) is not started.
+
+---
+
+# Phase 17 — Release Preparation
+
+## Goal
+
+Prepare production builds.
 
 ### Tasks
 
