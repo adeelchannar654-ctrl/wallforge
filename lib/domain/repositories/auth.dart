@@ -49,6 +49,19 @@ abstract final class AuthProviders {
   static const String password = 'password';
 }
 
+/// Account policy constants (Phase 16.6, D16.6-11).
+abstract final class AccountPolicy {
+  /// The minimum password length the app enforces client-side and
+  /// states as a hint under the password field. Firebase's own
+  /// floor is lower; the app's rule is the one players see, and
+  /// the gateway still maps Firebase's `weak-password` onto
+  /// [AuthError.weakPassword] for anything the client check
+  /// cannot see. No composition rules (no required symbols or
+  /// cases) — length is the requirement with the evidence behind
+  /// it, and composition rules mostly manufacture reuse.
+  static const int minPasswordLength = 8;
+}
+
 /// The outcome of an auth operation, or the currently known auth state.
 class AuthState {
   const AuthState.signedIn(
@@ -383,4 +396,12 @@ abstract interface class AccountAuthGateway extends AuthGateway {
   /// state is signed out — returning to a fresh guest is the
   /// controller's composition, not the gateway's.
   Future<AuthResult> deleteCurrentUser();
+
+  /// Reloads the current user from the provider and returns the
+  /// fresh state. This exists for the verification loop: a player
+  /// who taps the link in the verification email comes back to the
+  /// app, and the cached user's `emailVerified` only updates on a
+  /// reload. (Added beyond the phase brief's operation list for
+  /// exactly this; recorded in §13ab.)
+  Future<AuthResult> refreshCurrentUser();
 }

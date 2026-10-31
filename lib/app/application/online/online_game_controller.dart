@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/logging/app_logger.dart';
 import '../../../domain/wallforge_domain.dart';
+import '../account/identity_guard.dart';
 import '../achievements/achievements_service.dart';
 import '../action_inference.dart';
 import '../game_interaction.dart';
@@ -123,11 +124,19 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
     MatchHistoryRepository? history,
     AchievementsService? achievements,
     this.leaderboardSubmitter,
+    IdentityGuard? identityGuard,
   }) : _state = initialState ?? GameState.initial(),
        _clock = clock ?? DateTime.now,
        _historyRepository = history,
        _achievementsService = achievements,
-       _room = Room.fromJson(<String, dynamic>{}) ?? _emptyRoom;
+       _identityGuard = identityGuard ?? IdentityGuard.shared,
+       _room = Room.fromJson(<String, dynamic>{}) ?? _emptyRoom {
+    // Phase 16.6: this controller exists only for a live match
+    // (playing, or viewing its result where the rematch is
+    // claimed with the same uid), so identity changes are
+    // refused for its whole lifetime. Cleared in [dispose].
+    _identityGuard?.matchActive = true;
+  }
 
   static const AppLogger _log = AppLogger('online_game');
 
@@ -172,6 +181,12 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
   /// once when the match ends. Null when the feature flag is
   /// off or the screen did not wire it.
   final LeaderboardSubmitter? leaderboardSubmitter;
+
+  /// Phase 16.6: where this match reports its liveness so the
+  /// account layer can refuse a mid-match identity change.
+  /// Null when accounts are off — the default from
+  /// [IdentityGuard.shared].
+  final IdentityGuard? _identityGuard;
 
   /// Set by the game screen: called with the achievements a
   /// recorded finish just unlocked, for the unlock toast.
@@ -1151,6 +1166,7 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
   @override
   void dispose() {
     _disposed = true;
+    _identityGuard?.matchActive = false;
     _clockTimer?.cancel();
     _clockTimer = null;
     _presenceTimer?.cancel();

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/logging/app_logger.dart';
 import '../../../domain/wallforge_domain.dart';
+import '../account/identity_guard.dart';
 
 /// What the online lobby is currently doing, from `design.md` §19's connection
 /// states.
@@ -61,7 +62,9 @@ class OnlineLobbyController extends ChangeNotifier {
     this.matchmaking,
     MatchRepository? matches,
     this.boardConfig = const BoardConfig(),
-  }) : _matchRepository = matches;
+    IdentityGuard? identityGuard,
+  }) : _matchRepository = matches,
+       _identityGuard = identityGuard ?? IdentityGuard.shared;
 
   static const AppLogger _log = AppLogger('online_lobby');
 
@@ -176,6 +179,12 @@ class OnlineLobbyController extends ChangeNotifier {
   MatchRepository? get matchRepository => _matchRepository;
 
   final MatchRepository? _matchRepository;
+
+  /// Phase 16.6: where this lobby reports "a room (or a queue
+  /// entry) is open" so the account layer can refuse an identity
+  /// change that would strand the seat. Null when accounts are
+  /// off — the default from [IdentityGuard.shared].
+  final IdentityGuard? _identityGuard;
 
   /// The room code to show, or null.
   String? get roomCode => _room?.code;
@@ -468,12 +477,18 @@ class OnlineLobbyController extends ChangeNotifier {
   void _setPhase(OnlineLobbyPhase phase) {
     if (_disposed) return;
     _phase = phase;
+    // Every room/queue transition funnels through here, so the
+    // identity guard is re-derived from the room alone, like the
+    // phase itself.
+    _identityGuard?.roomOpen =
+        _room != null || _phase == OnlineLobbyPhase.searching;
     notifyListeners();
   }
 
   @override
   void dispose() {
     _disposed = true;
+    _identityGuard?.roomOpen = false;
     unawaited(_watch?.cancel());
     unawaited(_matchWatch?.cancel());
     _watch = null;

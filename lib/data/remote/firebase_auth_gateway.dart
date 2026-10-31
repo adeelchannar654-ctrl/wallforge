@@ -497,6 +497,15 @@ class FirebaseAuthGateway implements AccountAuthGateway {
     return const AuthState.signedOut();
   });
 
+  @override
+  Future<AuthResult> refreshCurrentUser() => _guard(() async {
+    final user = _auth.currentUser;
+    if (user == null) return const AuthState.signedOut();
+    await user.reload();
+    final fresh = _auth.currentUser;
+    return fresh == null ? const AuthState.signedOut() : _stateFor(fresh);
+  });
+
   /// Exposed so the sign-in moment can be timestamped in a room document.
   int nowMs() => _clock().millisecondsSinceEpoch;
 }

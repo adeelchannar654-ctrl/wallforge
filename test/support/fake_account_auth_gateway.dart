@@ -365,6 +365,14 @@ class FakeAccountAuthGateway implements AccountAuthGateway {
   }
 
   @override
+  Future<AuthResult> refreshCurrentUser() async {
+    calls.add('refreshCurrentUser');
+    final forced = _scripted('refreshCurrentUser');
+    if (forced != null) return forced;
+    return AuthSuccess(_state);
+  }
+
+  @override
   Future<AuthResult> deleteCurrentUser() async {
     calls.add('deleteCurrentUser');
     final forced = _scripted('deleteCurrentUser');
