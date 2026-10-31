@@ -6,6 +6,7 @@ import '../../app/theme/app_radii.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../app/theme/app_typography.dart';
 import '../../domain/models/player_id.dart';
+import 'app_icons.dart';
 
 /// Shared building blocks for the Phase 11 product screens.
 ///
@@ -46,11 +47,15 @@ class PrimaryActionButton extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.icon,
+    this.iconAsset,
   });
 
   final String label;
   final VoidCallback? onPressed;
   final IconData? icon;
+
+  /// Custom badge icon (see [AppIcons]); wins over [icon] when set.
+  final String? iconAsset;
 
   @override
   Widget build(BuildContext context) {
@@ -66,7 +71,9 @@ class PrimaryActionButton extends StatelessWidget {
                 FeedbackScope.maybeOf(context)?.onButtonPress();
                 onPressed!();
               },
-        icon: Icon(icon ?? Icons.play_arrow, size: 20),
+        icon: iconAsset != null
+            ? Image.asset(iconAsset!, width: 26, height: 26)
+            : Icon(icon ?? Icons.play_arrow, size: 20),
         label: Text(label),
         style: FilledButton.styleFrom(
           backgroundColor: AppColors.primaryContainer,
@@ -88,11 +95,15 @@ class SecondaryActionButton extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.icon,
+    this.iconAsset,
   });
 
   final String label;
   final VoidCallback? onPressed;
   final IconData? icon;
+
+  /// Custom badge icon (see [AppIcons]); wins over [icon] when set.
+  final String? iconAsset;
 
   @override
   Widget build(BuildContext context) {
@@ -106,7 +117,9 @@ class SecondaryActionButton extends StatelessWidget {
                 FeedbackScope.maybeOf(context)?.onButtonPress();
                 onPressed!();
               },
-        icon: Icon(icon ?? Icons.arrow_forward, size: 18),
+        icon: iconAsset != null
+            ? Image.asset(iconAsset!, width: 24, height: 24)
+            : Icon(icon ?? Icons.arrow_forward, size: 18),
         label: Text(label),
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.onSurface,

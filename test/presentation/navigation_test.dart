@@ -98,12 +98,12 @@ void main() {
     expect(find.byType(HomeScreen), findsOneWidget);
 
     // Home -> Profile -> back; Home -> Settings -> back.
-    await tester.tap(find.byIcon(Icons.person_outline));
+    await tester.tap(find.byTooltip('Profile'));
     await tester.pumpAndSettle();
     expect(find.byType(ProfileScreen), findsOneWidget);
     await back(tester);
     expect(find.byType(HomeScreen), findsOneWidget);
-    await tester.tap(find.byIcon(Icons.settings_outlined));
+    await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
     expect(find.byType(SettingsScreen), findsOneWidget);
     await back(tester);

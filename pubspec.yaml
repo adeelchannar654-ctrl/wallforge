@@ -73,6 +73,9 @@ flutter:
     # Phase 12 audio (design.md §30's assets/audio/): synthesized for
     # this project, CC0 — see assets/audio/LICENCE.txt.
     - assets/audio/
+    # Custom badge-style button icons (owner-supplied set, 2026-10-31):
+    # assets/icons/<name>.png, referenced via AppIcons.
+    - assets/icons/
 
   fonts:
     - family: Inter

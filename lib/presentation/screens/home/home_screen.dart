@@ -15,6 +15,7 @@ import '../../../domain/models/game_state.dart';
 import '../../../domain/repositories/repositories.dart';
 import '../../board/board.dart';
 import '../../widgets/app_chrome.dart';
+import '../../widgets/app_icons.dart';
 import '../../widgets/responsive_content.dart';
 import '../../widgets/wallforge_logo.dart';
 import '../../widgets/wallforge_wordmark.dart';
@@ -134,12 +135,12 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
         elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.person_outline),
+            icon: Image.asset(AppIcons.profile, width: 27, height: 27),
             tooltip: 'Profile',
             onPressed: () => Navigator.of(context).pushNamed(AppRoutes.profile),
           ),
           IconButton(
-            icon: const Icon(Icons.settings_outlined),
+            icon: Image.asset(AppIcons.settings, width: 27, height: 27),
             tooltip: 'Settings',
             onPressed: () =>
                 Navigator.of(context).pushNamed(AppRoutes.settings),
@@ -186,7 +187,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                 const SizedBox(height: AppSpacing.xl),
                 PrimaryActionButton(
                   label: 'PLAY',
-                  icon: Icons.play_arrow,
+                  iconAsset: AppIcons.play,
                   onPressed: () => _openModes(GameMode.local),
                 ),
                 const SizedBox(height: AppSpacing.lg),
@@ -195,21 +196,21 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                   const SizedBox(height: AppSpacing.md),
                 ],
                 _buildModeRow(
-                  icon: Icons.people_outline,
+                  iconAsset: AppIcons.local,
                   title: 'Local Match',
                   subtitle: 'Two players on one device.',
                   onTap: () => _openModes(GameMode.local),
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 _buildModeRow(
-                  icon: Icons.smart_toy_outlined,
+                  iconAsset: AppIcons.ai,
                   title: 'Vs AI',
                   subtitle: 'Single player against AI.',
                   onTap: () => _openModes(GameMode.versusAi),
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 _buildModeRow(
-                  icon: Icons.public,
+                  iconAsset: AppIcons.online,
                   title: 'Online Match',
                   subtitle: 'Remote two-player match.',
                   onTap: () => _openModes(GameMode.online),
@@ -247,7 +248,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
           const SizedBox(height: AppSpacing.md),
           SecondaryActionButton(
             label: 'RESUME MATCH',
-            icon: Icons.play_arrow,
+            iconAsset: AppIcons.resume,
             onPressed: _resume,
           ),
         ],
@@ -256,7 +257,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
   }
 
   Widget _buildModeRow({
-    required IconData icon,
+    required String iconAsset,
     required String title,
     required String subtitle,
     required VoidCallback onTap,
@@ -275,7 +276,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
           ),
           child: Row(
             children: [
-              Icon(icon, color: AppColors.primaryContainer, size: 28),
+              Image.asset(iconAsset, width: 42, height: 42),
               const SizedBox(width: AppSpacing.lg),
               Expanded(
                 child: Column(
@@ -304,11 +305,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
     return AppCard(
       child: Row(
         children: [
-          Icon(
-            Icons.school_outlined,
-            color: AppColors.primaryContainer,
-            size: 28,
-          ),
+          Image.asset(AppIcons.tutorial, width: 42, height: 42),
           const SizedBox(width: AppSpacing.lg),
           Expanded(
             child: Column(

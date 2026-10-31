@@ -10,6 +10,7 @@ import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
 import '../../../domain/models/board_config.dart';
 import '../../widgets/app_chrome.dart';
+import '../../widgets/app_icons.dart';
 import '../../widgets/responsive_content.dart';
 
 /// The three ways to play, as route arguments and mode-card identity.
@@ -142,19 +143,19 @@ class _GameModesScreenState extends State<GameModesScreen> {
   List<Widget> _modeCards(BuildContext context) {
     final local = _buildModeCard(
       mode: GameMode.local,
-      icon: Icons.people_outline,
+      iconAsset: AppIcons.local,
       title: 'Local',
       description: 'Two players on one device.',
     );
     final versusAi = _buildModeCard(
       mode: GameMode.versusAi,
-      icon: Icons.smart_toy_outlined,
+      iconAsset: AppIcons.ai,
       title: 'Vs AI',
       description: 'Single player against AI.',
     );
     final online = _buildModeCard(
       mode: GameMode.online,
-      icon: Icons.public,
+      iconAsset: AppIcons.online,
       title: 'Online',
       description: 'Remote two-player match.',
     );
@@ -196,7 +197,7 @@ class _GameModesScreenState extends State<GameModesScreen> {
 
   Widget _buildModeCard({
     required GameMode mode,
-    required IconData icon,
+    required String iconAsset,
     required String title,
     required String description,
   }) {
@@ -220,13 +221,7 @@ class _GameModesScreenState extends State<GameModesScreen> {
           ),
           child: Row(
             children: [
-              Icon(
-                icon,
-                size: 28,
-                color: selected
-                    ? AppColors.primaryContainer
-                    : AppColors.onSurfaceVariant,
-              ),
+              Image.asset(iconAsset, width: 42, height: 42),
               const SizedBox(width: AppSpacing.lg),
               Expanded(
                 child: Column(
@@ -242,8 +237,7 @@ class _GameModesScreenState extends State<GameModesScreen> {
                   ],
                 ),
               ),
-              if (selected)
-                Icon(Icons.check_circle, color: AppColors.primaryContainer),
+              if (selected) Image.asset(AppIcons.check, width: 26, height: 26),
             ],
           ),
         ),
