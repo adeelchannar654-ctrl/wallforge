@@ -20,6 +20,7 @@ import '../../board/board.dart';
 import '../../widgets/achievement_toast.dart';
 import '../../widgets/clock_chip.dart';
 import '../../widgets/match_exit_dialogs.dart';
+import '../../widgets/result_card.dart';
 import '../result/result_screen.dart';
 
 /// Interactive local game screen — pass-and-play between two humans.
@@ -71,6 +72,13 @@ class GameScreen extends StatelessWidget {
               body: ResultScreen(
                 data: _resultData(),
                 onRematch: controller.rematch,
+                onShare: controller.lastFinishedRecord == null
+                    ? null
+                    : () => shareMatchResult(
+                        context,
+                        record: controller.lastFinishedRecord!,
+                        finalState: controller.state,
+                      ),
                 onHome: () =>
                     Navigator.of(context)
                         .pushNamedAndRemoveUntil(AppRoutes.home, (_) => false),
@@ -179,7 +187,7 @@ class GameScreen extends StatelessWidget {
           config.wallsPerPlayer - state.wallsRemaining(PlayerId.blue),
       wallsUsedRed: config.wallsPerPlayer - state.wallsRemaining(PlayerId.red),
       config: config,
-      mySide: controller.versusAi ? PlayerId.blue : null,
+      mySide: controller.versusAi ? controller.humanSide : null,
       aiDifficulty: controller.versusAi ? controller.aiDifficulty : null,
       finishReason: controller.finishReason,
     );

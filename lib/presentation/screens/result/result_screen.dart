@@ -95,6 +95,7 @@ class ResultScreen extends StatelessWidget {
     required this.onHome,
     this.onRematch,
     this.rematchSection,
+    this.onShare,
   });
 
   final MatchResultData data;
@@ -102,6 +103,12 @@ class ResultScreen extends StatelessWidget {
   /// Starts the same match again. Ignored when [rematchSection] is given
   /// (the online consent flow brings its own controls).
   final VoidCallback? onRematch;
+
+  /// Shares the result (Phase 16.5, Part G): the card + text
+  /// flow owned by the presenting game screen, which holds
+  /// the record and the final board. Null hides the button
+  /// (the /result route has neither).
+  final VoidCallback? onShare;
 
   /// Returns to Home. Always present — §21 requires it on both sides.
   final VoidCallback onHome;
@@ -216,6 +223,14 @@ class ResultScreen extends StatelessWidget {
                   icon: Icons.replay,
                   onPressed: onRematch,
                 ),
+              if (onShare != null) ...[
+                const SizedBox(height: AppSpacing.md),
+                SecondaryActionButton(
+                  label: 'SHARE RESULT',
+                  icon: Icons.share_outlined,
+                  onPressed: onShare,
+                ),
+              ],
               const SizedBox(height: AppSpacing.md),
               SecondaryActionButton(
                 label: 'RETURN TO HOME',

@@ -17,6 +17,7 @@ import '../../board/board.dart';
 import '../../widgets/achievement_toast.dart';
 import '../../widgets/clock_chip.dart';
 import '../../widgets/match_exit_dialogs.dart';
+import '../../widgets/result_card.dart';
 import '../result/result_screen.dart';
 import 'online_rematch_section.dart';
 
@@ -116,6 +117,13 @@ class OnlineGameScreen extends StatelessWidget {
           onHome: () =>
               Navigator.of(context)
                   .pushNamedAndRemoveUntil(AppRoutes.home, (_) => false),
+          onShare: controller.lastFinishedRecord == null
+              ? null
+              : () => shareMatchResult(
+                  context,
+                  record: controller.lastFinishedRecord!,
+                  finalState: controller.state,
+                ),
           rematchSection: rematch == null
               ? null
               : OnlineRematchSection(

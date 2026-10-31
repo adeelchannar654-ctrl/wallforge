@@ -171,6 +171,12 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
   /// Never called with an empty list.
   void Function(List<AchievementDefinition>)? onAchievementsUnlocked;
 
+  /// The record built for this match when it finished
+  /// (Phase 16.5, Part G: the share flow's input), or null
+  /// before the finish is recorded.
+  MatchRecord? get lastFinishedRecord => _lastFinishedRecord;
+  MatchRecord? _lastFinishedRecord;
+
   /// The moves this client witnessed, in spec notation.
   final List<String> _recordedMoves = <String>[];
 
@@ -528,29 +534,29 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
     if (history == null) return;
     final room = _room;
     final startedAt = _startedObservedAtMs ?? room.createdAtMs;
-    final added = await history.recordIfNew(
-      MatchRecord(
-        id: room.code,
-        mode: MatchMode.online,
-        boardSize: room.boardConfig.size,
-        wallsPerPlayer: room.boardConfig.wallsPerPlayer,
-        mySide: mySide,
-        winnerSide: winner,
-        finishReason:
-            room.finishReason ??
-            (isAbandoned ? FinishReason.abandon : FinishReason.goal),
-        opponentLabel: 'Online player',
-        plies: _state.turnNumber,
-        durationMs: room.updatedAtMs > startedAt
-            ? room.updatedAtMs - startedAt
-            : 0,
-        endedAtMs: room.updatedAtMs,
-        timeControlSeconds: room.timeControlSeconds,
-        moves: List<String>.of(_recordedMoves),
-        movesComplete: _movesComplete,
-        rematchOf: room.rematchOf,
-      ),
+    final record = MatchRecord(
+      id: room.code,
+      mode: MatchMode.online,
+      boardSize: room.boardConfig.size,
+      wallsPerPlayer: room.boardConfig.wallsPerPlayer,
+      mySide: mySide,
+      winnerSide: winner,
+      finishReason:
+          room.finishReason ??
+          (isAbandoned ? FinishReason.abandon : FinishReason.goal),
+      opponentLabel: 'Online player',
+      plies: _state.turnNumber,
+      durationMs: room.updatedAtMs > startedAt
+          ? room.updatedAtMs - startedAt
+          : 0,
+      endedAtMs: room.updatedAtMs,
+      timeControlSeconds: room.timeControlSeconds,
+      moves: List<String>.of(_recordedMoves),
+      movesComplete: _movesComplete,
+      rematchOf: room.rematchOf,
     );
+    _lastFinishedRecord = record;
+    final added = await history.recordIfNew(record);
     // Phase 16.5, Part F: achievements evaluate over the
     // record just written.
     final achievements = _achievementsService;

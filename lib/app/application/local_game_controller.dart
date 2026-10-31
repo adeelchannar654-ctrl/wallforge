@@ -79,6 +79,12 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
   /// screen can toast them. Never called with an empty list.
   void Function(List<AchievementDefinition>)? onAchievementsUnlocked;
 
+  /// The record built for the match that just finished
+  /// (Phase 16.5, Part G: the share flow's input), or null
+  /// before any finish.
+  MatchRecord? get lastFinishedRecord => _lastFinishedRecord;
+  MatchRecord? _lastFinishedRecord;
+
   // --- Phase 16.5, Part E: match identity and history capture ---------------
 
   /// Mints local match ids: unique per process run via the
@@ -681,9 +687,13 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
     final winner = this.winner;
     if (winner == null) return;
     unawaited(_clearUnfinished());
+    // Built unconditionally (not only when a history store is
+    // attached): the share flow reads it too.
+    final record = _buildRecord(winner);
+    _lastFinishedRecord = record;
     final history = _historyRepository;
     if (history != null) {
-      final added = await history.recordIfNew(_buildRecord(winner));
+      final added = await history.recordIfNew(record);
       if (!added) return;
     }
     final stats = _statisticsRepository;

@@ -5316,3 +5316,61 @@ leaderboard hook's rank bounds; controller hook end-to-end;
 UI: screen states + progress text + the note, the toast).
 Gates: format 204 files 0 changed; analyze clean; affected
 suites green.
+
+### Part G — shareable result (2026-10-31)
+
+Shipped, per D16.5-8. The card (`ResultCard`, 600×780,
+captured at 2× = 1200×1560 PNG): the final board drawn by
+the game's own `BoardPainter`, the outcome headline, the
+mode/opponent/board/plies/duration/date facts, and the
+WALLFORGE name — nothing else: no room code, no uid, no
+player names (the share text is asserted in tests to not
+contain the record id). The whole card carries one
+descriptive semantic label. The text summary
+(`buildShareText`) is two lines: outcome ("Blue wins on
+time") and the fact line.
+The package question, decided and recorded: `share_plus`
+was evaluated against rules.md §3.3 (BSD-3, actively
+maintained, all platforms) and DEFERRED — its native halves
+cannot be build-verified in this VM (no JVM networking for
+Android, no Mac for iOS), and shipping an unverifiable
+native dependency into a release path is worse than
+shipping honest fallbacks. What shipped instead:
+- **Web:** the PNG downloads (Blob + anchor click via
+  `package:web` — added as a direct dependency: BSD-3, the
+  Dart team's own library, already transitive; §3.3
+  evaluation in this entry and in the pubspec comment) and
+  the text is copied. `flutter build web --release` passes
+  with the interop compiled in.
+- **Native:** the text is copied and the card is previewed
+  in a dialog that says plainly that direct image sharing
+  needs the system share sheet this build does not include
+  yet, and that a screenshot keeps the card.
+- **Partial move list:** text only, with the reason stated
+  — a card never shows a board the match did not reach
+  (`replayFinalState` returns null for incomplete or
+  unparseable lists; the Result screens pass the true final
+  state directly).
+Wiring: both controllers expose `lastFinishedRecord`; the
+Result screen gains a SHARE RESULT button only when the
+presenting screen supplies the flow (both game screens do;
+the bare /result route does not); the history detail shares
+its record the same way, replaying its moves to the final
+board. Also fixed en route, from Part D: the local result
+data now reports the human's ACTUAL side after a swap
+(`humanSide`), not a hard-coded Blue.
+Test note (hard-won): engine async (image readback, PNG
+decode) deadlocks the fake-async zone if awaited naively —
+the share tests await it through `runAsync` grace periods
+with fake-zone settling, the pattern the golden machinery
+uses; a codec await in the test zone hung the suite until
+moved. Tests: 7 new (text contents incl. the no-identifier
+assertion and the timeout/abandon wordings, replay honesty
+incl. an illegal-move refusal, PNG magic bytes + exact
+dimensions, the native flow end-to-end with a mocked
+clipboard, the partial-list text-only flow). Gates: format
+211 files 0 changed; analyze clean; web release build
+passes; full presentation suite green serially (626 tests
+— an earlier parallel run under triple job contention
+showed 24 timing failures that do not reproduce serially,
+the Part C flake pattern again).

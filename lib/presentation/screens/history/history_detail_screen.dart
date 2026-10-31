@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/application/replay.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
@@ -9,6 +10,7 @@ import '../../../domain/models/player_id.dart';
 import '../../../domain/repositories/repositories.dart';
 import '../../widgets/app_chrome.dart';
 import '../../widgets/responsive_content.dart';
+import '../../widgets/result_card.dart';
 import 'history_screen.dart' show historyHeadline, formatHistoryDuration;
 
 /// One history record in full (Phase 16.5, Part E): the facts
@@ -105,6 +107,16 @@ class HistoryDetailScreen extends StatelessWidget {
                       if (r.rematchOf != null)
                         _row('Rematch', 'Rematch of an earlier match'),
                     ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                SecondaryActionButton(
+                  label: 'SHARE RESULT',
+                  icon: Icons.share_outlined,
+                  onPressed: () => shareMatchResult(
+                    context,
+                    record: r,
+                    finalState: replayFinalState(r),
                   ),
                 ),
                 const SizedBox(height: AppSpacing.lg),
