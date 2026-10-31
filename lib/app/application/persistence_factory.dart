@@ -1,3 +1,4 @@
+import '../../data/local/shared_preferences_history_repository.dart';
 import '../../data/local/shared_preferences_settings_repository.dart';
 import '../../data/local/shared_preferences_statistics_repository.dart';
 import '../../data/local/shared_preferences_unfinished_match_repository.dart';
@@ -39,6 +40,10 @@ class PersistenceFactory {
         settings: const SharedPreferencesSettingsRepository(),
         statistics: const SharedPreferencesStatisticsRepository(),
         unfinishedMatch: const SharedPreferencesUnfinishedMatchRepository(),
+        // Phase 16.5: history is per-device by design, so it
+        // uses the local store even in the remote-persistence
+        // build (see attachRemote).
+        history: const SharedPreferencesHistoryRepository(),
       )
       ..loadPersisted();
   }
@@ -76,6 +81,9 @@ class PersistenceFactory {
           client: client,
           userId: ownerId,
         ),
+        // History stays on the device even here (Phase 16.5):
+        // it is never synced, by design.
+        history: const SharedPreferencesHistoryRepository(),
       )
       ..loadPersisted();
   }

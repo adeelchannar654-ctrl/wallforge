@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/application/ai/ai_difficulty.dart';
+import '../../../app/router/app_router.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
@@ -170,9 +171,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ],
                 const SizedBox(height: AppSpacing.lg),
+                SecondaryActionButton(
+                  label: 'MATCH HISTORY',
+                  icon: Icons.history,
+                  onPressed: () =>
+                      Navigator.of(context).pushNamed(AppRoutes.history),
+                ),
+                const SizedBox(height: AppSpacing.md),
                 Text(
                   'Statistics cover local and AI matches on this device. '
-                  'Online matches are not recorded here.',
+                  'Online matches are not recorded here — but every '
+                  'finished match, online included, is listed in Match '
+                  'History, which is stored on this device only.',
                   style: AppTypography.bodyBase.copyWith(
                     color: AppColors.onSurfaceVariant,
                     fontSize: 12,

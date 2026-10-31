@@ -21,6 +21,10 @@ class UnfinishedMatch {
     this.savedAtTurn = 0,
     this.timeControlSeconds = 0,
     this.humanSide = PlayerId.blue,
+    this.matchId,
+    this.moves = const <String>[],
+    this.elapsedMs = 0,
+    this.rematchOf,
   });
 
   /// The live match state, restored through [GameStateSerializer].
@@ -52,6 +56,26 @@ class UnfinishedMatch {
   /// which is what they all were.
   final PlayerId humanSide;
 
+  /// The match's history identity (Phase 16.5), minted when
+  /// the match started. Null in saves written before the field
+  /// existed; the controller mints one on resume in that case.
+  final String? matchId;
+
+  /// The moves played so far, in spec notation (Phase 16.5):
+  /// carried so a resumed match's history record still holds
+  /// the complete move list.
+  final List<String> moves;
+
+  /// Milliseconds of play accumulated before the current
+  /// session (Phase 16.5), so a resumed match's recorded
+  /// duration spans its sessions instead of restarting.
+  final int elapsedMs;
+
+  /// The match this one is a rematch of, when it is one
+  /// (Phase 16.5): carried so a resumed rematch's history
+  /// record keeps its link.
+  final String? rematchOf;
+
   Map<String, dynamic> toJson() => <String, dynamic>{
     'boardSize': boardSize,
     'versusAi': versusAi,
@@ -59,6 +83,10 @@ class UnfinishedMatch {
     'savedAtTurn': savedAtTurn,
     'timeControlSeconds': timeControlSeconds,
     'humanSide': humanSide.name,
+    'matchId': matchId,
+    'moves': moves,
+    'elapsedMs': elapsedMs,
+    'rematchOf': rematchOf,
     'gameState': GameStateSerializer.toJson(gameState),
   };
 
@@ -96,6 +124,21 @@ class UnfinishedMatch {
           ? rawTimeControl
           : 0,
       humanSide: json['humanSide'] == 'red' ? PlayerId.red : PlayerId.blue,
+      matchId:
+          (json['matchId'] is String && (json['matchId'] as String).isNotEmpty)
+          ? json['matchId'] as String
+          : null,
+      moves: json['moves'] is List
+          ? (json['moves'] as List).whereType<String>().toList()
+          : const <String>[],
+      elapsedMs: (json['elapsedMs'] is int && (json['elapsedMs'] as int) >= 0)
+          ? json['elapsedMs'] as int
+          : 0,
+      rematchOf:
+          (json['rematchOf'] is String &&
+              (json['rematchOf'] as String).isNotEmpty)
+          ? json['rematchOf'] as String
+          : null,
     );
   }
 

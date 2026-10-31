@@ -7,6 +7,7 @@ import '../../../app/theme/app_radii.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
 import '../../../core/constants/app_info.dart';
+import '../../../data/local/shared_preferences_history_repository.dart';
 import '../../../data/local/shared_preferences_settings_repository.dart';
 import '../../../data/local/shared_preferences_statistics_repository.dart';
 import '../../../data/local/shared_preferences_unfinished_match_repository.dart';
@@ -37,11 +38,13 @@ class HomeScreen extends StatefulWidget {
     this.statisticsRepository = const SharedPreferencesStatisticsRepository(),
     this.unfinishedMatchRepository =
         const SharedPreferencesUnfinishedMatchRepository(),
+    this.historyRepository = const SharedPreferencesHistoryRepository(),
   });
 
   final SettingsRepository settingsRepository;
   final StatisticsRepository statisticsRepository;
   final UnfinishedMatchRepository unfinishedMatchRepository;
+  final MatchHistoryRepository historyRepository;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -107,6 +110,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
       settings: widget.settingsRepository,
       statistics: widget.statisticsRepository,
       unfinishedMatch: widget.unfinishedMatchRepository,
+      history: widget.historyRepository,
     );
     await controller.refreshResumableMatch();
     final match = controller.resumableMatch;
@@ -221,6 +225,8 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                   const SizedBox(height: AppSpacing.md),
                   _buildStatisticsCard(),
                 ],
+                const SizedBox(height: AppSpacing.md),
+                _buildHistoryCard(),
                 const SizedBox(height: AppSpacing.xxl),
               ],
             ),
@@ -350,6 +356,30 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
               '${s.matchesPlayed} played · ${s.humanWins} won · '
               '${s.humanLosses} lost',
               style: AppTypography.bodyBase,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Phase 16.5: the doorway to the full per-device history —
+  /// always shown, because history also holds online matches,
+  /// which the statistics card above never counts.
+  Widget _buildHistoryCard() {
+    return AppCard(
+      child: InkWell(
+        onTap: () => Navigator.of(context).pushNamed(AppRoutes.history),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SectionTitle('MATCH HISTORY'),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Every finished match on this device, online included.',
+              style: AppTypography.bodyBase.copyWith(
+                color: AppColors.onSurfaceVariant,
+              ),
             ),
           ],
         ),

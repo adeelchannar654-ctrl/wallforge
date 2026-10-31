@@ -1,4 +1,5 @@
 import '../models/board_config.dart';
+import '../models/match_record.dart';
 import 'app_settings.dart';
 import 'match_statistics.dart';
 import 'room.dart';
@@ -56,6 +57,50 @@ abstract interface class UnfinishedMatchRepository {
   Future<void> save(UnfinishedMatch match);
 
   /// Removes the resumable match. Called when a match finishes or is abandoned.
+  Future<void> clear();
+}
+
+/// Per-device match history (Phase 16.5, Part E).
+///
+/// History is deliberately **local only**: no implementation
+/// reads or writes anything online. Online matches are recorded
+/// from the final snapshot the client already holds, so keeping
+/// history costs no Firestore operations at all.
+///
+/// The store carries its own finish gate: [recordIfNew] is the
+/// only way records enter, and it refuses an id that was ever
+/// recorded before (the gate set survives restarts and is
+/// bounded with the records), which is what makes "recorded
+/// exactly once" hold even when a finish is observed repeatedly
+/// (repeated snapshots, a rapid double finish, an app restart
+/// between the finish and the write).
+abstract interface class MatchHistoryRepository {
+  /// The maximum number of records (and gate ids) retained.
+  static const int maxRecords = 100;
+
+  /// Loads the recorded matches, newest first. Tolerant: a
+  /// damaged or newer-version store reads as empty and is
+  /// never overwritten by a load.
+  Future<List<MatchRecord>> load();
+
+  /// Records [record] if its id was never recorded before.
+  ///
+  /// Returns true when the record was written (and only then
+  /// may the caller fold the match into the legacy statistics —
+  /// the gate is what keeps history and statistics from ever
+  /// double-counting a match). Returns false for a duplicate,
+  /// and for a store written by a newer schema version, which
+  /// this build must not clobber.
+  Future<bool> recordIfNew(MatchRecord record);
+
+  /// Deletes one record by id. The id stays in the gate set:
+  /// deleting a record must never make its match recordable
+  /// again.
+  Future<void> delete(String id);
+
+  /// Discards all records. The gate set is kept for the same
+  /// reason as in [delete] — "clear all" clears the list, not
+  /// the past.
   Future<void> clear();
 }
 

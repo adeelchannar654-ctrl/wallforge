@@ -4,6 +4,7 @@ import '../../core/feedback/feedback_controller.dart';
 import '../../core/feedback/feedback_transitions.dart';
 import '../../data/local/in_memory_repositories.dart';
 import '../../domain/models/board_config.dart';
+import '../../domain/models/match_record.dart';
 import '../../domain/repositories/room.dart';
 import '../../app/application/ai/ai_difficulty.dart';
 import '../../app/application/local_game_controller.dart';
@@ -14,6 +15,8 @@ import '../../app/application/persistence_factory.dart';
 import '../../app/application/match_setup.dart';
 import '../../presentation/screens/ai/ai_difficulty_screen.dart';
 import '../../presentation/screens/game/game_screen.dart';
+import '../../presentation/screens/history/history_detail_screen.dart';
+import '../../presentation/screens/history/history_screen.dart';
 import '../../presentation/screens/home/home_screen.dart';
 import '../../presentation/screens/modes/game_modes_screen.dart';
 import '../../presentation/screens/online/online_game_screen.dart';
@@ -78,6 +81,12 @@ class AppRoutes {
 
   /// Settings.
   static const String settings = '/settings';
+
+  /// Match history list (Phase 16.5).
+  static const String history = '/history';
+
+  /// One history record's detail (Phase 16.5).
+  static const String historyDetail = '/history/detail';
 }
 
 /// Arguments for the `/online/game` route: the match controller the lobby
@@ -197,6 +206,16 @@ class AppRouter {
         return _page(settings, const TutorialScreen());
       case AppRoutes.profile:
         return _page(settings, const ProfileScreen());
+      case AppRoutes.history:
+        return _page(settings, const HistoryScreen());
+      case AppRoutes.historyDetail:
+        final record = settings.arguments;
+        return _page(
+          settings,
+          record is MatchRecord
+              ? HistoryDetailScreen(record: record)
+              : const HistoryScreen(),
+        );
       case AppRoutes.settings:
         return _page(settings, const SettingsScreen());
       default:
@@ -314,6 +333,7 @@ class AppRouter {
       settings: InMemorySettingsRepository(),
       statistics: InMemoryStatisticsRepository(),
       unfinishedMatch: InMemoryUnfinishedMatchRepository(),
+      history: InMemoryMatchHistoryRepository(),
     );
     return controller;
   }

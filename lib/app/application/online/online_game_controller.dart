@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/logging/app_logger.dart';
 import '../../../domain/wallforge_domain.dart';
+import '../action_inference.dart';
 import '../game_interaction.dart';
 
 /// The five connection states `design.md` §19 requires.
@@ -117,8 +118,10 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
     DateTime Function()? clock,
     this.opponentTimeout = opponentInactivityThreshold,
     this.movementAssistance = false,
+    MatchHistoryRepository? history,
   }) : _state = initialState ?? GameState.initial(),
        _clock = clock ?? DateTime.now,
+       _historyRepository = history,
        _room = Room.fromJson(<String, dynamic>{}) ?? _emptyRoom;
 
   static const AppLogger _log = AppLogger('online_game');
@@ -146,6 +149,31 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
   /// on their turn. Resolved from the persisted settings by the lobby when
   /// it builds this controller; the game itself has no settings store.
   final bool movementAssistance;
+
+  // --- Phase 16.5, Part E: history capture -----------------------------------
+
+  /// The per-device history store, or null when unwired (tests
+  /// that do not care about history). Recording an online
+  /// finish costs no Firestore operations: the record is built
+  /// from the final snapshot already in memory and the gate
+  /// lives in the local store.
+  final MatchHistoryRepository? _historyRepository;
+
+  /// The moves this client witnessed, in spec notation.
+  final List<String> _recordedMoves = <String>[];
+
+  /// Whether [_recordedMoves] is complete: false the moment a
+  /// snapshot jump shows a ply this client never saw.
+  bool _movesComplete = true;
+
+  /// Whether the terminal record has been handed to the store
+  /// (its gate would refuse a second copy anyway; this just
+  /// avoids rebuilding it on every snapshot).
+  bool _historyRecorded = false;
+
+  /// The `updatedAt` of the first started snapshot, for the
+  /// record's duration.
+  int? _startedObservedAtMs;
 
   final DateTime Function() _clock;
 
@@ -454,6 +482,65 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
   @visibleForTesting
   void debugTickClock() => _onClockTick();
 
+  // --- Phase 16.5, Part E: history recording ---------------------------------
+
+  /// Captures the ply between two consecutive snapshots for
+  /// the history record's move list. A transition that is not
+  /// exactly one ply marks the list partial — the record must
+  /// never present a list with silent gaps as complete.
+  void _capturePly(GameState before, GameState after) {
+    if (after.turnNumber == before.turnNumber) return;
+    final action = inferAction(before, after);
+    if (action == null) {
+      _movesComplete = false;
+      return;
+    }
+    _recordedMoves.add(action.toNotation());
+  }
+
+  /// Hands the finished match to the history store, once.
+  ///
+  /// Runs on the snapshot paths (adopt and echo alike: a
+  /// resign or timeout finish changes no board state, so it
+  /// arrives as an echo). The store's own gate would refuse a
+  /// duplicate anyway — this flag just avoids rebuilding the
+  /// record on every later snapshot.
+  void _maybeRecordHistory() {
+    if (_historyRecorded || !(isFinished || isAbandoned)) return;
+    _historyRecorded = true;
+    unawaited(_recordHistory());
+  }
+
+  Future<void> _recordHistory() async {
+    final history = _historyRepository;
+    if (history == null) return;
+    final room = _room;
+    final startedAt = _startedObservedAtMs ?? room.createdAtMs;
+    await history.recordIfNew(
+      MatchRecord(
+        id: room.code,
+        mode: MatchMode.online,
+        boardSize: room.boardConfig.size,
+        wallsPerPlayer: room.boardConfig.wallsPerPlayer,
+        mySide: mySide,
+        winnerSide: winner,
+        finishReason:
+            room.finishReason ??
+            (isAbandoned ? FinishReason.abandon : FinishReason.goal),
+        opponentLabel: 'Online player',
+        plies: _state.turnNumber,
+        durationMs: room.updatedAtMs > startedAt
+            ? room.updatedAtMs - startedAt
+            : 0,
+        endedAtMs: room.updatedAtMs,
+        timeControlSeconds: room.timeControlSeconds,
+        moves: List<String>.of(_recordedMoves),
+        movesComplete: _movesComplete,
+        rematchOf: room.rematchOf,
+      ),
+    );
+  }
+
   /// This client's colour, or null before the room is known.
   PlayerId? get mySide => _room.sideFor(uid);
 
@@ -708,6 +795,7 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
       // turns a lost acknowledgement into a success instead of a stuck spinner.
       _resolvePendingAfterSync();
       _syncClockTimer();
+      _maybeRecordHistory();
       notifyListeners();
       return;
     }
@@ -718,6 +806,10 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
 
     // --- adopt ---
     final previousState = _state;
+    _capturePly(previousState, room.boardState!);
+    if (room.status == RoomStatus.started) {
+      _startedObservedAtMs ??= room.updatedAtMs;
+    }
     _room = room;
     _state = room.boardState!;
     _fireAdoptedCues(previousState, _state);
@@ -731,6 +823,7 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
     _sync = OnlineSyncState.inSync;
     _resolvePendingAfterSync();
     _syncClockTimer();
+    _maybeRecordHistory();
     notifyListeners();
   }
 

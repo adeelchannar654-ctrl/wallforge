@@ -11,8 +11,10 @@ import '../../domain/models/game_action.dart';
 import 'match_clock.dart';
 import '../../domain/models/game_state.dart';
 import '../../domain/models/game_status.dart';
+import '../../domain/models/match_record.dart';
 import '../../domain/models/player_id.dart';
 import '../../domain/repositories/repositories.dart';
+import 'action_inference.dart';
 import 'ai/ai_difficulty.dart';
 import 'game_interaction.dart';
 import 'ai/ai_opponent.dart';
@@ -67,6 +69,49 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
   SettingsRepository? _settingsRepository;
   StatisticsRepository? _statisticsRepository;
   UnfinishedMatchRepository? _unfinishedMatchRepository;
+  MatchHistoryRepository? _historyRepository;
+
+  // --- Phase 16.5, Part E: match identity and history capture ---------------
+
+  /// Mints local match ids: unique per process run via the
+  /// counter, and across runs via the start timestamp.
+  static int _matchCounter = 0;
+
+  String _mintMatchId() =>
+      'local-${_now().millisecondsSinceEpoch}-${_matchCounter++}';
+
+  /// The current match's history identity.
+  late String _matchId = _mintMatchId();
+
+  /// The match this one is a rematch of, or null.
+  String? _rematchOfId;
+
+  /// Set by [rematch] so [startMatch] links the new match to
+  /// the one it follows.
+  bool _nextStartIsRematch = false;
+
+  /// When the current session of this match began (epoch ms),
+  /// and how much play the match had already accumulated in
+  /// earlier sessions (a resumed match).
+  int _sessionStartMs = 0;
+  int _elapsedBeforeMs = 0;
+
+  /// The moves played, in spec notation, in order.
+  List<String> _recordedMoves = <String>[];
+
+  /// The state before the most recent applied action, for
+  /// move inference in [onActionApplied].
+  GameState? _stateBeforeAction;
+
+  /// The current match's history identity (its record id).
+  String get matchId => _matchId;
+
+  /// The moves recorded so far, in spec notation.
+  List<String> get recordedMoves => List.unmodifiable(_recordedMoves);
+
+  /// Total play time of the current match so far.
+  int get elapsedMs =>
+      _elapsedBeforeMs + (_now().millisecondsSinceEpoch - _sessionStartMs);
 
   /// Attaches local storage.
   ///
@@ -78,10 +123,12 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
     required SettingsRepository settings,
     required StatisticsRepository statistics,
     required UnfinishedMatchRepository unfinishedMatch,
+    MatchHistoryRepository? history,
   }) {
     _settingsRepository = settings;
     _statisticsRepository = statistics;
     _unfinishedMatchRepository = unfinishedMatch;
+    _historyRepository = history;
   }
 
   /// The settings this controller is running with.
@@ -338,6 +385,16 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
     _showingResult = false;
     _outcomeWinner = null;
     _appFinishReason = null;
+    // Phase 16.5, Part E: a fresh match identity. A rematch
+    // links back to the match it follows; anything else does
+    // not. The history capture starts empty.
+    _rematchOfId = _nextStartIsRematch ? _matchId : null;
+    _nextStartIsRematch = false;
+    _matchId = _mintMatchId();
+    _sessionStartMs = _now().millisecondsSinceEpoch;
+    _elapsedBeforeMs = 0;
+    _recordedMoves = <String>[];
+    _stateBeforeAction = null;
     if (timeControlSeconds != null) {
       _timeControlSeconds = timeControlSeconds;
       _clockExplicit = true;
@@ -390,6 +447,7 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
   /// the app to swap, so the swap is the players' own act and
   /// the match simply restarts with the same settings.
   void rematch() {
+    _nextStartIsRematch = true;
     startMatch(
       config: _state.boardConfig,
       versusAi: _versusAi,
@@ -454,6 +512,9 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
     // An application-layer finish (resign/timeout) ends the match
     // even though the engine state still reads inProgress.
     if (_outcomeWinner != null) return ActionFailure.matchFinished;
+    // Phase 16.5, Part E: remember the pre-action state so the
+    // applied action can be inferred for the history record.
+    _stateBeforeAction = _state;
     final result = GameEngine.apply(_state, _state.currentPlayer, action);
     if (result is SuccessResult) {
       _state = result.state;
@@ -464,6 +525,15 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
 
   @override
   void onActionApplied() {
+    // Phase 16.5, Part E: capture the ply for the history
+    // record (the winning move included — this runs before the
+    // finish branch below).
+    final beforeAction = _stateBeforeAction;
+    _stateBeforeAction = null;
+    if (beforeAction != null) {
+      final action = inferAction(beforeAction, _state);
+      if (action != null) _recordedMoves.add(action.toNotation());
+    }
     if (_state.status == GameStatus.finished) {
       _showingResult = true;
       _stopClock();
@@ -558,6 +628,15 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
     // Phase 16.5: a rematch in progress resumes with its sides
     // as they were — the save carries the human's side.
     _aiPlayer = match.versusAi ? match.humanSide.opponent : kAiPlayer;
+    // Phase 16.5, Part E: the match keeps its identity, its
+    // move list and its accumulated play time across the
+    // resume, so its history record is whole.
+    _matchId = match.matchId ?? _mintMatchId();
+    _rematchOfId = match.rematchOf;
+    _recordedMoves = List<String>.of(match.moves);
+    _elapsedBeforeMs = match.elapsedMs;
+    _sessionStartMs = _now().millisecondsSinceEpoch;
+    _stateBeforeAction = null;
     // Phase 16.5: the resumed match keeps its time control, and
     // the current turn restarts at a full clock (D16.5-4) — the
     // save deliberately stores no deadline.
@@ -579,16 +658,55 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
 
   /// Records a finished match into the local statistics and drops the resumable
   /// match, since a finished match is no longer resumable.
+  ///
+  /// Phase 16.5, Part E: the match is also written to history.
+  /// The history store's finish gate decides whether this
+  /// finish is new: only a first recording folds the match
+  /// into the statistics, so history and statistics can never
+  /// double-count. (Online matches never enter the statistics
+  /// at all — their counters keep their Phase 6 meaning, local
+  /// modes only; the Profile screen says so. Their history
+  /// records are written by the online controller.)
   Future<void> recordFinishedMatch() async {
     final winner = this.winner;
     if (winner == null) return;
     unawaited(_clearUnfinished());
+    final history = _historyRepository;
+    if (history != null) {
+      final added = await history.recordIfNew(_buildRecord(winner));
+      if (!added) return;
+    }
     final stats = _statisticsRepository;
     if (stats == null) return;
     await stats.recordResult(
       boardSize: _state.boardConfig.size,
       difficulty: _difficultyNameFor(_versusAi, _aiDifficulty),
       humanWon: winner == _humanPlayer,
+    );
+  }
+
+  /// The history record for the match that just finished.
+  MatchRecord _buildRecord(PlayerId winner) {
+    final nowMs = _now().millisecondsSinceEpoch;
+    return MatchRecord(
+      id: _matchId,
+      mode: _versusAi ? MatchMode.versusAi : MatchMode.local,
+      boardSize: _state.boardConfig.size,
+      wallsPerPlayer: _state.boardConfig.wallsPerPlayer,
+      mySide: _versusAi ? _humanPlayer : null,
+      winnerSide: winner,
+      finishReason: finishReason ?? FinishReason.goal,
+      opponentLabel: _versusAi
+          ? 'AI · ${_aiDifficulty.name[0].toUpperCase()}'
+                '${_aiDifficulty.name.substring(1)}'
+          : 'Local player',
+      plies: _state.turnNumber,
+      durationMs: elapsedMs,
+      endedAtMs: nowMs,
+      timeControlSeconds: _timeControlSeconds,
+      moves: List<String>.of(_recordedMoves),
+      movesComplete: true,
+      rematchOf: _rematchOfId,
     );
   }
 
@@ -625,6 +743,10 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
           savedAtTurn: _state.turnNumber,
           timeControlSeconds: _timeControlSeconds,
           humanSide: _humanPlayer,
+          matchId: _matchId,
+          moves: List<String>.of(_recordedMoves),
+          elapsedMs: elapsedMs,
+          rematchOf: _rematchOfId,
         ),
       ),
     );

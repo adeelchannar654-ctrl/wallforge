@@ -12,6 +12,7 @@ import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_radii.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
+import '../../../data/local/shared_preferences_history_repository.dart';
 import '../../../data/local/shared_preferences_settings_repository.dart';
 import '../../../domain/wallforge_domain.dart';
 import '../../widgets/app_chrome.dart';
@@ -378,6 +379,7 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
       uid: controller.uid!,
       code: room.code,
       movementAssistance: settings.movementAssistance,
+      history: const SharedPreferencesHistoryRepository(),
     );
     // The match controller fires its cues through the app's feedback
     // layer, with the settings snapshot just loaded applied to it.

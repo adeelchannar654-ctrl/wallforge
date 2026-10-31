@@ -8,6 +8,7 @@ export 'finish_reason.dart';
 export 'game_action.dart';
 export 'game_state.dart';
 export 'game_status.dart';
+export 'match_record.dart';
 export 'player_id.dart';
 export 'time_control.dart';
 export 'wall.dart';

@@ -5180,3 +5180,78 @@ clock + code). Gates: format 187 files 0 changed; analyze
 clean; spec checker OK; oracle unchanged; affected suites
 green (data + quick match + lobby + online controller +
 navigation + online screens, 569 tests).
+
+### Part E — match history (2026-10-31)
+
+Shipped, per D16.5-6. `MatchRecord` (domain model): id,
+mode (local / versusAi / online), board size + walls, my
+side (null in pass-and-play — the record belongs to no
+single player), winner side (null only for abandonment),
+finish reason, opponent label ("AI · Hard" / "Local player"
+ / "Online player" — never an identifier), plies, duration,
+ended-at, time control, the move list in spec notation, a
+`movesComplete` honesty flag, and `rematchOf`.
+Store: `MatchHistoryRepository` with a shared-preferences
+blob (`wallforge.history.v1`, internal schemaVersion 1:
+{records, recordedIds}) and an in-memory twin with identical
+semantics. The **finish gate** is the recorded-ids set
+inside the same blob: `recordIfNew` is the only way in, it
+refuses a known id, and the local controller folds the
+legacy statistics ONLY when the gate accepts — so history
+and statistics can never double-count, across restarts and
+repeated finish observations alike. Bound: 100 records and
+100 gate ids, newest kept (the gate's trade-off is explicit:
+an id evicted from the bounded gate could theoretically be
+re-recorded, but ids are unique per match — room codes
+online, timestamp+counter locally — so an evicted id can
+never be observed again in practice). Delete and clear-all
+remove records but keep the gate, so a cleared match still
+sitting on a result screen cannot re-record itself.
+Tolerance: corrupt blob → empty + recording recovers;
+damaged records skipped individually; a NEWER schema blob
+reads empty and is never overwritten. Existing statistics
+are untouched (migration = preservation): they keep their
+Phase 6 meaning (local modes only) and the Profile screen
+now says exactly that and points to History.
+Move lists are built by `inferAction` (one shared helper):
+the exact single-ply action between two states, null for
+anything else. Locally the controller diffs the pre-action
+state it captures in `attemptAction`; online, consecutive
+snapshots. A multi-ply jump (a client connecting after the
+finish, a reconnect gap) marks the record partial instead of
+guessing. `UnfinishedMatch` carries matchId + moves +
+elapsedMs + rematchOf so a resumed match records whole,
+under its original identity, with its duration accumulated
+across sessions. Online recording happens in the online
+controller at the first terminal snapshot (adopt or echo —
+resign/timeout finishes change no board state), from data
+already in memory: **zero extra Firestore reads or writes**.
+Screens: History (from a new always-visible Home card and
+from Profile) — list with mode + result filters (a
+pass-and-play record is neither Won nor Lost and says who
+won instead), the per-device honesty line up top, clear-all
+with confirmation, empty states for both "nothing yet" and
+"nothing matches"; Detail — every field, the numbered move
+list (with the incomplete-list warning when partial), and
+delete with confirmation; the list reloads on return
+(RouteAware, the Phase 16 Home lesson). The screens state
+plainly that history is per-device and lost on uninstall.
+Online opponent label is generic: the app has no online
+display names yet (Part H introduces generated ones), and
+storing the opponent's uid in a local record was rejected —
+history never holds identifiers.
+Tests: 24 new (repository 9: gate, restart persistence,
+bound, delete/clear gate semantics, corrupt recovery,
+damaged-record tolerance, newer-schema guard, in-memory
+parity; local 6: resign/goal/timeout recording, idempotence
+against a repeated finish call, rematch linking, resume
+wholeness; online 3: mirrored two-client recording,
+abandonment with no winner, late-connect partial list; UI
+6: headlines, filters, detail + delete, clear-all, empty
+state, 390 px at 1.5 scale). One real bug found by a test:
+the in-memory gate trimmed its id set from the wrong end
+(dropping the newest ids instead of the oldest) — fixed to
+mirror the blob store. Gates: format 196 files 0 changed;
+analyze clean; affected suites green (385 in the regression
+batch incl. persistence/firestore integration, navigation,
+Phase 16 matrix, plus the Phase 11/13/14 screen suites).
