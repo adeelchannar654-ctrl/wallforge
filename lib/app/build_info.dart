@@ -41,3 +41,16 @@ const bool kFeatureLeaderboard = bool.fromEnvironment(
   'FEATURE_LEADERBOARD',
   defaultValue: kDebugMode,
 );
+
+/// Whether the optional accounts UI is compiled in (Phase 16.6):
+/// `--dart-define=FEATURE_ACCOUNTS=true` enables it; debug
+/// builds default to on, release builds to OFF until the owner
+/// has finished the Firebase Console setup in
+/// `owner_tests_16_6.md` (providers, fingerprints, templates).
+/// With the flag off the app behaves exactly as it did before
+/// Phase 16.6: anonymous guest identity, no account UI. Mirrors
+/// [kFeatureLeaderboard]'s pattern and reasoning.
+const bool kFeatureAccounts = bool.fromEnvironment(
+  'FEATURE_ACCOUNTS',
+  defaultValue: kDebugMode,
+);
