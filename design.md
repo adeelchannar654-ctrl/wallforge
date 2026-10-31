@@ -614,6 +614,15 @@ Groups:
 
 - Account information.
 - Sign out.
+- Phase 16.6: the section shows the guest/account status and
+  opens the Account screen — Continue with Google, email +
+  password create/sign-in (8-character minimum, show/hide),
+  email verification and password reset, the conflict choice
+  when a sign-in already has an account, sign-out to a fresh
+  guest, clear-this-device's-progress, and account deletion
+  (re-authenticated). The public identity is always the
+  generated display name — never a Google name or an email.
+  Guests are never blocked from any game screen by sign-in.
 
 ---
 

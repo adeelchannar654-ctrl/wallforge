@@ -301,7 +301,19 @@ Firebase services:
 
 ### Firebase Authentication
 
-Used to identify users.
+Used to identify users. Phase 16.6 builds the account layer
+on it: anonymous (guest) sign-in is the default identity, and
+Google / Email-Password credentials **link** onto the guest's
+uid rather than replacing it. One gateway
+(`FirebaseAuthGateway`) owns the SDK and exposes a single
+auth-state stream plus typed results; no other code touches
+the SDK's auth API. The uid is the identity every other
+document keys on, so it must not change while an online
+match or open room exists (enforced client-side by the
+IdentityGuard, Phase 16.6 Part C). Only accounts (never
+guests) carry a cloud profile document
+(`users/{uid}/profile`), and leaderboard writes require a
+non-anonymous token in the Security Rules.
 
 ### Cloud Firestore
 

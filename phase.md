@@ -1744,8 +1744,23 @@ output and the phase pushed. Phase 17 is not started.
 
 ### Result
 
-In progress — recorded in full in `memory.md` §13ab when the
-phase closes.
+Complete in code 2026-11-01. Guest stays the default and
+nothing blocks on sign-in; Google and Email/Password link
+onto the guest's uid (conflicts surface as a plain choice,
+never an auto-merge); the mid-match IdentityGuard freezes
+identity changes during live play; the cloud profile syncs
+under a strict budget (1 read + ≤1 write per sign-in, ≤1
+write per finished match) behind a finish-gate merge that
+cannot double-count; leaderboard rules now require a real
+(non-anonymous, verified-if-email) account while guests keep
+reading and playing; deletion re-authenticates, removes the
+profile first, and aborts if that fails. All gates green in
+the build VM (full suite in `memory.md` §13ab). Not
+owner-verified: native Google sign-in (no device build
+possible here) and the rules suite (emulator cannot boot
+here) — both scripted in `owner_tests_16_6.md`, with the
+rules deploy still pending alongside Phases 10/16.5. Full
+record: `memory.md` §13ab (D16.6-1…13).
 
 ---
 

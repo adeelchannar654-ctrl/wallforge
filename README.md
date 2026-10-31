@@ -23,8 +23,13 @@ manual testing. Phase 16.5 (Game Clock, Resign, Rematch, Match
 History, Achievements, Shareable Results, Weekly Leaderboard) is
 complete in code except the owner-run items listed in `phase.md`
 (rules deployment, device checks, the rules test suite against
-the emulator).** See [`phase.md`](phase.md) for the full plan and
-the per-phase results.
+the emulator). Phase 16.6 (Accounts and Sign-in) is likewise
+complete in code: optional Google / Email-Password accounts
+that upgrade the guest identity in place, a small synced cloud
+profile, and an account-gated leaderboard — owner items in
+`owner_tests_16_6.md` (Console setup, native sign-in device
+checks, the rules deploy and suite).** See [`phase.md`](phase.md)
+for the full plan and the per-phase results.
 
 - **Phase 0 — Project Foundation.** Flutter project, platform targets, folder
   structure, lint/format standards and test structure in place.
@@ -189,6 +194,24 @@ the per-phase results.
   match documents, and behind a compile-time flag that is off
   in release builds unless explicitly enabled. Full record in
   [`memory.md`](memory.md) §13aa.
+- **Phase 16.6 — Accounts and Sign-in.** The guest stays the
+  default: the app starts instantly as an anonymous guest and
+  nothing needs an account. Signing in with Google or
+  Email/Password *links* onto the guest's uid (a credential
+  that already has an account offers a plain choice, never an
+  auto-merge), and identity changes are refused while a match
+  or room is live. A small cloud profile
+  (`users/{uid}/profile` — generated name, achievements, a
+  statistics snapshot; no email, no history) syncs on sign-in
+  behind a merge that cannot double-count a match. The
+  leaderboard now counts only real accounts (verified, for
+  email) in the Security Rules; guests still read it and play
+  online. Accounts sit behind
+  `--dart-define=FEATURE_ACCOUNTS` (on in debug, off in
+  release unless enabled). Data inventory and deletion
+  semantics: [`privacy_notes.md`](privacy_notes.md); owner
+  setup and checks: [`owner_tests_16_6.md`](owner_tests_16_6.md).
+  Full record in [`memory.md`](memory.md) §13ab.
 
 **Firebase still needs owner-side setup in the Console for Android/iOS.**
 The web app is registered and live-verified (above). Android and iOS

@@ -5919,3 +5919,79 @@ firebase.google.com/docs/auth (crawls dated 2026-10-31):
   **not device-verified** (no Android build can run in this
   VM — Gradle networking is blocked; see TOOLS.md). The
   owner script carries the device checks.
+
+## Results (phase close, 2026-11-01)
+
+- **Commits** (local order): `1012486` decisions record ·
+  `28eea8e` FEATURE_ACCOUNTS flag · `01062ac` auth model +
+  typed gateway · `e65993c` link/conflict/sign-out/guard ·
+  `24eed90` account UI · `54ffd38` cloud profile + merge ·
+  `f56f2ca` deletion hardening + privacy notes · `5887666`
+  rules · `e77878b` journey/matrix/owner script · `3818aaf`
+  sync-arming fix · (docs close follows in the same push).
+  Baseline 05f9062.
+- **Gates**: `dart format --set-exit-if-changed` 244 files,
+  0 changed; `flutter analyze` — No issues found; spec
+  checker OK; oracle SHA-256 unchanged
+  (6f1e3c05…94ba96); mojibake scan clean; full `flutter test`
+  — **2,075 tests, all passed**, up from the 1,948 baseline
+  (+127, every one in a named new suite: matrix 26, account
+  screen 17, profile sync 15, cloud profile 12, journey 7,
+  and 50 across the auth state / gateway totality / fake
+  contract / account controller / guard wiring / deletion
+  suites).
+- **Web size**: release `main.dart.js` 3,139,130 → 3,147,992
+  bytes (+8,862, +0.28%) with both flags at their release
+  defaults (off); with FEATURE_ACCOUNTS and
+  FEATURE_LEADERBOARD on: 3,230,550 bytes.
+- **Firestore recount** (added by this phase; the move path
+  is untouched — still 4 reads / 2 writes per online action,
+  zero auth work per move): sign-in sync = 1 profile read +
+  ≤1 write (first sign-in always 1); post-match sync = 0
+  reads + ≤1 write per finished match, accounts only,
+  debounced, skipped when the snapshot is unchanged; account
+  deletion = 1 profile delete; name regeneration = 0 ops
+  (rides the next sync); guests = 0 added ops, and their
+  leaderboard submissions are now skipped client-side rather
+  than spent (a net saving vs 16.5). Profile rules perform
+  no cross-document reads. Modelled heavy account (20
+  finished matches + 2 sign-ins a day): ≈22 writes + 2 reads
+  a day — 0.11% of the Spark 20k writes/day quota.
+- **Rules**: written and syntax-checked; the emulator suite
+  (existing + `rules_phase166.test.mjs`) is **written, not
+  run** — the emulator cannot boot in this VM (Java
+  networking). Owner runs it via `owner_tests_16_6.md` §3,
+  together with the still-pending rules deploy.
+- **Native Google sign-in**: written, not device-verified
+  (Gradle cannot run here); owner script §1/§4.
+- **Residual risks, plainly**: (1) two devices on one account
+  playing simultaneously can overwrite each other's profile
+  snapshot between sign-in merges — self-healing at the next
+  sign-in merge from local stores, worst case a conservative
+  undercount (D16.6-8); (2) a room abandoned by navigating
+  away (lobby disposed) sits outside the IdentityGuard
+  (pre-existing Phase 8 behaviour; abandonment rules clean
+  up); (3) profile rules cannot type-check map/list element
+  values — the tolerant client reader ignores a malformed
+  profile wholesale, so the risk is an owner corrupting only
+  their own sync; (4) leaderboard collusion is reduced (a
+  real account per identity), not eliminated (security_model
+  §16.6).
+- **Open Questions (owner)**: OQ-16.6-1 — Sign in with Apple
+  when iOS ships (Guideline 4.8) or drop Google on iOS?
+  (D16.6-1 records the constraint.) OQ-16.6-2 — publish the
+  Play-required web account-deletion page with the Phase 17
+  listing (gap recorded in `privacy_notes.md`). OQ-16.6-3 —
+  enable email enumeration protection + review sign-up quota
+  in the Console (owner script §2).
+- **Defect caught by the final full-suite gate (and fixed,
+  `fix(accounts)` commit)**: as first written, a finished
+  local match in a guest/unavailable session still scheduled
+  the sync service's 3 s debounce timer, which then outlived
+  the screen — the real-app journey suites failed on the
+  pending timer. The fix is two-part and principled:
+  post-match sync is *armed* only by a sign-in sync (a
+  guest's match schedules nothing at all — the budget's
+  "guests: nothing" taken literally), and the app root now
+  owns and disposes the sync service the factory creates.
+  A regression test covers the unarmed case.
