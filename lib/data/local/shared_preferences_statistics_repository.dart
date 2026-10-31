@@ -57,6 +57,16 @@ class SharedPreferencesStatisticsRepository implements StatisticsRepository {
   }
 
   @override
+  Future<void> replace(MatchStatistics value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(key, jsonEncode(value.toJson()));
+    } on Object {
+      // A failed replace costs the merge's local adoption, not play.
+    }
+  }
+
+  @override
   Future<void> clear() async {
     try {
       final prefs = await SharedPreferences.getInstance();

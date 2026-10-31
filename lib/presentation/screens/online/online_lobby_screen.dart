@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_breakpoints.dart';
 
+import '../../../app/application/account/account_controller.dart';
+import '../../../app/application/account/profile_sync_service.dart';
+import '../../../app/application/account/syncing_history_repository.dart';
 import '../../../app/application/achievements/achievements_service.dart';
 import '../../../app/application/online/leaderboard_submitter.dart';
 import '../../../app/application/online/online_game_controller.dart';
@@ -387,7 +390,15 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
       uid: controller.uid!,
       code: room.code,
       movementAssistance: settings.movementAssistance,
-      history: const SharedPreferencesHistoryRepository(),
+      // Phase 16.6: with accounts compiled in, recorded finishes
+      // also notify the profile sync (one debounced write at
+      // most). Flag off: the raw store, exactly as before.
+      history: kFeatureAccounts
+          ? SyncingHistoryRepository(
+              const SharedPreferencesHistoryRepository(),
+              onRecorded: () => ProfileSyncService.shared?.noteMatchFinished(),
+            )
+          : const SharedPreferencesHistoryRepository(),
       achievements: AchievementsService(
         history: const SharedPreferencesHistoryRepository(),
         statistics: const SharedPreferencesStatisticsRepository(),
@@ -403,6 +414,16 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
               ),
               names: const SharedPreferencesLeaderboardNameRepository(),
               myUid: controller.uid!,
+              // Phase 16.6 (D16.6-10): with accounts compiled in,
+              // a guest's (or unverified email account's) result
+              // is not submitted at all — the rules would deny
+              // the write. Evaluated at submit time from the
+              // account controller when one is installed, else
+              // from the lobby's own session snapshot.
+              accountEligible: kFeatureAccounts
+                  ? () => (AccountService.shared?.state ?? controller.authState)
+                        .canWriteLeaderboard
+                  : null,
             )
           : null,
     );

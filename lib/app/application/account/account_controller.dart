@@ -121,6 +121,14 @@ class AccountController extends ChangeNotifier {
       _state = await gateway.signInAnonymously();
     }
     notifyListeners();
+    // A session restored already signed in (the ordinary case on
+    // a second launch) is a landing on an account state too: the
+    // sign-in hook (profile sync) must run for it, not only for
+    // sign-ins performed through this controller.
+    if (_state.isAccount) {
+      final hook = onAccountSignedIn;
+      if (hook != null) unawaited(hook(_state));
+    }
   }
 
   // --- Connecting -------------------------------------------------------------

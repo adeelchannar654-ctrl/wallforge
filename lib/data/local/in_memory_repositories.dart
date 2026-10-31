@@ -52,6 +52,9 @@ class InMemoryStatisticsRepository implements StatisticsRepository {
   }
 
   @override
+  Future<void> replace(MatchStatistics value) async => _statistics = value;
+
+  @override
   Future<void> clear() async => _statistics = MatchStatistics.empty;
 }
 
@@ -129,5 +132,18 @@ class InMemoryMatchHistoryRepository implements MatchHistoryRepository {
   @override
   Future<void> clear() async {
     _records = [];
+  }
+
+  @override
+  Future<Set<String>?> recordedIds() async => Set<String>.of(_recordedIds);
+
+  @override
+  Future<void> absorbRecordedIds(Set<String> ids) async {
+    _recordedIds.addAll(ids);
+    // Bounded like recordIfNew's gate: insertion order is
+    // chronological, so dropping the first ids drops the oldest.
+    while (_recordedIds.length > MatchHistoryRepository.maxRecords) {
+      _recordedIds.remove(_recordedIds.first);
+    }
   }
 }

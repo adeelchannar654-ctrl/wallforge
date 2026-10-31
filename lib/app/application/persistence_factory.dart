@@ -9,6 +9,10 @@ import '../../data/remote/firestore_settings_repository.dart';
 import '../../data/remote/firestore_statistics_repository.dart';
 import '../../data/remote/firestore_unfinished_match_repository.dart';
 import '../../domain/models/board_config.dart';
+import '../../domain/repositories/repositories.dart';
+import '../build_info.dart';
+import 'account/profile_sync_service.dart';
+import 'account/syncing_history_repository.dart';
 import 'ai/ai_difficulty.dart';
 import 'achievements/achievements_service.dart';
 import 'local_game_controller.dart';
@@ -48,7 +52,7 @@ class PersistenceFactory {
         // uses the local store even in the remote-persistence
         // build (see attachRemote). Achievements evaluate over
         // it (Part F).
-        history: history,
+        history: _syncing(history),
         achievements: AchievementsService(
           history: history,
           statistics: statistics,
@@ -56,6 +60,21 @@ class PersistenceFactory {
         ),
       )
       ..loadPersisted();
+  }
+
+  /// Phase 16.6: with the accounts feature compiled in, the
+  /// controller-facing history is wrapped so each newly recorded
+  /// match notifies the profile sync service. A compile-time
+  /// branch: with the flag off the store passes through
+  /// unwrapped and the history path is exactly the pre-phase
+  /// one. The achievements service keeps the raw store — it
+  /// reads history, it does not record into it.
+  static MatchHistoryRepository _syncing(MatchHistoryRepository inner) {
+    if (!kFeatureAccounts) return inner;
+    return SyncingHistoryRepository(
+      inner,
+      onRecorded: () => ProfileSyncService.shared?.noteMatchFinished(),
+    );
   }
 
   /// Attaches the Firestore-backed repositories and starts the async load.
@@ -95,7 +114,7 @@ class PersistenceFactory {
         ),
         // History stays on the device even here (Phase 16.5):
         // it is never synced, by design.
-        history: history,
+        history: _syncing(history),
         achievements: AchievementsService(
           history: history,
           statistics: statistics,

@@ -73,6 +73,16 @@ class FirestoreStatisticsRepository implements StatisticsRepository {
   }
 
   @override
+  Future<void> replace(MatchStatistics value) async {
+    final path = await _path();
+    if (path == null) return;
+    await _write(path, <String, dynamic>{
+      ...value.toJson(),
+      'schemaVersion': schemaVersion,
+    });
+  }
+
+  @override
   Future<void> clear() async {
     final path = await _path();
     if (path == null) return;

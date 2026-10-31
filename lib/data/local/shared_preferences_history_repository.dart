@@ -88,6 +88,48 @@ class SharedPreferencesHistoryRepository implements MatchHistoryRepository {
     }
   }
 
+  @override
+  Future<Set<String>?> recordedIds() async {
+    // A newer-schema blob must not be merged against a guess.
+    if (await _hasNewerBlob()) return null;
+    final blob = await _readBlob();
+    // Missing or corrupt reads as an empty gate: recordIfNew
+    // would start fresh from the same state, so the merge may
+    // treat this device as having counted nothing.
+    if (blob == null) return <String>{};
+    return blob.recordedIds.toSet();
+  }
+
+  @override
+  Future<void> absorbRecordedIds(Set<String> ids) async {
+    if (ids.isEmpty) return;
+    try {
+      if (await _hasNewerBlob()) return;
+      final blob = await _readBlob();
+      if (blob == null) {
+        // Nothing stored yet (or corrupt): start the gate with
+        // the absorbed ids, exactly as recordIfNew starts fresh.
+        await _writeBlob(
+          records: const [],
+          recordedIds: ids.take(MatchHistoryRepository.maxRecords).toList(),
+        );
+        return;
+      }
+      final merged = <String>[
+        ...blob.recordedIds,
+        for (final id in ids)
+          if (!blob.recordedIds.contains(id)) id,
+      ];
+      await _writeBlob(
+        records: blob.records,
+        recordedIds: merged.take(MatchHistoryRepository.maxRecords).toList(),
+      );
+    } on Object {
+      // A failed absorb costs the merge's protection, not play;
+      // the next sign-in merge retries it.
+    }
+  }
+
   /// Whether the stored blob declares a schema newer than this
   /// build understands (and so must be left alone).
   Future<bool> _hasNewerBlob() async {

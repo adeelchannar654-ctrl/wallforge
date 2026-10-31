@@ -117,6 +117,11 @@ class OnlineLobbyController extends ChangeNotifier {
   /// The signed-in user's id, or null.
   String? get uid => _authState.uid;
 
+  /// The last known auth state (Phase 16.6: the leaderboard
+  /// wiring reads the account gate from it when no account
+  /// controller is installed).
+  AuthState get authState => _authState;
+
   /// Which side the caller plays, or null when not in a room.
   PlayerId? get mySide {
     final id = uid;

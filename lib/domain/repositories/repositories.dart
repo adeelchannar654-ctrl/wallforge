@@ -7,6 +7,7 @@ import 'unfinished_match.dart';
 
 export 'app_settings.dart';
 export 'auth.dart';
+export 'cloud_profile.dart';
 export 'match_statistics.dart';
 export 'room.dart';
 export 'unfinished_match.dart';
@@ -43,6 +44,13 @@ abstract interface class StatisticsRepository {
     required String difficulty,
     required bool humanWon,
   });
+
+  /// Replaces the stored totals wholesale (Phase 16.6): the
+  /// cloud-profile merge adopting a snapshot that provably covers
+  /// every match this device counted. Never used for ordinary
+  /// recording — [recordResult] is the only way totals grow one
+  /// match at a time.
+  Future<void> replace(MatchStatistics value);
 
   /// Discards all stored statistics.
   Future<void> clear();
@@ -102,6 +110,24 @@ abstract interface class MatchHistoryRepository {
   /// reason as in [delete] — "clear all" clears the list, not
   /// the past.
   Future<void> clear();
+
+  /// The finish gate itself (Phase 16.6): every id ever recorded
+  /// on this device. The cloud-profile merge compares this set
+  /// against the ids a cloud statistics snapshot claims to cover,
+  /// which is what makes the merge provably unable to
+  /// double-count a match.
+  ///
+  /// Null means "the store cannot be read truthfully" (a blob
+  /// written by a newer schema version): the caller must not
+  /// merge against a guess, and must leave the store untouched.
+  Future<Set<String>?> recordedIds();
+
+  /// Adds [ids] to the finish gate without adding records
+  /// (Phase 16.6): ids a merged cloud snapshot already counted,
+  /// absorbed so those matches can never be counted again on
+  /// this device. Bounded like the gate itself; a store written
+  /// by a newer schema version is left alone.
+  Future<void> absorbRecordedIds(Set<String> ids);
 }
 
 /// The achievement unlock store (Phase 16.5, Part F): which

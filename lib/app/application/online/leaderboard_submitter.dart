@@ -21,6 +21,7 @@ class LeaderboardSubmitter {
     required this.repository,
     required this.names,
     required this.myUid,
+    this.accountEligible,
   });
 
   /// The leaderboard store.
@@ -31,6 +32,16 @@ class LeaderboardSubmitter {
 
   /// This player's uid.
   final String myUid;
+
+  /// Phase 16.6 (D16.6-10): whether this player may write
+  /// leaderboard entries right now — a real account, verified
+  /// for email — evaluated at submit time, not at construction.
+  /// Null means "no account gate in this build" (the accounts
+  /// feature is off) and submission behaves exactly as it did
+  /// in Phase 16.5. When it returns false the submission is
+  /// skipped entirely, so a guest never spends a write the
+  /// Security Rules would certainly deny.
+  final bool Function()? accountEligible;
 
   /// This player's current generated display name.
   Future<String> displayName() async {
@@ -52,6 +63,8 @@ class LeaderboardSubmitter {
   /// Submits [room]'s finished match, if it qualifies.
   Future<void> submit(Room room) async {
     try {
+      final eligible = accountEligible;
+      if (eligible != null && !eligible()) return;
       if (room.status != RoomStatus.finished) return;
       final winner = room.winnerId;
       if (winner == null) return; // abandoned: never counts

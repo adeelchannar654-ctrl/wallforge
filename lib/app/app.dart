@@ -14,6 +14,7 @@ import '../data/local/shared_preferences_unfinished_match_repository.dart';
 import 'application/account/account_controller.dart';
 import 'application/account/account_factory.dart';
 import 'application/account/identity_guard.dart';
+import 'application/account/profile_sync_service.dart';
 import 'build_info.dart';
 import 'router/app_router.dart';
 import 'theme/app_colors.dart';
@@ -101,6 +102,9 @@ class _WallforgeAppState extends State<WallforgeApp> {
     if (identical(IdentityGuard.shared, _identityGuard)) {
       IdentityGuard.install(null);
     }
+    // The factory installed the sync service when it built the
+    // controller this root owns; clear it with the rest.
+    if (_account != null) ProfileSyncService.install(null);
     _account?.dispose();
     _feedback.dispose();
     super.dispose();
