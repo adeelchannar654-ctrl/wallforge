@@ -17,10 +17,11 @@ it is demonstrated by a test, not asserted.
 
 | Collection | Shape (as implemented, `architecture.md` §11) |
 |---|---|
-| `matches/{code}` | Room + match state: seats (`blue`/`red` with `playerId`, `ready`), `status`, `boardState` (serialised `GameState` or `null` before start), `turnNumber`, `currentPlayerId`, `winnerId`, `version`, `updatedAt`, config (`boardSize`, `wallsPerPlayer`), `schemaVersion`, Phase 10's `abandonedById` |
+| `matches/{code}` | Room + match state: seats (`blue`/`red` with `playerId`, `ready`), `status`, `boardState` (serialised `GameState` or `null` before start), `turnNumber`, `currentPlayerId`, `winnerId`, `version`, `updatedAt`, config (`boardSize`, `wallsPerPlayer`), `schemaVersion`, Phase 10's `abandonedById`, Phase 16.5's `finishReason`, `timeControlSeconds`, `turnDeadline`, `serverUpdatedAt`, `rematchOf` |
 | `matches/{code}/moves/{NNNNNN}` | One record per ply, id is the zero-padded turn number: `turnNumber`, `playerId`, `action`, `notation`, `createdAt`, `resultingVersion` |
 | `matchmaking/{boardKey}/waiting/{uid}` | Queue entry: `uid`, `queuedAt` (document id is the uid) |
 | `matchmaking/{boardKey}/matched/{uid}` | The full room document, written for both players by a successful quick-match claim |
+| `leaderboards/{weekStartMs}/entries/{uid}` | Phase 16.5 weekly entry: `uid`, `displayName` (generated), `points`, `wins`, `losses`, `countedMatches` (map: match id → opponent uid), `opponentCounts`, `weekStartMs`, `lastCountedMatch` |
 | `users/{uid}/{document}` | Private per-user documents (`settings`, `statistics`, `unfinishedMatch`) |
 | `playerRooms/{uid}` | Phase 10 open-room pointer: `openRoomCode` (string or `null`), `updatedAt` |
 
@@ -256,6 +257,109 @@ only the `moves` subcollection, a single-field ordering that needs no
 composite index), and the `FirestoreClient` port has no filter parameter
 by design. If a future phase adds a filtered query, that phase adds the
 index and records it here.
+
+## Phase 16.5: the game clock, resign, rematch seats, and the leaderboard
+
+Phase 16.5 adds four rules surfaces. All of them keep the
+Phase 10 posture: the client is never trusted, every new
+check is proven by a rules test, and what the rules cannot
+prove is written down here rather than implied.
+
+### Server time and the per-move clock
+
+- Every turn-advancing or terminal write (start, move,
+  abandonment claim, resign, timeout claim) must carry
+  `serverUpdatedAt == request.time`, written via the
+  server-timestamp sentinel. A client therefore cannot
+  backdate or postdate a move: the stamp *is* the server's
+  clock at the moment the write lands.
+- A clocked match stores `turnDeadline` (epoch ms). Start
+  and move writes must place it in the band
+  `[request.time + limit − 2 s, request.time + limit + 15 s]`
+  — no less (the mover is the waiting player next and could
+  otherwise shrink the opponent's clock and claim at once),
+  and no more than a small latency slack above (any excess
+  only ever gifts time to the opponent).
+- A **timeout claim** is the waiting player's write: the
+  match must be clocked, the stored deadline plus a 2 s
+  grace must have passed *on the server's clock*, the
+  claimant wins, the board is frozen. For clocked matches
+  this replaces the 120-second inactivity heuristic (the
+  abandonment claim now requires an unclocked match) —
+  the caveat in "Timeout and abandonment" about
+  client-written `updatedAt` does not apply to clocked
+  matches, whose deadline is bounded against server time
+  at every step.
+- A late move and a timeout claim race on the same
+  document; the transactions serialise and exactly one
+  lands, as with the abandonment race. The rules do not
+  refuse a "late move" as such — the claim is the
+  enforcement, and it is available the moment the grace
+  passes.
+- **Resign** is a member's write that finishes the match
+  with the *other* seat as winner and the board frozen;
+  the resigner can never name themselves. The winner a
+  resign or timeout document declares is safe for the
+  opponent's client to believe precisely because these
+  rules bound it to the other seat.
+
+### Rematch seats
+
+A rematch swaps the players' colours, which means the
+matchmaking claim sometimes seats the *claimer* in Blue.
+The matched-room create rule keeps its "claimer is Red"
+shape for ordinary pairings and licenses the swap only
+when the new room's `rematchOf` names a finished (or
+abandoned) match seating the same two players — verified
+with one `get()` of the named document. A forged code, an
+unfinished match, or a match against a third player is
+refused. The host of a matched room is always its Blue
+seat, so in a rematch the acceptor hosts.
+
+### The weekly leaderboard
+
+- An entry write counts **exactly one** finished match,
+  proven by one rules-side `get()`: the match is finished
+  with a decisive winner, its two seats are distinct and
+  one is the writer, the opponent the entry claims is the
+  match's other seat, it ran at least 10 plies, and it
+  ended — by its server stamp — inside the entry's week.
+- The points delta must equal the entitlement that proof
+  yields (3 for the writer's win, 1 for their loss).
+  Wins/losses counters must move consistently, the
+  counted-matches map must gain exactly that one key (a
+  map diff: no removals, no changes, one addition), the
+  per-opponent count rises by one and may not exceed 3,
+  and the week may hold at most 20 counted matches.
+- The week itself is arithmetic, not trust: `weekStartMs`
+  must be a Monday 00:00 UTC (the epoch was a Thursday, so
+  Mondays satisfy `ms % 604800000 == 345600000`), must
+  equal the bucket in the path, and must contain
+  `request.time`. Last week's bucket is closed the moment
+  the new week opens.
+- Display names are generated (Adjective + Noun + two
+  digits) and the rules validate exactly that shape, so
+  no moderation surface exists. The one other legal write
+  is a rename-only update.
+- Reads require sign-in; deletes are never allowed.
+
+**Residual cheating surface, stated plainly.** The entry
+is written by the player's own client. The rules prove
+every counted match is a *real, finished* match the
+writer played, within the caps — but two colluding
+accounts can play real matches against each other and
+farm up to 3 counted matches per pairing per week (and
+20 per week overall), and a player can operate alts as
+opponents. Eliminating that requires a trusted server to
+decide what counts, which the Spark plan cannot run;
+the caps bound the damage, and the app says the same on
+the leaderboard screen itself.
+
+**History and achievements have no rules surface at all:**
+they are per-device, local-only stores. They are
+consequently fakeable by the device's owner, which is
+accepted — they unlock nothing, are never ranked, and
+never feed the leaderboard.
 
 ## Running the rules tests
 

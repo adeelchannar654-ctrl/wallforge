@@ -863,3 +863,45 @@ Before approving a screen:
 - Does it use the Wallforge visual language?
 - Does it avoid unnecessary decoration?
 - Does it preserve the front-facing board style?
+
+---
+
+# 33. Phase 16.5 Surfaces
+
+Added in Phase 16.5, reusing the existing tokens and components
+(§15–§24) rather than introducing a new visual language:
+
+- **Move clock.** A chip beside the player whose turn is timed:
+  timer icon + `m:ss`. Low time (≤ 5 s) swaps the icon to a
+  warning triangle and the semantic label says "low time" — the
+  cue is never colour alone. Threshold announcements (10 s,
+  5 s) travel through a live region. The picker (Off / 15s /
+  30s / 60s) is a chip row in the lobby's create card and in
+  Settings ("Default move clock"); Quick Match's card states
+  its fixed 60 s.
+- **Resign / leave.** A RESIGN action on the local game screen
+  and in the online screen's menu, both behind the shared
+  confirm dialogs (§29 states); leaving an active local match
+  asks first and distinguishes leaving (the match stays
+  resumable) from resigning (it ends).
+- **History.** A list (Home card and Profile button) with
+  mode/result filter chips; each row leads with the outcome in
+  words ("Won · Vs AI", "Blue won · Local") and an icon. The
+  detail screen lists every fact and the numbered move list.
+  Both screens state that history is per-device.
+- **Achievements.** Rows with a trophy/lock icon, the name,
+  the description, and the state in words — "Unlocked · <date>"
+  or "Progress: X of Y" / "Locked". Unlocks arrive as a
+  SnackBar toast with a VIEW action: non-modal, announced,
+  never blocking play.
+- **Share card.** A 600×780 card in the app palette: the final
+  board via the game's own painter, the outcome headline and
+  the fact lines, the WALLFORGE wordmark. One semantic label
+  describes the whole card.
+- **Leaderboard.** Rank rows (number, generated name, points,
+  W–L as text); the player's own row carries a YOU tag and a
+  heavier outline, and pins below the board as "50+" when
+  outside the fetched top. The header carries the reset
+  countdown and the player's generated name with REGENERATE;
+  the footer states the counting rules and the residual
+  collusion limit in plain language.

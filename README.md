@@ -19,7 +19,11 @@ A wall may never remove the last route to either player's goal.
 
 **Phases 0–15 are complete (Phase 15 except owner-run device/browser
 checks); Phase 16 (Testing and QA) is complete except owner-run
-manual testing.** See [`phase.md`](phase.md) for the full plan and
+manual testing. Phase 16.5 (Game Clock, Resign, Rematch, Match
+History, Achievements, Shareable Results, Weekly Leaderboard) is
+complete in code except the owner-run items listed in `phase.md`
+(rules deployment, device checks, the rules test suite against
+the emulator).** See [`phase.md`](phase.md) for the full plan and
 the per-phase results.
 
 - **Phase 0 — Project Foundation.** Flutter project, platform targets, folder
@@ -164,6 +168,27 @@ the per-phase results.
   [`memory.md`](memory.md) §13w for the full record, including the
   per-screen tablet decisions and the landscape bug the tests
   caught (board size floors overflowing short slots).
+- **Phase 16.5 — Game Clock, Resign, Rematch, History,
+  Achievements, Share, Leaderboard.** Resign in every mode with
+  one finish-reason set (goal / resign / timeout / abandon). An
+  optional per-move clock (off / 15 / 30 / 60 s; Quick Match
+  fixed at 60 s), enforced online by server time in the
+  Security Rules — the deadline rides in the same write as each
+  move, so a clocked game costs exactly what an unclocked one
+  does. Rematches swap the players' colours and carry the
+  board, difficulty and clock; online, the swap is licensed by
+  the rules against the finished match. Every finished match is
+  recorded once into a per-device history (move list included)
+  with list/detail screens; local deterministic achievements
+  (17) evaluate over that history; results share as an
+  on-device PNG card plus text (web downloads the PNG; native
+  copies the text and previews the card — the OS share sheet
+  awaits a package decision). The weekly leaderboard is
+  unranked, capped (win 3 / loss 1, 10+ plies, ≤20 matches a
+  week, ≤3 per opponent), rules-validated against the finished
+  match documents, and behind a compile-time flag that is off
+  in release builds unless explicitly enabled. Full record in
+  [`memory.md`](memory.md) §13aa.
 
 **Firebase still needs owner-side setup in the Console for Android/iOS.**
 The web app is registered and live-verified (above). Android and iOS
@@ -196,7 +221,7 @@ condition are unchanged. The initial legal-move counts (3 moves / 128 walls) are
 unchanged. One failure reason, `wallCrosses`, became unreachable and is
 documented as retired rather than removed.
 
-**Test status:** 968 tests pass, with the spec checker reporting `OK` and the
+**Test status:** 1,948 tests pass, with the spec checker reporting `OK` and the
 oracle vectors byte-identical to the reference generator.
 
 ---

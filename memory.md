@@ -5469,3 +5469,70 @@ online end-to-end 2: a 12-ply resign finish boards both
 players mirrored, a short match and an abandonment board
 nobody). Gates: format 221 files 0 changed; analyze clean;
 affected suites green (530).
+
+### Part I — cross-cutting verification (2026-10-31)
+
+**Firestore recount** (`test/perf/phase165_recount_test.dart`,
+measured through the Phase 15 counting client over the real
+repositories; rules-side lookups counted statically from
+`firestore.rules`, as in Phase 15):
+
+| Operation | Client cost | Rules lookups | All-in |
+|---|---|---|---|
+| Move (clocked or not) | 1 txn: 1 get, 2 sets | 1 get (move-record parent) | 4 reads / 2 writes per ply (with both listener deliveries) — **identical for clocked and unclocked**, asserted |
+| Resign | 1 txn: 1 get, 1 set | 0 | one-time |
+| Timeout claim | 1 txn: 1 get, 1 set | 0 | one-time |
+| Abandonment claim | unchanged from Phase 10/15 | 0 | one-time |
+| Rematch claim | 1 txn: 3 sets, 2 deletes, ≤ 5 gets | 2 getAfter (matched docs) + 1 get (rematch target) | one-time |
+| Leaderboard entry (per player) | 1 txn: 1 get, 1 set | 1 get (the match) | 2 reads / 1 write |
+| Leaderboard view | 2 queries + 1 read | 0 | ≤ 54 reads (50 + 1 + 3), cached 5 min |
+| History / achievements / share | 0 | 0 | local only |
+
+Quotas re-checked 2026-10-31 against Firebase's pricing
+page (figures corroborated across the current pricing
+summaries): Spark no-cost is unchanged — 50,000 reads/day,
+20,000 writes/day, 20,000 deletes/day, 1 GiB stored.
+Capacity: a typical ~60-ply game (both players
+board-counted, either finish) costs ≈ 250 reads / ≈ 127
+writes → **≈ 155 games/day, writes still limiting** —
+Phase 15's headline (≈160) essentially unchanged, the
+leaderboard's +2 writes/game being the only delta.
+Leaderboard views alone: 50,000 / 54 ≈ **925 views/day**
+of pure read budget; the 5-minute cache means real view
+volume runs far below the per-view cost. Exactly one match
+listener per online client still (Phase 15 invariant,
+re-asserted by the existing suites + the clock ticker
+existing only while a clocked match is live).
+**Security model**: `security_model.md` gained the
+Phase 16.5 section (server-time discipline, the deadline
+band, resign bounds, the rematch-seat licence, the
+leaderboard proof shape, and the residual collusion
+surface in plain language) and its shapes table now lists
+the new fields and the leaderboard collection.
+**Regression**: two real-app journeys through
+`WallforgeApp` (vs-AI resign → swapped rematch with the AI
+opening → mid-match resize → history detail; and a
+scripted 5×5 goal win → achievement toast → share preview
+→ achievements screen → leaderboard's graceful no-Firebase
+state), a 48-render responsive/accessibility matrix over
+the new screens (6 viewports × 2 UI scales), and the full
+Phase 15/16 lifecycle suites re-run green as part of the
+full suite. **Gates (real output):** format 224 files 0
+changed after formatting; `flutter analyze` — no issues;
+**`flutter test` — 1,948 passed, 0 failed** (serial run,
+12 min 31 s; the count reconciles exactly: 1,767 baseline
++ 11 B + 34 C + 11 D + 24 E + 15 F + 7 G + 25 H + 54 I);
+`flutter build web --release` — built, main.dart.js
+3,139,130 bytes vs Phase 16's 2,896,568 (+8.4% for eight
+features incl. the package:web interop); spec checker OK;
+oracle hash unchanged (6f1e3c05…94ba96); mojibake scan
+clean over tracked files; engine untouched. The JS rules
+suite remains **written, not run** in this VM (the
+emulator cannot boot here — Java networking is blocked;
+the owner's script runs it). Owner manual-test script:
+`owner_tests_16_5.md`. Docs updated: phase.md (16.5
+Result), README (status + feature entry + test count),
+architecture.md §11 (new fields, leaderboard documents,
+local stores), design.md §33 (the new surfaces),
+security_model.md (above). Pushed to GitHub at the end of
+this part; the remote HEAD is stated in the final report.

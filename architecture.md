@@ -361,6 +361,41 @@ matches/{code}/moves/{NNNNNN}           # zero-padded: the id is the ply
   resultingVersion int
 ```
 
+**Phase 16.5 additions to the room document** (all additive,
+`schemaVersion` stays 2): `finishReason` (goal | resign |
+timeout | abandon, written by the transition that ends the
+match), `timeControlSeconds` (0 = off; one of 0/15/30/60;
+immutable), `turnDeadline` (epoch ms; the current turn's
+server-bounded deadline), `serverUpdatedAt` (server
+timestamp sentinel on every turn-advancing or terminal
+write), and `rematchOf` (the finished match's code when
+this room is its rematch).
+
+**Phase 16.5 leaderboard documents**:
+
+```text
+leaderboards/{weekStartMs}              # no document: the id is the
+                                        # week's Monday 00:00 UTC, epoch ms
+  entries/{uid}
+    uid             str                 # == the document id
+    displayName     str                 # generated: "Swift Falcon 42"
+    points          int                 # win 3 / loss 1
+    wins, losses    int
+    countedMatches  map str->uid        # match id -> opponent uid, <= 20
+    opponentCounts  map uid->int        # <= 3 per opponent
+    weekStartMs     int                 # == the bucket id
+    lastCountedMatch str                # the match the last write counted
+```
+
+**Local-only stores (never synced)**: match history
+(`wallforge.history.v1`: records + the finish-gate id set,
+bounded to 100) and achievement unlocks
+(`wallforge.achievements.v1`) live in `shared_preferences`
+on the device. History and achievements read nothing
+online; an online match's history record is built from the
+final snapshot the client already holds. Settings gained
+one field (`defaultTimeControlSeconds`).
+
 ### Why one document holds both roles
 
 The match document **is** the room document; there is no separate `rooms/`

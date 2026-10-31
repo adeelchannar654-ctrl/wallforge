@@ -1614,6 +1614,65 @@ Every part's exit criteria met and gated with real output;
 engine, oracle and spec unchanged; pushed to GitHub. Phase 17
 (Release Preparation) is not started.
 
+### Result
+
+**Complete in code 2026-10-31, except owner-run items**
+(rules deployment to the live project, the rules test suite
+against the emulator, two-device online checks, and Windows
+golden regeneration — scripted in `owner_tests_16_5.md`).
+All eight parts shipped in order, each gated and committed
+separately; the full record, decisions (D16.5-1…9) and gate
+outputs are in `memory.md` §13aa.
+
+- Resign in every mode with one application-layer finish
+  set (goal / resign / timeout / abandon); the rules bound
+  a resign's winner to the other seat.
+- Per-move clock (off / 15 / 30 / 60 s; Quick Match fixed
+  60 s): server-time enforced in the rules (stamped writes,
+  band-checked deadlines, timeout claim after deadline +
+  2 s grace); the deadline rides in the same write as each
+  move — a clocked move costs exactly what an unclocked
+  one does (recount: 1 transaction, 1 read, 2 writes).
+- Rematch completed: sides swap everywhere (the online
+  swap is rules-licensed against the finished match via
+  `rematchOf`), settings and clock carry, proposals lapse
+  at 60 s and the claim transaction now refuses stale
+  entries.
+- Match history: write-once records behind a persisted
+  finish gate (statistics fold through the same gate, so
+  nothing double-counts), bounded at 100, corruption- and
+  newer-schema-tolerant, with move lists and list/detail
+  screens. Per-device only, stated in the UI.
+- Achievements: 17 local deterministic entries (one
+  external: the leaderboard's top-10), pure predicates over
+  history + the legacy statistics snapshot, idempotent
+  unlocks, a non-blocking announced toast.
+- Shareable results: on-device PNG card (1200×1560) + text;
+  web downloads the PNG, native copies text and previews
+  the card. `share_plus` was evaluated and deferred (its
+  native halves cannot be build-verified in the build VM)
+  — the native share sheet is the documented gap.
+- Weekly leaderboard behind `--dart-define=FEATURE_LEADERBOARD`
+  (off in release by default): weekly Monday-UTC buckets,
+  generated display names, win 3 / loss 1 with ply and
+  per-opponent/week caps, every counted match re-validated
+  by the rules against the finished match document; the
+  residual collusion surface is stated in
+  `security_model.md` and on the screen.
+- Firestore recount (Part I): per-move cost unchanged (4
+  reads / 2 writes all-in, as in Phase 15); resign/timeout
+  claim = 1 transaction (1 get, 1 set); rematch claim = 1
+  transaction (3 sets, 2 deletes); leaderboard entry = 1
+  transaction (1 get, 1 set) + 1 rules-side get of the
+  match; a board view ≤ 54 reads (top 50 + own entry +
+  last week's 3), cached 5 minutes — ≈ 925 views would
+  exhaust the 50k daily free reads on their own, and a
+  typical 60-ply game still allows ≈ 155 games/day
+  (writes limiting), essentially Phase 15's headline. Full
+  table in `memory.md` §13aa.
+
+Phase 17 was not started.
+
 ---
 
 # Phase 17 — Release Preparation
