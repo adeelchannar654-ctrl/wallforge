@@ -232,7 +232,7 @@ void main() {
     tearDown(() => service.dispose());
 
     test('a guest sync spends nothing', () async {
-      current = AuthState.signedIn('uid-9');
+      current = const AuthState.signedIn('uid-9');
       await service.syncOnSignIn(current);
       expect(cloud.loads, 0);
       expect(cloud.saves, 0);
@@ -315,7 +315,7 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 40));
       expect(cloud.saves, 2);
       // A guest never writes, changed or not.
-      current = AuthState.signedIn('uid-9');
+      current = const AuthState.signedIn('uid-9');
       await history.recordIfNew(record('m2'));
       service.noteMatchFinished();
       await Future<void>.delayed(const Duration(milliseconds: 40));

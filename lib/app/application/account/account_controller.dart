@@ -320,6 +320,17 @@ class AccountController extends ChangeNotifier {
   /// which identifies nobody.
   Future<AuthResult> deleteAccount({String? password}) {
     return _identityChange(() async {
+      // Deletion is an account operation. A guest's anonymous
+      // identity is not an account — the Account screen says so
+      // and shows no button — and the controller refuses too,
+      // rather than silently destroying the guest's uid (and
+      // with it, the identity their leaderboard entries and
+      // rooms know).
+      if (!_state.isAccount) {
+        return const AuthRejected(
+          AuthFailure(AuthError.unavailable, detail: 'no account to delete'),
+        );
+      }
       // 1. Re-authenticate (freshness) for the current provider.
       if (_state.providerId == AuthProviders.password) {
         if (password == null) {
@@ -348,7 +359,7 @@ class AccountController extends ChangeNotifier {
         if (!removed) {
           return const AuthRejected(
             AuthFailure(
-              AuthError.unknown,
+              AuthError.unavailable,
               detail: 'cloud profile could not be removed',
             ),
           );
