@@ -89,6 +89,15 @@ class ProfileSyncService {
   CloudProfile? _lastSynced;
   Timer? _timer;
 
+  /// Whether a sign-in sync has run for an account in this
+  /// service's lifetime. Post-match syncs are scheduled only
+  /// when armed: a guest's finished match must not schedule
+  /// cloud work at all — not even a timer that later no-ops
+  /// (the budget is "guests: nothing", and an unowned pending
+  /// timer is a lifecycle bug in its own right, as the app's
+  /// journey tests demonstrated).
+  bool _armed = false;
+
   // --- The wiring seam -------------------------------------------------------
 
   static ProfileSyncService? _shared;
@@ -191,11 +200,13 @@ class ProfileSyncService {
   /// (link, sign-in, conflict resolution, app start).
   Future<void> syncOnSignIn(AuthState state) async {
     if (!state.isAccount) {
+      _armed = false;
       _lastSynced = null;
       return;
     }
     final uid = state.uid;
     if (uid == null) return;
+    _armed = true;
     try {
       final gate = await history.recordedIds();
       if (gate == null) return; // Newer local schema: hands off.
@@ -239,8 +250,11 @@ class ProfileSyncService {
 
   /// Notes that a match finished (the history decorator calls
   /// this). The write itself is debounced and skipped entirely
-  /// when the snapshot is unchanged or the player is a guest.
+  /// when the snapshot is unchanged or the player is a guest —
+  /// and nothing is even scheduled until a sign-in sync has
+  /// armed the service for an account (see [_armed]).
   void noteMatchFinished() {
+    if (!_armed) return;
     _timer?.cancel();
     _timer = Timer(debounce, () => unawaited(_syncAfterMatch()));
   }

@@ -41,6 +41,7 @@ class _WallforgeAppState extends State<WallforgeApp> {
   late final FeedbackController _feedback;
   IdentityGuard? _identityGuard;
   AccountController? _account;
+  ProfileSyncService? _profileSync;
 
   @override
   void initState() {
@@ -65,6 +66,7 @@ class _WallforgeAppState extends State<WallforgeApp> {
       final account = AccountFactory.firebase(
         guard: guard,
         clearLocalProgress: _clearDeviceProgress,
+        onSyncCreated: (sync) => _profileSync = sync,
       );
       _account = account;
       AccountService.install(account);
@@ -103,8 +105,10 @@ class _WallforgeAppState extends State<WallforgeApp> {
       IdentityGuard.install(null);
     }
     // The factory installed the sync service when it built the
-    // controller this root owns; clear it with the rest.
+    // controller this root owns; clear and dispose it with the
+    // rest (it holds the post-match debounce timer).
     if (_account != null) ProfileSyncService.install(null);
+    _profileSync?.dispose();
     _account?.dispose();
     _feedback.dispose();
     super.dispose();

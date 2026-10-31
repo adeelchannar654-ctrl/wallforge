@@ -28,6 +28,7 @@ abstract final class AccountFactory {
     Future<void> Function(AuthState state)? onAccountSignedIn,
     Future<bool> Function()? deleteCloudProfile,
     Future<void> Function()? clearLocalProgress,
+    void Function(ProfileSyncService sync)? onSyncCreated,
   }) {
     final gateway = FirebaseAuthGateway();
     final sync = ProfileSyncService(
@@ -42,6 +43,9 @@ abstract final class AccountFactory {
       currentAuth: gateway.current,
     );
     ProfileSyncService.install(sync);
+    // The caller owns the sync service's lifecycle: it holds a
+    // debounce timer, and whoever creates it must dispose it.
+    onSyncCreated?.call(sync);
     return AccountController(
       gateway: gateway,
       guard: guard,

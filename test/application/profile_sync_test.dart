@@ -322,6 +322,28 @@ void main() {
       expect(cloud.saves, 2);
     });
 
+    test(
+      'post-match sync is not even scheduled before a sign-in sync',
+      () async {
+        // The service is not armed: no timer, no write, even
+        // though the current identity is an account. (In the app
+        // this is the guest/unavailable case — a pending timer
+        // outliving the screen was a real defect the journey
+        // suites caught.)
+        await history.recordIfNew(record('m1'));
+        service.noteMatchFinished();
+        await Future<void>.delayed(const Duration(milliseconds: 40));
+        expect(cloud.saves, 0);
+        // After a sign-in sync arms it, the same note writes.
+        await service.syncOnSignIn(account);
+        final savesAfterSignIn = cloud.saves;
+        await history.recordIfNew(record('m2'));
+        service.noteMatchFinished();
+        await Future<void>.delayed(const Duration(milliseconds: 40));
+        expect(cloud.saves, savesAfterSignIn + 1);
+      },
+    );
+
     test('a newer-schema local store stops the merge entirely', () async {
       SharedPreferences.setMockInitialValues({
         'wallforge.history.v1': jsonEncode({
