@@ -22,6 +22,7 @@ it is demonstrated by a test, not asserted.
 | `matchmaking/{boardKey}/waiting/{uid}` | Queue entry: `uid`, `queuedAt` (document id is the uid) |
 | `matchmaking/{boardKey}/matched/{uid}` | The full room document, written for both players by a successful quick-match claim |
 | `leaderboards/{weekStartMs}/entries/{uid}` | Phase 16.5 weekly entry: `uid`, `displayName` (generated), `points`, `wins`, `losses`, `countedMatches` (map: match id → opponent uid), `opponentCounts`, `weekStartMs`, `lastCountedMatch` |
+| `users/{uid}/profile` | Phase 16.6 cloud profile: `schemaVersion`, `displayName` (generated), `nameGeneration`, `achievements` (map, ≤64), `statistics` (counters + two bucket maps), `statisticsRecordIds` (≤100), `updatedAtMs`. No email field exists. |
 | `users/{uid}/{document}` | Private per-user documents (`settings`, `statistics`, `unfinishedMatch`) |
 | `playerRooms/{uid}` | Phase 10 open-room pointer: `openRoomCode` (string or `null`), `updatedAt` |
 
@@ -361,14 +362,63 @@ consequently fakeable by the device's owner, which is
 accepted — they unlock nothing, are never ranked, and
 never feed the leaderboard.
 
+## Phase 16.6: accounts — what changes and what does not
+
+- **Leaderboard writes now require a real account.** The
+  create/update/rename rules additionally require
+  `lbAccountOk()`: the token's `firebase.sign_in_provider`
+  is not `anonymous`, and for the `password` provider
+  `email_verified` is true. Reads stay signed-in-only
+  (guests can view), and online play — rooms, Quick Match,
+  moves — stays open to guests exactly as before. The check
+  denies only the anonymous provider it can see; a token
+  with no provider claim is not treated as anonymous
+  (Firebase always sets the claim on real tokens).
+- **What this does and does not fix.** The multi-account /
+  collusion surface above is *reduced, not eliminated*:
+  farming now costs a real Google account or a verified
+  email per identity instead of a free anonymous account —
+  plus Firebase's own creation quotas (100/hour per IP) and
+  the unchanged per-pairing (3) and per-week (20) caps.
+  Colluding *real* accounts can still farm within those
+  caps. Nothing here pretends otherwise.
+- **The cloud profile** (`users/{uid}/profile`) is the one
+  new document. Owner-only, and unlike the Phase 6/7 private
+  documents it is shape-validated: closed field set, the
+  generated-name pattern (there is no email field to write),
+  bounded counters, capped collections (64 achievements,
+  100 covered match ids), and a not-from-the-future write
+  stamp. The general `users/{uid}` wildcard was narrowed by
+  exactly this one document so it cannot grant an
+  unvalidated profile write alongside the validated match;
+  every other private path keeps its owner-only behaviour.
+  Rules cannot check map/list element types exhaustively;
+  a mistyped element makes the owner's own client ignore
+  the whole profile, so the residual risk is an owner
+  corrupting only their own sync.
+- **Identity changes are guarded client-side, not by
+  rules:** the uid cannot change while an online match or
+  an open room exists (Part C's IdentityGuard), because
+  seats, queue entries and leaderboard entitlement are all
+  keyed by uid. Linking a credential keeps the uid, so a
+  linked account inherits its guest identity's documents
+  with no rules-visible change at all.
+
 ## Running the rules tests
 
 ```sh
 cd tool/rules_tests && npm install   # once
 cd ../..
 firebase emulators:exec --only firestore --project demo-wallforge \
-  "node --test tool/rules_tests/test/rules.test.mjs"
+  "node --test tool/rules_tests/test/"
 ```
+
+(The directory form runs both suites: `rules.test.mjs` —
+Phases 10/16.5 — and `rules_phase166.test.mjs` — the account
+gate and profile rules. The 16.6 file was written in an
+environment where the emulator cannot boot and is recorded
+as written-not-run until the owner's pass in
+`owner_tests_16_6.md`.)
 
 The suite runs against the Firestore emulator with the repository's real
 `firestore.rules` and needs a Java runtime for the emulator. Recorded

@@ -664,6 +664,24 @@ service cloud.firestore {
         function lbAfter() { return request.resource.data; }
         function lbBefore() { return resource.data; }
 
+        // Phase 16.6 (D16.6-10): leaderboard entries may be
+        // written only by a real account — a non-anonymous
+        // sign-in, and for email accounts a VERIFIED email.
+        // Guests can read the board and play online exactly as
+        // before; their results simply do not count. The check
+        // denies only what it can see: a token carrying no
+        // provider claim at all (the rules test harness's
+        // claim-less contexts) is not treated as anonymous —
+        // Firebase always sets firebase.sign_in_provider on
+        // real tokens, anonymous ones included.
+        function lbAccountOk() {
+          let provider = request.auth.token
+            .get('firebase', {}).get('sign_in_provider', '');
+          return provider != 'anonymous'
+            && (provider != 'password'
+                || request.auth.token.get('email_verified', false) == true);
+        }
+
         function lbShape(d) {
           return d.keys().hasOnly([
               'uid', 'displayName', 'points', 'wins', 'losses',
@@ -783,8 +801,8 @@ service cloud.firestore {
         }
 
         allow read: if signedIn();
-        allow create: if signedIn() && lbCreateValid();
-        allow update: if signedIn()
+        allow create: if signedIn() && lbAccountOk() && lbCreateValid();
+        allow update: if signedIn() && lbAccountOk()
           && (lbUpdateValid() || lbRenameValid());
         allow delete: if false;
       }
@@ -793,9 +811,76 @@ service cloud.firestore {
     // ------------------------------------------------------ per-player private
 
     // Phase 6/7 persistence: settings, statistics and the unfinished match are
-    // the owning player's documents and nobody else's.
+    // the owning player's documents and nobody else's. Phase 16.6 narrows
+    // this wildcard by exactly one document: `profile` is carved out (the
+    // condition below) because its own match validates the document's shape
+    // — a general allow here would grant the same write without validation,
+    // and Firestore grants when ANY matching rule allows. Every other path
+    // keeps the owner-only behaviour the existing rules tests prove,
+    // including nested ones like settings/current.
     match /users/{userId}/{document=**} {
-      allow read, write: if signedIn() && uid() == userId;
+      allow read, write: if signedIn() && uid() == userId
+        && document != 'profile'
+        && !document.matches('^profile/.+');
+    }
+
+    // Phase 16.6 (Part E/G): the cloud profile — the small document an
+    // account adds. Owner-only, and writes are shape-checked: the field
+    // set is closed, the display name is the generated pattern (never a
+    // Google name, never an email — there is deliberately no email field
+    // to write), counters are bounded non-negative ints, and the two
+    // collections are size-capped exactly as the client model caps them
+    // (64 achievements, 100 covered match ids). Map/list *element* types
+    // cannot be checked exhaustively in rules; a mistyped element makes
+    // the owner's own client ignore the whole profile (tolerant reader),
+    // so the residual risk is the owner corrupting only their own sync.
+    match /users/{userId}/profile {
+      function profileValid() {
+        let d = request.resource.data;
+        return d.keys().hasOnly([
+            'schemaVersion', 'displayName', 'nameGeneration',
+            'achievements', 'statistics', 'statisticsRecordIds',
+            'updatedAtMs',
+          ])
+          && d.keys().hasAll([
+            'schemaVersion', 'displayName', 'nameGeneration',
+            'achievements', 'statistics', 'statisticsRecordIds',
+            'updatedAtMs',
+          ])
+          && d.schemaVersion is int && d.schemaVersion == 1
+          && d.displayName is string
+          && d.displayName.matches(
+              '^[A-Z][a-z]+ [A-Z][a-z]+ [0-9][0-9]$')
+          && d.nameGeneration is int
+          && d.nameGeneration >= 0 && d.nameGeneration <= 100000
+          && d.achievements is map && d.achievements.size() <= 64
+          && d.statistics is map
+          && d.statistics.keys().hasOnly([
+            'matchesPlayed', 'humanWins', 'humanLosses',
+            'byBoardSize', 'byDifficulty',
+          ])
+          && d.statistics.keys().hasAll([
+            'matchesPlayed', 'humanWins', 'humanLosses',
+            'byBoardSize', 'byDifficulty',
+          ])
+          && d.statistics.matchesPlayed is int
+          && d.statistics.matchesPlayed >= 0
+          && d.statistics.matchesPlayed <= 1000000
+          && d.statistics.humanWins is int && d.statistics.humanWins >= 0
+          && d.statistics.humanLosses is int
+          && d.statistics.humanLosses >= 0
+          && d.statistics.byBoardSize is map
+          && d.statistics.byDifficulty is map
+          && d.statisticsRecordIds is list
+          && d.statisticsRecordIds.size() <= 100
+          && d.updatedAtMs is int
+          && notFromTheFuture(d.updatedAtMs);
+      }
+
+      allow read: if signedIn() && uid() == userId;
+      allow create, update: if signedIn() && uid() == userId
+        && profileValid();
+      allow delete: if signedIn() && uid() == userId;
     }
 
     // Phase 10's open-room pointer: the client-side guard against one player
