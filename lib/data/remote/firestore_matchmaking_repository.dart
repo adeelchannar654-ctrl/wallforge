@@ -238,11 +238,21 @@ class FirestoreMatchmakingRepository implements MatchmakingRepository {
   Future<Room?> _claim(
     BoardConfig config,
     String uid,
-    FirestoreDocument candidate,
-  ) async {
+    FirestoreDocument candidate, {
+    int timeControlSeconds = 60,
+    bool swapSeats = false,
+    String? rematchOfCode,
+  }) async {
     final otherUid = candidate.data['uid'];
     if (otherUid is! String || otherUid.isEmpty) return null;
-    final room = _buildRoom(config, uid, otherUid);
+    final room = _buildRoom(
+      config,
+      uid,
+      otherUid,
+      timeControlSeconds: timeControlSeconds,
+      swapSeats: swapSeats,
+      rematchOfCode: rematchOfCode,
+    );
     if (room == null) return null;
 
     try {
@@ -273,6 +283,16 @@ class FirestoreMatchmakingRepository implements MatchmakingRepository {
         final stillWaiting = await txn.get(candidate.path);
         if (stillWaiting == null) return null;
         if (stillWaiting['uid'] != otherUid) return null; // entry was replaced
+        // Phase 16.5: and still *fresh* — a rematch proposal
+        // expires with the queue's staleness window (60 s), so
+        // an accept that arrives after the lapse must not seat
+        // anyone. findMatch's candidates are pre-reaped to fresh
+        // entries, so this only bites the claimPlayer path,
+        // whose entry is read directly.
+        final queuedAt = stillWaiting['queuedAt'];
+        if (queuedAt is! int || queuedAt < _nowMs - staleAfter.inMilliseconds) {
+          return null;
+        }
 
         // 3. Is the candidate already in another *live* match? A player who
         //    matched earlier can still have a leftover queue entry — from an
@@ -307,31 +327,44 @@ class FirestoreMatchmakingRepository implements MatchmakingRepository {
 
   /// The room for a successful pairing, or null if no code could be produced.
   ///
-  /// The player who was *already waiting* becomes the host in Blue, matching the
-  /// convention of a code room: whoever set the room up is Blue, and Blue moves
-  /// first (`game_spec.md` R-PLAYER-07).
+  /// By default the player who was *already waiting* becomes the host in
+  /// Blue, matching the convention of a code room: whoever set the room up
+  /// is Blue, and Blue moves first (`game_spec.md` R-PLAYER-07).
+  ///
+  /// A rematch ([swapSeats]) exchanges the colours relative to
+  /// the finished match: the claimer takes Blue, the waiting
+  /// player takes Red. The host is always the Blue seat (the
+  /// matched-create rule requires `hostId == blue.playerId`), so
+  /// hosting follows the colour, not the proposer — in a rematch
+  /// the acceptor hosts and starts the match.
   Room? _buildRoom(
     BoardConfig config,
     String uid,
     String waitingUid, {
     int timeControlSeconds = 60,
+    bool swapSeats = false,
+    String? rematchOfCode,
   }) {
     final code = RoomCode.tryParse(codeGenerator.generate());
     if (code == null) return null;
     final now = _nowMs;
+    final blueUid = swapSeats ? uid : waitingUid;
+    final redUid = swapSeats ? waitingUid : uid;
     return Room(
       code: code.value,
       status: RoomStatus.waiting,
       boardConfig: config,
-      hostId: waitingUid,
-      blue: RoomSeat(playerId: waitingUid),
-      red: RoomSeat(playerId: uid),
+      hostId: blueUid,
+      blue: RoomSeat(playerId: blueUid),
+      red: RoomSeat(playerId: redUid),
       createdAtMs: now,
       updatedAtMs: now,
       // Quick Match's clock is fixed at 60 s per move (Phase
       // 16.5): one default for everyone keeps the queue a single
-      // pool keyed by board config alone.
+      // pool keyed by board config alone. A rematch claim passes
+      // the finished match's own control instead.
       timeControlSeconds: timeControlSeconds,
+      rematchOf: rematchOfCode,
     );
   }
 
@@ -392,6 +425,9 @@ class FirestoreMatchmakingRepository implements MatchmakingRepository {
   Future<MatchmakingResult> claimPlayer({
     required BoardConfig config,
     required String candidateUid,
+    int timeControlSeconds = 0,
+    bool swapSeats = false,
+    String? rematchOfCode,
   }) async {
     final uid = await userId();
     if (uid == null || uid.isEmpty) {
@@ -427,6 +463,9 @@ class FirestoreMatchmakingRepository implements MatchmakingRepository {
       config,
       uid,
       FirestoreDocument(path: _waitingPath(config, candidateUid), data: entry),
+      timeControlSeconds: timeControlSeconds,
+      swapSeats: swapSeats,
+      rematchOfCode: rematchOfCode,
     );
     if (room != null) return MatchmakingResult.matched(room);
 

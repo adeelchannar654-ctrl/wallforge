@@ -31,6 +31,9 @@ class _FakeMatchmaking implements MatchmakingRepository {
   Future<MatchmakingResult> claimPlayer({
     required BoardConfig config,
     required String candidateUid,
+    int timeControlSeconds = 0,
+    bool swapSeats = false,
+    String? rematchOfCode,
   }) async {
     claimedCandidate = candidateUid;
     return MatchFound(_room(code: 'NEW123', createdAtMs: 2000));
@@ -94,6 +97,7 @@ void main() {
       config: const BoardConfig(),
       finishedCode: 'OLD123',
       finishedCreatedAtMs: 1000,
+      finishedTimeControlSeconds: 0,
       pollInterval: const Duration(milliseconds: 30),
     );
   });

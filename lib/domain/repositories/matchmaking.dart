@@ -159,9 +159,19 @@ abstract interface class MatchmakingRepository {
   /// rather than automatic. Returns [MatchRejected] with
   /// [MatchmakingFailureReason.pairingFailed] when the candidate is no
   /// longer waiting or the claim cannot commit.
+  ///
+  /// Phase 16.5: a rematch claim passes [swapSeats] (the two
+  /// players exchange colours relative to the finished match),
+  /// the finished match's [timeControlSeconds], and its code as
+  /// [rematchOfCode], which the new room records in `rematchOf`.
+  /// The Security Rules license the swapped seating only when
+  /// `rematchOf` names a finished match between the same pair.
   Future<MatchmakingResult> claimPlayer({
     required BoardConfig config,
     required String candidateUid,
+    int timeControlSeconds = 0,
+    bool swapSeats = false,
+    String? rematchOfCode,
   });
 }
 

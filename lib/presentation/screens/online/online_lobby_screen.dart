@@ -396,6 +396,7 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
             config: room.boardConfig,
             finishedCode: room.code,
             finishedCreatedAtMs: room.createdAtMs,
+            finishedTimeControlSeconds: room.timeControlSeconds,
           )
         : null;
     await match.connect();

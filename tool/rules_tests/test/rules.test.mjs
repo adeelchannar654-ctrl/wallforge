@@ -61,6 +61,7 @@ function roomDoc(overrides = {}) {
     finishReason: null,
     timeControlSeconds: 0,
     turnDeadline: null,
+    rematchOf: null,
     ...overrides,
   };
 }
@@ -968,7 +969,8 @@ test('rematch (phase 11): a claim after a finished match overwrites the old pair
   // Alice proposes (a plain queue entry, exactly like Quick Match's), and
   // Bob accepts with the standard claim transaction: both queue entries
   // consumed, a NEW room created, and both matched documents overwritten
-  // in the same commit. Fresh seats: the proposer hosts as Blue.
+  // in the same commit. This is the generic claim shape (claimer takes
+  // Red); a Phase 16.5 rematch swaps the seats instead — see below.
   await seed(`matchmaking/${BOARD_KEY}/waiting/alice`, { uid: 'alice', queuedAt: NOW });
   const payload = roomDoc({
     code: 'RMT456',
@@ -983,6 +985,57 @@ test('rematch (phase 11): a claim after a finished match overwrites the old pair
       txn.set(matchedRef(bob, 'bob'), payload);
     }),
   );
+});
+
+test('rematch (phase 16.5): swapped seats are licensed only by a real finished match', async () => {
+  const finished = roomDoc({
+    code: 'OLD999',
+    status: 'finished',
+    red: { playerId: 'bob', ready: true },
+    winnerId: 'alice',
+    version: 40,
+  });
+  await seed('matches/OLD999', finished);
+  await seed(`matchmaking/${BOARD_KEY}/waiting/alice`, { uid: 'alice', queuedAt: NOW });
+  // Bob accepts Alice's proposal with the seats SWAPPED: Bob (the
+  // finished match's Red) takes Blue and hosts; Alice takes Red.
+  // `rematchOf` names the finished match, and the rules verify it.
+  const swapped = roomDoc({
+    code: 'RMT789',
+    hostId: 'bob',
+    blue: { playerId: 'bob', ready: false },
+    red: { playerId: 'alice', ready: false },
+    rematchOf: 'OLD999',
+  });
+  const claimWith = (payload) => runTransaction(bob, async (txn) => {
+    txn.set(doc(bob, `matches/${payload.code}`), payload);
+    txn.set(matchedRef(bob, 'alice'), payload);
+    txn.set(matchedRef(bob, 'bob'), payload);
+  });
+  await assertSucceeds(
+    runTransaction(bob, async (txn) => {
+      txn.delete(waitingRef(bob, 'alice'));
+      txn.set(doc(bob, 'matches/RMT789'), swapped);
+      txn.set(matchedRef(bob, 'alice'), swapped);
+      txn.set(matchedRef(bob, 'bob'), swapped);
+    }),
+  );
+  // The same swapped shape without the licence is refused.
+  await assertFails(claimWith({ ...swapped, code: 'RMT790', rematchOf: null }));
+  // A forged target: no such match.
+  await assertFails(claimWith({ ...swapped, code: 'RMT791', rematchOf: 'NOPE42' }));
+  // A real but UNFINISHED match between the pair is no licence.
+  await seed('matches/LIVE42', startedRoom({ code: 'LIVE42' }));
+  await assertFails(claimWith({ ...swapped, code: 'RMT792', rematchOf: 'LIVE42' }));
+  // A finished match against somebody else is no licence either.
+  await seed('matches/OLD555', roomDoc({
+    code: 'OLD555',
+    status: 'finished',
+    red: { playerId: 'carol', ready: true },
+    winnerId: 'alice',
+    version: 9,
+  }));
+  await assertFails(claimWith({ ...swapped, code: 'RMT793', rematchOf: 'OLD555' }));
 });
 
 test('quick match: a matched document without its room is denied', async () => {

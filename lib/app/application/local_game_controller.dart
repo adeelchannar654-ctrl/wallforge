@@ -24,7 +24,10 @@ import 'ai/ai_opponent.dart';
 /// hang. A short, fixed delay is predictable and costs nothing.
 const Duration kAiThinkDelay = Duration(milliseconds: 300);
 
-/// The player the AI controls in a versus-AI match.
+/// The player the AI controls in a versus-AI match started
+/// fresh. A rematch swaps the sides (Phase 16.5), so the
+/// controller tracks the live assignment in a field seeded
+/// from this constant.
 const PlayerId kAiPlayer = PlayerId.red;
 
 /// Phase 4 application layer: local pass-and-play game controller.
@@ -128,6 +131,10 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
   /// Phase 5: optional offline AI opponent.
   bool _versusAi = false;
   AiDifficulty _aiDifficulty = AiDifficulty.easy;
+
+  /// The side the AI currently plays (Phase 16.5): [kAiPlayer]
+  /// in a fresh match, swapped by a rematch.
+  PlayerId _aiPlayer = kAiPlayer;
   Timer? _aiTimer;
 
   /// The AI pawn's cell on its own previous turn, so it can avoid stepping
@@ -158,7 +165,14 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
   bool get isAiTurn =>
       _versusAi &&
       _state.status == GameStatus.inProgress &&
-      _state.currentPlayer == kAiPlayer;
+      _state.currentPlayer == _aiPlayer;
+
+  /// The side the human plays in a vs-AI match (Blue in a fresh
+  /// match, Red in a rematch — Phase 16.5's side swap).
+  PlayerId get humanSide => _humanPlayer;
+
+  /// The side the AI plays in a vs-AI match.
+  PlayerId get aiSide => _aiPlayer;
 
   /// The winner: the engine's, for a goal finish, or the
   /// application-layer outcome for a resign/timeout finish.
@@ -252,7 +266,7 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
       _stopClock();
       return;
     }
-    if (_versusAi && _state.currentPlayer == kAiPlayer) {
+    if (_versusAi && _state.currentPlayer == _aiPlayer) {
       _stopClock();
       return;
     }
@@ -317,6 +331,7 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
     bool versusAi = false,
     AiDifficulty aiDifficulty = AiDifficulty.easy,
     int? timeControlSeconds,
+    PlayerId? humanSide,
   }) {
     _state = GameState.initial(config);
     resetInteraction();
@@ -329,6 +344,11 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
     }
     _versusAi = versusAi;
     _aiDifficulty = aiDifficulty;
+    // Phase 16.5: the human's side in a vs-AI match — Blue for
+    // a fresh match (the default the difficulty screen states),
+    // Red for a rematch, where the sides swap. Pass-and-play
+    // has no fixed human side; the field rests at the default.
+    _aiPlayer = versusAi ? (humanSide ?? PlayerId.blue).opponent : kAiPlayer;
     _aiPreviousCell = null;
     _aiVisitOrder.clear();
     _cancelAiTurn();
@@ -344,20 +364,38 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
   }
 
   /// Restart the current match with same config and the same opponent.
+  ///
+  /// A restart keeps the sides as they are; only a rematch
+  /// exchanges them.
   void restart() {
     startMatch(
       config: _state.boardConfig,
       versusAi: _versusAi,
       aiDifficulty: _aiDifficulty,
+      timeControlSeconds: _timeControlSeconds,
+      humanSide: _versusAi ? _humanPlayer : null,
     );
   }
 
-  /// Start a rematch (same config, swap who goes first if desired).
+  /// Start a rematch: same board, same opponent, same clock —
+  /// and the sides swap (Phase 16.5).
+  ///
+  /// Whoever moved first in the finished match moves second in
+  /// this one: in vs-AI the human takes the other colour and
+  /// the AI opens as Blue; online, the seats exchange in the
+  /// new room. Blue still moves first (R-PLAYER-07) — it is
+  /// the *players* who change colours, never the rule. In
+  /// pass-and-play the two players exchange colours physically
+  /// on the shared screen; there is no per-player identity in
+  /// the app to swap, so the swap is the players' own act and
+  /// the match simply restarts with the same settings.
   void rematch() {
     startMatch(
       config: _state.boardConfig,
       versusAi: _versusAi,
       aiDifficulty: _aiDifficulty,
+      timeControlSeconds: _timeControlSeconds,
+      humanSide: _versusAi ? _humanPlayer.opponent : null,
     );
   }
 
@@ -517,6 +555,9 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
     _state = match.gameState;
     _versusAi = match.versusAi;
     _aiDifficulty = _difficultyFromName(match.aiDifficulty);
+    // Phase 16.5: a rematch in progress resumes with its sides
+    // as they were — the save carries the human's side.
+    _aiPlayer = match.versusAi ? match.humanSide.opponent : kAiPlayer;
     // Phase 16.5: the resumed match keeps its time control, and
     // the current turn restarts at a full clock (D16.5-4) — the
     // save deliberately stores no deadline.
@@ -567,8 +608,7 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
   }
 
   /// The player a human controls; the AI always takes the other side.
-  static PlayerId get _humanPlayer =>
-      kAiPlayer == PlayerId.red ? PlayerId.blue : PlayerId.red;
+  PlayerId get _humanPlayer => _aiPlayer.opponent;
 
   /// Saves the in-progress match so it can be resumed after a restart.
   void _saveUnfinished() {
@@ -584,6 +624,7 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
           aiDifficulty: _difficultyNameFor(_versusAi, _aiDifficulty),
           savedAtTurn: _state.turnNumber,
           timeControlSeconds: _timeControlSeconds,
+          humanSide: _humanPlayer,
         ),
       ),
     );
@@ -615,7 +656,7 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
   /// Remembers the AI pawn's current cell and position for loop avoidance.
   void _recordAiPosition() {
     if (!_versusAi) return;
-    _aiPreviousCell ??= _state.pawnPosition(kAiPlayer);
+    _aiPreviousCell ??= _state.pawnPosition(_aiPlayer);
     _aiVisitOrder[AiOpponent.positionKey(_state)] = _state.turnNumber;
   }
 
@@ -666,7 +707,7 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
     final action = await AiOpponent.chooseActionAsync(
       _state,
       _aiDifficulty,
-      kAiPlayer,
+      _aiPlayer,
       previousCell: _aiPreviousCell,
       visitOrder: _aiVisitOrder,
     );
@@ -683,7 +724,7 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
   /// Applies the AI's chosen action through the shared interaction layer,
   /// exactly as a human action is. The AI never bypasses validation.
   void _playAiAction(GameAction action) {
-    _aiPreviousCell = _state.pawnPosition(kAiPlayer);
+    _aiPreviousCell = _state.pawnPosition(_aiPlayer);
     setModeSilently(InteractionMode.move);
     final failure = attemptAction(action);
     if (failure == null) {

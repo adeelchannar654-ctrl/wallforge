@@ -123,6 +123,7 @@ class Room {
     this.timeControlSeconds = 0,
     this.turnDeadlineMs,
     this.serverUpdatedAtMs,
+    this.rematchOf,
   });
 
   /// The shareable room code, also the document id.
@@ -232,6 +233,15 @@ class Room {
   /// the repositories overlay the sentinel at write time.
   final int? serverUpdatedAtMs;
 
+  /// The room code of the finished match this room is a rematch
+  /// of (Phase 16.5), or null for a first pairing.
+  ///
+  /// Written once at creation by the matchmaking claim that
+  /// builds a rematch room, pinned by the rules afterwards, and
+  /// read by history (Part E) to link the two matches. Additive
+  /// like [abandonedById]: older documents simply lack it.
+  final String? rematchOf;
+
   /// The seat for [side].
   RoomSeat seatFor(PlayerId side) => side == PlayerId.blue ? blue : red;
 
@@ -299,6 +309,7 @@ class Room {
     timeControlSeconds: timeControlSeconds,
     turnDeadlineMs: turnDeadlineMs,
     serverUpdatedAtMs: serverUpdatedAtMs,
+    rematchOf: rematchOf,
   );
 
   /// A copy with the given fields replaced.
@@ -330,6 +341,7 @@ class Room {
     int? timeControlSeconds,
     Object? turnDeadlineMs = _keep,
     Object? serverUpdatedAtMs = _keep,
+    Object? rematchOf = _keep,
   }) => Room(
     code: code,
     status: status ?? this.status,
@@ -359,6 +371,9 @@ class Room {
     serverUpdatedAtMs: identical(serverUpdatedAtMs, _keep)
         ? this.serverUpdatedAtMs
         : serverUpdatedAtMs as int?,
+    rematchOf: identical(rematchOf, _keep)
+        ? this.rematchOf
+        : rematchOf as String?,
   );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -391,6 +406,9 @@ class Room {
     // turn-advancing and terminal writes (see the field's doc).
     'timeControlSeconds': timeControlSeconds,
     'turnDeadline': turnDeadlineMs,
+    // Phase 16.5. The finished match's code when this room is
+    // its rematch; null for a first pairing.
+    'rematchOf': rematchOf,
   };
 
   static Map<String, dynamic> _seatToJson(RoomSeat seat) => <String, dynamic>{
@@ -482,6 +500,11 @@ class Room {
       timeControlSeconds: _nonNegativeIntOr(json['timeControlSeconds'], 0),
       turnDeadlineMs: _positiveIntOrNull(json['turnDeadline']),
       serverUpdatedAtMs: _positiveIntOrNull(json['serverUpdatedAt']),
+      rematchOf:
+          (json['rematchOf'] is String &&
+              (json['rematchOf'] as String).isNotEmpty)
+          ? json['rematchOf'] as String
+          : null,
     );
   }
 
@@ -543,7 +566,8 @@ class Room {
           finishReason == other.finishReason &&
           timeControlSeconds == other.timeControlSeconds &&
           turnDeadlineMs == other.turnDeadlineMs &&
-          serverUpdatedAtMs == other.serverUpdatedAtMs;
+          serverUpdatedAtMs == other.serverUpdatedAtMs &&
+          rematchOf == other.rematchOf;
 
   @override
   int get hashCode => Object.hash(
@@ -565,6 +589,7 @@ class Room {
     timeControlSeconds,
     turnDeadlineMs,
     serverUpdatedAtMs,
+    rematchOf,
   );
 
   @override

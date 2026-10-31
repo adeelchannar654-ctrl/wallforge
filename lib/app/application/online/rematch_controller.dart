@@ -42,11 +42,20 @@ enum RematchPhase {
 /// * **Notice** = polling [MatchmakingRepository.waitingPlayerIds] for the
 ///   finished opponent's uid while the Result screen is open.
 /// * **Accept** = [MatchmakingRepository.claimPlayer]: the standard claim
-///   transaction — a brand-new room, fresh seats (proposer hosts as Blue,
-///   acceptor takes Red), both `matched` documents in the same commit.
+///   transaction — a brand-new room in the same commit.
 /// * **Decline** = simply not claiming. A proposal also lapses on its own
 ///   through the queue's 60-second staleness window, or when the proposer
 ///   cancels. Navigating Home abandons the negotiation entirely.
+///
+/// Phase 16.5 completed the rematch contract: the new room **swaps the
+/// seats** relative to the finished match (whoever played Blue plays Red —
+/// Blue still moves first; the *players* exchange colours), carries the
+/// finished match's board config and per-move clock, and records the
+/// finished match's code in the new room's `rematchOf`. Because the rules
+/// require a matched room's host to be its Blue seat, hosting follows the
+/// colour: in a rematch the *acceptor* hosts and starts the match. The
+/// proposal's recorded expiry is the queue's existing 60-second staleness
+/// window — no second lifetime was invented for it.
 ///
 /// Both players must act — one proposes, the other accepts — and the new
 /// room's ordinary ready/start handshake is a further explicit step before
@@ -67,6 +76,7 @@ class RematchController extends ChangeNotifier {
     required this.config,
     required this.finishedCode,
     required this.finishedCreatedAtMs,
+    required this.finishedTimeControlSeconds,
     this.pollInterval = const Duration(seconds: 3),
   });
 
@@ -90,6 +100,10 @@ class RematchController extends ChangeNotifier {
   /// is history and is ignored.
   final String finishedCode;
   final int finishedCreatedAtMs;
+
+  /// The finished match's per-move clock in seconds (0 = off),
+  /// carried into the rematch room unchanged (Phase 16.5).
+  final int finishedTimeControlSeconds;
 
   /// How often the queue is checked for the opponent's proposal while the
   /// Result screen is open. Injectable for tests.
@@ -184,12 +198,17 @@ class RematchController extends ChangeNotifier {
   }
 
   /// Accepts the opponent's proposal by claiming their queue entry into a
-  /// new room (this player takes Red; the proposer hosts as Blue).
+  /// new room with the seats swapped relative to the finished match (this
+  /// player takes whichever colour they did not play), the finished
+  /// match's clock, and `rematchOf` naming the finished match.
   Future<void> accept() async {
     if (_disposed) return;
     final result = await matchmaking.claimPlayer(
       config: config,
       candidateUid: opponentUid,
+      timeControlSeconds: finishedTimeControlSeconds,
+      swapSeats: true,
+      rematchOfCode: finishedCode,
     );
     if (_disposed) return;
     switch (result) {

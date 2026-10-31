@@ -19,6 +19,9 @@ class _FakeMatchmaking implements MatchmakingRepository {
     MatchmakingFailure(MatchmakingFailureReason.pairingFailed, 'not set'),
   );
   String? claimedCandidate;
+  int? claimedTimeControlSeconds;
+  bool? claimedSwapSeats;
+  String? claimedRematchOf;
   int joinQueueCalls = 0;
   int cancelCalls = 0;
 
@@ -39,8 +42,14 @@ class _FakeMatchmaking implements MatchmakingRepository {
   Future<MatchmakingResult> claimPlayer({
     required BoardConfig config,
     required String candidateUid,
+    int timeControlSeconds = 0,
+    bool swapSeats = false,
+    String? rematchOfCode,
   }) async {
     claimedCandidate = candidateUid;
+    claimedTimeControlSeconds = timeControlSeconds;
+    claimedSwapSeats = swapSeats;
+    claimedRematchOf = rematchOfCode;
     return claimResult;
   }
 
@@ -123,6 +132,7 @@ void main() {
       config: const BoardConfig(),
       finishedCode: 'OLD123',
       finishedCreatedAtMs: 1000,
+      finishedTimeControlSeconds: 30,
       pollInterval: const Duration(milliseconds: 30),
     );
   });
@@ -155,6 +165,11 @@ void main() {
 
     await controller.accept();
     expect(matchmaking.claimedCandidate, 'uid-opp');
+    // Phase 16.5: the accept carries the swap, the finished
+    // match's clock (30 s in this fixture) and its code.
+    expect(matchmaking.claimedSwapSeats, isTrue);
+    expect(matchmaking.claimedTimeControlSeconds, 30);
+    expect(matchmaking.claimedRematchOf, 'OLD123');
     expect(controller.phase, RematchPhase.matched);
     expect(controller.matchedRoom, fresh);
   });

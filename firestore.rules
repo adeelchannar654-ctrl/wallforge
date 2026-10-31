@@ -53,7 +53,7 @@ service cloud.firestore {
         'blue', 'red', 'createdAt', 'updatedAt', 'version', 'schemaVersion',
         'boardState', 'turnNumber', 'currentPlayerId', 'winnerId',
         'abandonedById', 'finishReason', 'timeControlSeconds',
-        'turnDeadline', 'serverUpdatedAt',
+        'turnDeadline', 'serverUpdatedAt', 'rematchOf',
       ])
       && d.keys().hasAll([
         'code', 'status', 'boardSize', 'wallsPerPlayer', 'hostId',
@@ -91,6 +91,8 @@ service cloud.firestore {
               && d.timeControlSeconds >= 0 && d.timeControlSeconds <= 3600))
       && (!('turnDeadline' in d)
           || d.turnDeadline == null || d.turnDeadline is int)
+      && (!('rematchOf' in d)
+          || d.rematchOf == null || d.rematchOf is string)
       && (!('serverUpdatedAt' in d) || d.serverUpdatedAt is timestamp);
   }
 
@@ -117,6 +119,27 @@ service cloud.firestore {
   // request it *is* `request.time`).
   function serverStamped(d) {
     return d.get('serverUpdatedAt', null) == request.time;
+  }
+
+  // A rematch room (Phase 16.5) names the finished match it
+  // follows in `rematchOf`. The named document must exist, be
+  // over, and seat exactly the same two players (in either
+  // order — a rematch swaps them). This is what licenses the
+  // one exception to "the claimer takes Red" in the matched
+  // create below: swapped seats are provable, not asserted.
+  // Costs one billed read per rematch-room creation.
+  function rematchTargetValid(d) {
+    return exists(/databases/$(database)/documents/matches/$(d.rematchOf))
+      && get(/databases/$(database)/documents/matches/$(d.rematchOf)).data.status
+          in ['finished', 'abandoned']
+      && ((get(/databases/$(database)/documents/matches/$(d.rematchOf)).data.blue.playerId
+              == d.blue.playerId
+           && get(/databases/$(database)/documents/matches/$(d.rematchOf)).data.red.playerId
+              == d.red.playerId)
+        || (get(/databases/$(database)/documents/matches/$(d.rematchOf)).data.blue.playerId
+              == d.red.playerId
+           && get(/databases/$(database)/documents/matches/$(d.rematchOf)).data.red.playerId
+              == d.blue.playerId));
   }
 
   // Structural checks on a stored `GameState` snapshot (serializer shape).
@@ -230,6 +253,7 @@ service cloud.firestore {
         && (!('finishReason' in after()) || after().finishReason == null)
         && after().get('timeControlSeconds', 0) in [0, 15, 30, 60]
         && after().get('turnDeadline', null) == null
+        && after().get('rematchOf', null) == null
         && after().blue.ready == false && after().red.ready == false
         && after().createdAt == after().updatedAt
         && notFromTheFuture(after().createdAt)
@@ -241,6 +265,11 @@ service cloud.firestore {
       // both seats already filled (the waiting player is host and Blue; the
       // claimer is Red). Valid only as part of that transaction: both players'
       // matched documents must land with the identical payload.
+      //
+      // Phase 16.5 exception: a REMATCH room swaps the seats (the
+      // claimer takes Blue) — allowed only when `rematchOf` names
+      // a finished match between the same two players, proven by
+      // `rematchTargetValid`; the host is still the Blue seat.
       allow create: if signedIn()
         && validRoomShape(after(), code)
         && after().status == 'waiting'
@@ -257,7 +286,10 @@ service cloud.firestore {
         && after().createdAt == after().updatedAt
         && notFromTheFuture(after().createdAt)
         && after().blue.playerId != null
-        && after().red.playerId == uid()
+        && (after().red.playerId == uid()
+          || (after().blue.playerId == uid()
+            && after().get('rematchOf', null) is string
+            && rematchTargetValid(after())))
         && after().hostId == after().blue.playerId
         && getAfter(/databases/$(database)/documents/matchmaking/$(boardKeyOf(after()))/matched/$(after().blue.playerId)).data == after()
         && getAfter(/databases/$(database)/documents/matchmaking/$(boardKeyOf(after()))/matched/$(after().red.playerId)).data == after();
@@ -272,6 +304,8 @@ service cloud.firestore {
           && after().wallsPerPlayer == before().wallsPerPlayer
           && after().get('timeControlSeconds', 0)
               == before().get('timeControlSeconds', 0)
+          && after().get('rematchOf', null)
+              == before().get('rematchOf', null)
           && after().createdAt == before().createdAt
           && before().schemaVersion in [1, 2];
       }

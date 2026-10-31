@@ -1,4 +1,5 @@
 import '../models/game_state.dart';
+import '../models/player_id.dart';
 import '../serialization/game_state_serializer.dart';
 
 /// A match the player can resume, as persisted.
@@ -19,6 +20,7 @@ class UnfinishedMatch {
     required this.aiDifficulty,
     this.savedAtTurn = 0,
     this.timeControlSeconds = 0,
+    this.humanSide = PlayerId.blue,
   });
 
   /// The live match state, restored through [GameStateSerializer].
@@ -41,12 +43,22 @@ class UnfinishedMatch {
   /// turn at a full clock (D16.5-4) — no deadline is stored.
   final int timeControlSeconds;
 
+  /// The side the human plays in a vs-AI match (Phase 16.5).
+  ///
+  /// Blue for every match started fresh; Red for a rematch in
+  /// progress, where the sides were swapped. Without it a
+  /// resumed rematch would hand the human's pawn to the AI.
+  /// Saves written before the field existed default to Blue,
+  /// which is what they all were.
+  final PlayerId humanSide;
+
   Map<String, dynamic> toJson() => <String, dynamic>{
     'boardSize': boardSize,
     'versusAi': versusAi,
     'aiDifficulty': aiDifficulty,
     'savedAtTurn': savedAtTurn,
     'timeControlSeconds': timeControlSeconds,
+    'humanSide': humanSide.name,
     'gameState': GameStateSerializer.toJson(gameState),
   };
 
@@ -83,6 +95,7 @@ class UnfinishedMatch {
       timeControlSeconds: (rawTimeControl is int && rawTimeControl >= 0)
           ? rawTimeControl
           : 0,
+      humanSide: json['humanSide'] == 'red' ? PlayerId.red : PlayerId.blue,
     );
   }
 

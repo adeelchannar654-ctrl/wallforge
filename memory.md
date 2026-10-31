@@ -5109,3 +5109,74 @@ load-sensitive flakes under full-suite parallelism — the
 definitive full re-run is a Part I gate, and the one new
 test with a fixed real-time allowance (vs-AI think) was
 rewritten to poll for the AI's move instead of sleeping.
+
+### Part D — rematch completed (2026-10-31)
+
+What already existed (Step 0 audit, confirmed again here):
+the local Result screen's REMATCH button wired to
+`LocalGameController.rematch()` (which restarted with the
+same settings but swapped nothing and stated no contract),
+and the online consent flow (propose = queue entry, accept =
+`claimPlayer`, decline = not claiming, lapse = the queue's
+60 s staleness). What was missing: the swap, the clock
+carrying over, the `rematchOf` link, and an enforced expiry.
+Shipped:
+- **Local/vs-AI swap.** The AI's side is now a field
+  (`_aiPlayer`, seeded from `kAiPlayer`) instead of a
+  compile-time constant; `_humanPlayer` derives from it.
+  `startMatch` takes `humanSide` (default Blue);
+  `rematch()` passes the opposite side, the same board,
+  difficulty and time control; `restart()` passes the current
+  side (a restart never swaps). In a swapped vs-AI game the
+  AI opens as Blue (Blue still moves first — R-PLAYER-07 is
+  untouched; the *players* exchange colours). Statistics now
+  follow the human across the swap (`humanWon` compares
+  against the live human side). `UnfinishedMatch` gained a
+  tolerant `humanSide` (default Blue = every pre-16.5 save),
+  so a rematch in progress resumes with the human's pawn
+  still the human's. Pass-and-play: no per-player identity
+  exists in the app to swap — the two players exchange
+  colours on the shared screen, and the rematch restarts
+  with the same board and clock (recorded here honestly
+  rather than pretending a state change).
+- **Online swap.** `claimPlayer` gained `swapSeats`,
+  `timeControlSeconds` and `rematchOfCode`;
+  `FirestoreMatchmakingRepository._buildRoom` seats the
+  claimer in Blue and the proposer in Red when swapping, and
+  the host follows the Blue seat (the matched-create rule
+  requires `hostId == blue.playerId`) — so in a rematch the
+  acceptor hosts and starts. `RematchController` requires
+  the finished match's time control and passes all three on
+  accept; the lobby screen supplies it from the finished
+  room. `Room.rematchOf` added additively (schemaVersion
+  stays 2), written by the claim, pinned by
+  `identityStable`.
+- **Rules licence for swapped seats.** The matched-create
+  rule's "claimer is Red" gained exactly one exception: the
+  claimer may take Blue only when `rematchOf` names a real
+  finished/abandoned match seating the same two players
+  (`rematchTargetValid`, one billed `get()` per rematch-room
+  creation — counted in Part I). Code-room creates must
+  carry `rematchOf: null`. JS tests: the swapped claim
+  succeeds against a real finished match; the same shape
+  without the link, with a forged code, against an
+  unfinished match, or against a different pair all fail —
+  **written, not run** (emulator).
+- **Expiry enforced in the claim.** A proposal already
+  lapsed through the 60 s staleness in the UI (poll →
+  proposal disappears); the claim transaction now ALSO
+  refuses a stale candidate entry, so a late programmatic
+  accept cannot seat anyone (previously `claimPlayer` read
+  the entry directly with no freshness check).
+Tests: 11 new in `phase165_rematch_test.dart` (vs-AI swap
+incl. AI opens, swap-back, restart-keeps-sides, settings
+carried, pass-and-play, statistics across the swap, resume
+of a swapped match, repository swap/link/clock, both
+controllers end-to-end into the same swapped room, decline
++ lapse + late-accept refusal, double-accept idempotence,
+rematch-after-timeout) plus strengthened assertions in the
+existing rematch controller test (the accept carries swap +
+clock + code). Gates: format 187 files 0 changed; analyze
+clean; spec checker OK; oracle unchanged; affected suites
+green (data + quick match + lobby + online controller +
+navigation + online screens, 569 tests).
