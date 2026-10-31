@@ -9,6 +9,7 @@ import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
 import '../../../data/local/shared_preferences_settings_repository.dart';
+import '../../../domain/models/time_control.dart';
 import '../../../data/remote/firebase_auth_gateway.dart';
 import '../../../domain/repositories/repositories.dart';
 import '../../widgets/app_chrome.dart';
@@ -177,6 +178,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ? (v) => _save(_settings.copyWith(movementAssistance: v))
               : null,
         ),
+        Divider(color: AppColors.outlineVariant),
+        _clockRow(),
         Divider(color: AppColors.outlineVariant),
         Row(
           children: [
@@ -421,6 +424,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onChanged: _loaded
               ? (v) => _save(_settings.copyWith(uiScale: v))
               : null,
+        ),
+      ],
+    );
+  }
+
+  /// The Phase 16.5 default move-clock row: the per-move limit
+  /// applied to new local and vs-AI matches. Online rooms choose
+  /// their own clock at creation; Quick Match is fixed at 60 s.
+  /// "Off" is always available — the clock never traps a player.
+  Widget _clockRow() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Default move clock', style: AppTypography.bodyBase),
+        Text(
+          'Time limit per move in local and vs-AI games. '
+          'Running out of time loses the game.',
+          style: AppTypography.bodyBase.copyWith(
+            color: AppColors.onSurfaceVariant,
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Wrap(
+          spacing: AppSpacing.sm,
+          children: [
+            for (final seconds in kTimeControlOptionsSeconds)
+              ChoiceChip(
+                label: Text(timeControlShortLabel(seconds)),
+                selected: _settings.defaultTimeControlSeconds == seconds,
+                onSelected: _loaded
+                    ? (_) => _save(
+                        _settings.copyWith(defaultTimeControlSeconds: seconds),
+                      )
+                    : null,
+              ),
+          ],
         ),
       ],
     );

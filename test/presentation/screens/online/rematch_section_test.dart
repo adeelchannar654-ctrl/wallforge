@@ -50,8 +50,10 @@ class _FakeRooms implements RoomRepository {
   Future<RoomResult> leave(String code) async =>
       RoomResult.success(_room(code: code, createdAtMs: 0));
   @override
-  Future<RoomResult> create({required BoardConfig config}) =>
-      throw UnimplementedError();
+  Future<RoomResult> create({
+    required BoardConfig config,
+    int timeControlSeconds = 0,
+  }) => throw UnimplementedError();
   @override
   Future<RoomResult> join(String code) => throw UnimplementedError();
   @override

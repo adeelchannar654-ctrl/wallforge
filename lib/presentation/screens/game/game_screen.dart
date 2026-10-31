@@ -17,6 +17,7 @@ import '../../../domain/models/game_action.dart';
 import '../../../domain/models/game_status.dart';
 import '../../../domain/models/player_id.dart';
 import '../../board/board.dart';
+import '../../widgets/clock_chip.dart';
 import '../../widgets/match_exit_dialogs.dart';
 import '../result/result_screen.dart';
 
@@ -563,6 +564,15 @@ class GameScreen extends StatelessWidget {
             remaining: walls,
             playerColor: color,
           ),
+          if (controller.clockSide == player &&
+              controller.clockRemaining != null) ...[
+            const SizedBox(height: AppSpacing.sm),
+            ClockChip(
+              remaining: controller.clockRemaining!,
+              lowTime: controller.clockLowTime,
+              announcement: controller.clockAnnouncement,
+            ),
+          ],
         ],
       ),
     );
@@ -596,6 +606,15 @@ class GameScreen extends StatelessWidget {
         children: [
           Text(label, style: AppTypography.labelCaps.copyWith(color: color)),
           const Spacer(),
+          if (controller.clockSide == player &&
+              controller.clockRemaining != null) ...[
+            ClockChip(
+              remaining: controller.clockRemaining!,
+              lowTime: controller.clockLowTime,
+              announcement: controller.clockAnnouncement,
+            ),
+            const SizedBox(width: AppSpacing.sm),
+          ],
           WallInventoryNotches(
             total: controller.state.boardConfig.wallsPerPlayer,
             remaining: walls,
@@ -629,9 +648,39 @@ class _ControllerOwnership extends StatefulWidget {
   State<_ControllerOwnership> createState() => _ControllerOwnershipState();
 }
 
-class _ControllerOwnershipState extends State<_ControllerOwnership> {
+class _ControllerOwnershipState extends State<_ControllerOwnership>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // Phase 16.5: presenting the match is what starts its
+    // clock — the same controller sits on Home for statistics
+    // and the resume card, where no clock may run.
+    widget.controller.activateClock();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Phase 16.5: a local clock freezes while the app is
+    // backgrounded — nobody loses a game to a phone call.
+    // (Online clocks cannot pause: the deadline is server-side
+    // by design, and the opponent's client keeps its own time.)
+    switch (state) {
+      case AppLifecycleState.paused:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.detached:
+        widget.controller.pauseClock();
+      case AppLifecycleState.resumed:
+        widget.controller.resumeClock();
+      case AppLifecycleState.inactive:
+        break;
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     if (widget.owns) widget.controller.dispose();
     super.dispose();
   }

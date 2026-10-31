@@ -66,8 +66,10 @@ class _FakeRooms implements RoomRepository {
   }
 
   @override
-  Future<RoomResult> create({required BoardConfig config}) =>
-      throw UnimplementedError();
+  Future<RoomResult> create({
+    required BoardConfig config,
+    int timeControlSeconds = 0,
+  }) => throw UnimplementedError();
 
   @override
   Future<RoomResult> join(String code) => throw UnimplementedError();

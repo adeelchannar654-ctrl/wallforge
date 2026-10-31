@@ -250,11 +250,17 @@ class FirestoreMatchRepository implements MatchRepository {
           winnerId: isFinished ? room.seatFor(next.winner!).playerId : null,
           // Phase 16.5: a game-ending move records the goal finish.
           finishReason: isFinished ? FinishReason.goal : null,
+          // Phase 16.5 clock: the next player's deadline, set in
+          // this same write (no extra writes per move). Cleared
+          // when the match ends or the clock is off.
+          turnDeadlineMs: !isFinished && room.timeControlSeconds > 0
+              ? _nowMs + room.timeControlSeconds * 1000
+              : null,
           updatedAtMs: _nowMs,
           version: room.version + 1,
         );
 
-        txn.set(matchPath, updated.toJson());
+        txn.set(matchPath, _stamped(updated.toJson()));
         txn.set(movePath, <String, dynamic>{
           'turnNumber': expectedTurnNumber,
           'playerId': uid,
@@ -307,6 +313,13 @@ class FirestoreMatchRepository implements MatchRepository {
         if (room.status != RoomStatus.started) {
           return _claimReject(AbandonmentFailureReason.matchNotStarted);
         }
+        // Phase 16.5: a clocked match replaces the inactivity
+        // heuristic with the turn deadline — expiry belongs to
+        // `claimTimeout`, and the rules refuse this claim for
+        // clocked matches as well.
+        if (room.timeControlSeconds > 0) {
+          return _claimReject(AbandonmentFailureReason.clockedMatch);
+        }
         // The claim belongs to the player who is *waiting*. If the document
         // says it is our turn, the player who may have gone is us.
         if (room.currentPlayerId == null) {
@@ -334,7 +347,7 @@ class FirestoreMatchRepository implements MatchRepository {
           updatedAtMs: _nowMs,
           version: room.version + 1,
         );
-        txn.set(matchPath, claimed.toJson());
+        txn.set(matchPath, _stamped(claimed.toJson()));
         return AbandonmentResult.claimed(claimed);
       });
     } on Object {
@@ -391,13 +404,112 @@ class FirestoreMatchRepository implements MatchRepository {
           updatedAtMs: _nowMs,
           version: room.version + 1,
         );
-        txn.set(matchPath, resigned.toJson());
+        txn.set(matchPath, _stamped(resigned.toJson()));
         return ResignResult.resigned(resigned);
       });
     } on Object {
       return _resignReject(ResignFailureReason.networkUnavailable);
     }
   }
+
+  /// The grace after the deadline before a timeout claim is
+  /// accepted (Phase 16.5, D16.5-3): covers the snapshot delivery
+  /// latency of a move that was already in flight at the
+  /// deadline. The Security Rules apply the same constant
+  /// against `request.time`; the two must move together.
+  static const int timeoutGraceMs = 2000;
+
+  @override
+  Future<TimeoutClaimResult> claimTimeout({required String code}) async {
+    final uid = await userId();
+    if (uid == null || uid.isEmpty) {
+      return const TimeoutClaimResult.rejected(
+        TimeoutClaimFailure(
+          TimeoutClaimFailureReason.notAuthenticated,
+          message: 'Sign in to play online.',
+        ),
+      );
+    }
+
+    final matchPath = _matchPath(code);
+    try {
+      return await client.runTransaction<TimeoutClaimResult>((txn) async {
+        final rawRoom = await txn.get(matchPath);
+        if (rawRoom == null) {
+          return _timeoutReject(TimeoutClaimFailureReason.roomNotFound);
+        }
+        final room = Room.fromJson(rawRoom);
+        if (room == null) {
+          return _timeoutReject(TimeoutClaimFailureReason.roomNotFound);
+        }
+        if (!room.isMember(uid)) {
+          return _timeoutReject(TimeoutClaimFailureReason.notAMember);
+        }
+        if (room.status == RoomStatus.finished ||
+            room.status == RoomStatus.abandoned) {
+          return _timeoutReject(TimeoutClaimFailureReason.matchAlreadyOver);
+        }
+        if (room.status != RoomStatus.started) {
+          return _timeoutReject(TimeoutClaimFailureReason.matchNotStarted);
+        }
+        if (room.timeControlSeconds <= 0 || room.turnDeadlineMs == null) {
+          return _timeoutReject(TimeoutClaimFailureReason.noClock);
+        }
+        if (room.currentPlayerId == null) {
+          return _timeoutReject(TimeoutClaimFailureReason.matchAlreadyOver);
+        }
+        // Only the waiting player may claim: the expired clock
+        // belongs to the player to move.
+        if (room.currentPlayerId == uid) {
+          return _timeoutReject(TimeoutClaimFailureReason.notOpponentTurn);
+        }
+        // Client-side pre-check on the device clock; the rules
+        // re-judge against server time, so a skewed device can
+        // neither steal nor be robbed by this check being wrong.
+        if (_nowMs <= room.turnDeadlineMs! + timeoutGraceMs) {
+          return _timeoutReject(TimeoutClaimFailureReason.clockNotExpired);
+        }
+        final claimed = room.copyWith(
+          status: RoomStatus.finished,
+          winnerId: uid,
+          currentPlayerId: null,
+          finishReason: FinishReason.timeout,
+          turnDeadlineMs: null,
+          updatedAtMs: _nowMs,
+          version: room.version + 1,
+        );
+        txn.set(matchPath, _stamped(claimed.toJson()));
+        return TimeoutClaimResult.claimed(claimed);
+      });
+    } on Object {
+      return _timeoutReject(TimeoutClaimFailureReason.networkUnavailable);
+    }
+  }
+
+  static TimeoutClaimResult _timeoutReject(TimeoutClaimFailureReason reason) =>
+      TimeoutClaimResult.rejected(
+        TimeoutClaimFailure(reason, message: timeoutMessageFor(reason)),
+      );
+
+  /// Player-facing wording for each refused timeout claim.
+  static String timeoutMessageFor(TimeoutClaimFailureReason reason) =>
+      switch (reason) {
+        TimeoutClaimFailureReason.notAuthenticated => 'Sign in to play online.',
+        TimeoutClaimFailureReason.notAMember => 'You are not in this match.',
+        TimeoutClaimFailureReason.roomNotFound =>
+          'That match is no longer available.',
+        TimeoutClaimFailureReason.matchNotStarted =>
+          'The match has not started yet.',
+        TimeoutClaimFailureReason.matchAlreadyOver =>
+          'This match is already over.',
+        TimeoutClaimFailureReason.notOpponentTurn =>
+          'It is your turn — your clock is the one running.',
+        TimeoutClaimFailureReason.noClock => 'This match has no move clock.',
+        TimeoutClaimFailureReason.clockNotExpired =>
+          'The clock has not run out yet.',
+        TimeoutClaimFailureReason.networkUnavailable =>
+          'Could not reach the server. Check your connection.',
+      };
 
   static ResignResult _resignReject(ResignFailureReason reason) =>
       ResignResult.rejected(
@@ -417,6 +529,12 @@ class FirestoreMatchRepository implements MatchRepository {
           'Could not reach the server. Check your connection.',
       };
 
+  /// Overlays the server-timestamp sentinel on a match document
+  /// being written by a turn-advancing or terminal transition
+  /// (Phase 16.5) — see `FirestoreRoomRepository` for the why.
+  Map<String, dynamic> _stamped(Map<String, dynamic> json) =>
+      json..['serverUpdatedAt'] = ServerTimestamp.value;
+
   static AbandonmentResult _claimReject(AbandonmentFailureReason reason) =>
       AbandonmentResult.rejected(
         AbandonmentFailure(reason, message: claimMessageFor(reason)),
@@ -434,6 +552,9 @@ class FirestoreMatchRepository implements MatchRepository {
         AbandonmentFailureReason.matchAlreadyOver =>
           'This match is already over.',
         AbandonmentFailureReason.notOpponentTurn => 'It is your turn to move.',
+        AbandonmentFailureReason.clockedMatch =>
+          'This match has a move clock. When the clock runs out, '
+              'the waiting player wins on time.',
         AbandonmentFailureReason.opponentStillActive =>
           'Your opponent is still playing.',
         AbandonmentFailureReason.networkUnavailable =>

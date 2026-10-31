@@ -15,12 +15,27 @@ import 'firestore_client.dart';
 /// throws. Exposes the stored documents so a test can assert on the actual
 /// document layout, which is how the free-tier cost stays visible.
 class InMemoryFirestoreClient implements FirestoreClient {
-  InMemoryFirestoreClient({Map<String, Map<String, dynamic>>? seed})
-    : documents = <String, Map<String, dynamic>>{
-        for (final entry
-            in (seed ?? const <String, Map<String, dynamic>>{}).entries)
-          entry.key: Map<String, dynamic>.from(entry.value),
-      };
+  InMemoryFirestoreClient({
+    Map<String, Map<String, dynamic>>? seed,
+    DateTime Function()? clock,
+  }) : documents = <String, Map<String, dynamic>>{
+         for (final entry
+             in (seed ?? const <String, Map<String, dynamic>>{}).entries)
+           entry.key: Map<String, dynamic>.from(entry.value),
+       },
+       _clock = clock ?? DateTime.now;
+
+  /// Resolves [ServerTimestamp] markers the way the real backend
+  /// resolves server-time stamps: to this client's clock, as
+  /// epoch milliseconds (Phase 16.5).
+  final DateTime Function() _clock;
+
+  Map<String, dynamic> _resolve(Map<String, dynamic> data) => data.map(
+    (key, value) => MapEntry(
+      key,
+      value is ServerTimestamp ? _clock().millisecondsSinceEpoch : value,
+    ),
+  );
 
   /// Document path -> data. Public so tests can inspect the real layout.
   final Map<String, Map<String, dynamic>> documents;
@@ -43,7 +58,7 @@ class InMemoryFirestoreClient implements FirestoreClient {
   @override
   Future<void> write(String path, Map<String, dynamic> data) async {
     _maybeFail();
-    documents[path] = Map<String, dynamic>.from(data);
+    documents[path] = _resolve(Map<String, dynamic>.from(data));
     writeLog.add(path);
     _emit(path);
   }
@@ -258,7 +273,7 @@ class InMemoryFirestoreClient implements FirestoreClient {
         if (data == null) {
           documents.remove(path);
         } else {
-          documents[path] = data;
+          documents[path] = _resolve(data);
           writeLog.add(path);
         }
         _emit(path);

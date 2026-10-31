@@ -310,7 +310,12 @@ class FirestoreMatchmakingRepository implements MatchmakingRepository {
   /// The player who was *already waiting* becomes the host in Blue, matching the
   /// convention of a code room: whoever set the room up is Blue, and Blue moves
   /// first (`game_spec.md` R-PLAYER-07).
-  Room? _buildRoom(BoardConfig config, String uid, String waitingUid) {
+  Room? _buildRoom(
+    BoardConfig config,
+    String uid,
+    String waitingUid, {
+    int timeControlSeconds = 60,
+  }) {
     final code = RoomCode.tryParse(codeGenerator.generate());
     if (code == null) return null;
     final now = _nowMs;
@@ -323,6 +328,10 @@ class FirestoreMatchmakingRepository implements MatchmakingRepository {
       red: RoomSeat(playerId: uid),
       createdAtMs: now,
       updatedAtMs: now,
+      // Quick Match's clock is fixed at 60 s per move (Phase
+      // 16.5): one default for everyone keeps the queue a single
+      // pool keyed by board config alone.
+      timeControlSeconds: timeControlSeconds,
     );
   }
 

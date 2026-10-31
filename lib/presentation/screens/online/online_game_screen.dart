@@ -14,6 +14,7 @@ import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
 import '../../../domain/wallforge_domain.dart';
 import '../../board/board.dart';
+import '../../widgets/clock_chip.dart';
 import '../../widgets/match_exit_dialogs.dart';
 import '../result/result_screen.dart';
 import 'online_rematch_section.dart';
@@ -298,6 +299,15 @@ class OnlineGameScreen extends StatelessWidget {
               ),
             ),
           ),
+          if (controller.clockSide == side &&
+              controller.clockRemaining != null) ...[
+            const SizedBox(width: AppSpacing.sm),
+            ClockChip(
+              remaining: controller.clockRemaining!,
+              lowTime: controller.clockLowTime,
+              announcement: controller.clockAnnouncement,
+            ),
+          ],
         ],
       ),
     );

@@ -71,6 +71,10 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
   final GlobalKey _joinKey = GlobalKey();
   String? _joinError;
 
+  /// Phase 16.5: the per-move clock chosen for a created room
+  /// (0 = off). Quick Match does not use it — its clock is fixed.
+  int _createTimeControlSeconds = 0;
+
   @override
   void initState() {
     super.initState();
@@ -208,7 +212,8 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
           const SizedBox(height: AppSpacing.xs),
           Text(
             'Get paired with someone else automatically. No room code '
-            'needed — a ${board.size}x${board.size} board.',
+            'needed — a ${board.size}x${board.size} board. Quick Match '
+            'plays with a ${kQuickMatchTimeControlSeconds}s move clock.',
             style: AppTypography.bodyBase.copyWith(
               color: AppColors.onSurfaceVariant,
             ),
@@ -236,9 +241,30 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
             ),
           ),
           const SizedBox(height: AppSpacing.md),
+          const Text('MOVE CLOCK', style: AppTypography.labelCaps),
+          const SizedBox(height: AppSpacing.xs),
+          Wrap(
+            spacing: AppSpacing.sm,
+            children: [
+              for (final seconds in kTimeControlOptionsSeconds)
+                ChoiceChip(
+                  label: Text(timeControlShortLabel(seconds)),
+                  selected: _createTimeControlSeconds == seconds,
+                  onSelected: controller.isBusy
+                      ? null
+                      : (_) =>
+                            setState(() => _createTimeControlSeconds = seconds),
+                ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
           _primaryButton(
             label: controller.isBusy ? 'WORKING' : 'CREATE ROOM',
-            onPressed: controller.isBusy ? null : controller.createRoom,
+            onPressed: controller.isBusy
+                ? null
+                : () => controller.createRoom(
+                    timeControlSeconds: _createTimeControlSeconds,
+                  ),
           ),
         ],
       ),

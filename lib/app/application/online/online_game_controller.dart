@@ -168,6 +168,32 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
   AbandonmentFailure? _claimFailure;
   bool _resigning = false;
   ResignFailure? _resignFailure;
+
+  // --- Phase 16.5: game clock ------------------------------------------------
+
+  /// Estimated offset between this device's clock and the
+  /// server's, in milliseconds (server − local), learned from
+  /// the `serverUpdatedAt` stamp on each live snapshot. The
+  /// stamp was written one network trip ago, so the estimate
+  /// carries up to a round-trip of error — immaterial at
+  /// one-second display granularity, and never used to judge a
+  /// claim (the repository pre-checks and the rules decide
+  /// against `request.time`).
+  int _serverOffsetMs = 0;
+
+  /// The 1 Hz clock ticker; exists only while a clocked match
+  /// is live (see `_syncClockTimer`).
+  Timer? _clockTimer;
+  bool _claimingTimeout = false;
+  TimeoutClaimFailure? _timeoutFailure;
+
+  /// The turn a timeout claim was last attempted for, so the
+  /// auto-claim fires once per turn, not once per tick.
+  int _timeoutClaimedTurn = -1;
+  int _lastClockSecond = -1;
+  int _lastClockTurn = -1;
+  String? _clockAnnouncement;
+  int _lastAnnouncedThreshold = 0;
   OpponentPresence _lastPresence = OpponentPresence.notApplicable;
   Timer? _presenceTimer;
 
@@ -223,6 +249,10 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
   /// opponent clock can stretch or shrink the wait; `security_model.md`
   /// records that limit rather than hiding it.
   OpponentPresence get opponentPresence {
+    // Phase 16.5: a clocked match replaces the inactivity
+    // heuristic with the turn deadline — there is no abandonment
+    // claim to offer, whatever the presence looks like.
+    if (_room.timeControlSeconds > 0) return OpponentPresence.notApplicable;
     if (_room.status != RoomStatus.started || isFinished) {
       return OpponentPresence.notApplicable;
     }
@@ -274,6 +304,155 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
       _room.finishReason == FinishReason.resign &&
       winner != null &&
       winner != mySide;
+
+  // --- Phase 16.5: clock surface ----------------------------------------------
+
+  /// The match's per-move control in seconds (0 = off).
+  int get timeControlSeconds => _room.timeControlSeconds;
+
+  /// This device's best estimate of the server's current time.
+  int get estimatedServerNowMs =>
+      _clock().millisecondsSinceEpoch + _serverOffsetMs;
+
+  /// Time left on the current turn's clock, or null when no
+  /// clock is running (off, not started, or over). Computed from
+  /// the stored server deadline against the skew-corrected
+  /// local estimate — never from a locally counted duration, so
+  /// a reconnect lands on the same value as a steady client.
+  Duration? get clockRemaining {
+    if (_room.timeControlSeconds <= 0 ||
+        _room.status != RoomStatus.started ||
+        isFinished ||
+        isAbandoned) {
+      return null;
+    }
+    final deadline = _room.turnDeadlineMs;
+    if (deadline == null) return null;
+    final ms = deadline - estimatedServerNowMs;
+    return ms <= 0 ? Duration.zero : Duration(milliseconds: ms);
+  }
+
+  /// The side whose clock is running, or null.
+  PlayerId? get clockSide =>
+      clockRemaining == null ? null : _state.currentPlayer;
+
+  /// Whether the running clock is in its last five seconds.
+  bool get clockLowTime {
+    final remaining = clockRemaining;
+    return remaining != null && remaining.inSeconds <= 5;
+  }
+
+  /// The latest threshold announcement ("10 seconds left"),
+  /// set only at the thresholds (see the local controller).
+  String? get clockAnnouncement => _clockAnnouncement;
+
+  /// Whether the timeout claim is available right now: clocked,
+  /// live, the opponent to move, and the deadline plus grace
+  /// has passed on the estimated server clock.
+  bool get canClaimTimeout =>
+      _room.timeControlSeconds > 0 &&
+      _room.status == RoomStatus.started &&
+      !isFinished &&
+      !isAbandoned &&
+      !isMyTurn &&
+      _room.currentPlayerId != null &&
+      _room.turnDeadlineMs != null &&
+      estimatedServerNowMs > _room.turnDeadlineMs! + kTimeoutGraceMs;
+
+  /// Whether a timeout claim is in flight.
+  bool get isClaimingTimeout => _claimingTimeout;
+
+  /// The last refused timeout claim, or null.
+  TimeoutClaimFailure? get timeoutFailure => _timeoutFailure;
+
+  /// Claims the match on time: the opponent's clock ran out.
+  ///
+  /// Also fired automatically by the clock ticker the moment
+  /// the claim becomes available — the waiting player should
+  /// not have to win a tapping race against a fact the shared
+  /// document already proves.
+  Future<void> claimTimeout() async {
+    if (_claimingTimeout || !canClaimTimeout) return;
+    _claimingTimeout = true;
+    _timeoutFailure = null;
+    notifyListeners();
+    final result = await matches.claimTimeout(code: code);
+    if (_disposed) return;
+    _claimingTimeout = false;
+    switch (result) {
+      case TimeoutClaimed():
+        await resync();
+      case TimeoutClaimRejected(:final failure):
+        _timeoutFailure = failure;
+        _log.log('timeout claim refused: ${failure.reason.name}');
+    }
+    notifyListeners();
+  }
+
+  void _noteServerTime(Room room) {
+    final stamp = room.serverUpdatedAtMs;
+    if (stamp == null) return;
+    _serverOffsetMs = stamp - _clock().millisecondsSinceEpoch;
+  }
+
+  /// Keeps the 1 Hz clock ticker in existence exactly while a
+  /// clocked match is live — an unclocked, waiting or finished
+  /// match schedules nothing (Phase 15 invariant).
+  void _syncClockTimer() {
+    final shouldRun =
+        _room.timeControlSeconds > 0 &&
+        _room.status == RoomStatus.started &&
+        !isFinished &&
+        !isAbandoned &&
+        !_disposed;
+    if (shouldRun && _clockTimer == null) {
+      _clockTimer = Timer.periodic(
+        const Duration(seconds: 1),
+        (_) => _onClockTick(),
+      );
+    } else if (!shouldRun && _clockTimer != null) {
+      _clockTimer!.cancel();
+      _clockTimer = null;
+    }
+  }
+
+  void _onClockTick() {
+    if (_disposed) return;
+    if (_room.turnNumber != _lastClockTurn) {
+      _lastClockTurn = _room.turnNumber;
+      _lastAnnouncedThreshold = 0;
+      _clockAnnouncement = null;
+      _lastClockSecond = -1;
+    }
+    if (canClaimTimeout && _timeoutClaimedTurn != _room.turnNumber) {
+      _timeoutClaimedTurn = _room.turnNumber;
+      unawaited(claimTimeout());
+    }
+    final remaining = clockRemaining;
+    if (remaining != null) {
+      final seconds = remaining.inSeconds;
+      if (seconds <= 10 && _lastAnnouncedThreshold == 0) {
+        _lastAnnouncedThreshold = 10;
+        _clockAnnouncement = '10 seconds left';
+      } else if (seconds <= 5 && _lastAnnouncedThreshold == 10) {
+        _lastAnnouncedThreshold = 5;
+        _clockAnnouncement = '5 seconds left';
+      }
+      if (seconds <= 5 && seconds > 0 && isMyTurn) feedback?.onClockTick();
+      if (seconds != _lastClockSecond) {
+        _lastClockSecond = seconds;
+        notifyListeners();
+      }
+    }
+    _syncClockTimer();
+  }
+
+  /// Whether the clock ticker currently exists (lifecycle tests).
+  bool get clockTimerActive => _clockTimer != null;
+
+  /// Drives one clock tick directly (tests).
+  @visibleForTesting
+  void debugTickClock() => _onClockTick();
 
   /// This client's colour, or null before the room is known.
   PlayerId? get mySide => _room.sideFor(uid);
@@ -490,6 +669,9 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
       _failSync('The shared match could not be read.');
       return;
     }
+    // Phase 16.5: every live snapshot refines the server-clock
+    // estimate the countdown runs on.
+    _noteServerTime(room);
     if (room.boardState == null &&
         _room.status != RoomStatus.started &&
         _room.status != RoomStatus.finished &&
@@ -525,6 +707,7 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
       // unchanged from our stale local view is the proof. Resolving here is what
       // turns a lost acknowledgement into a success instead of a stuck spinner.
       _resolvePendingAfterSync();
+      _syncClockTimer();
       notifyListeners();
       return;
     }
@@ -547,6 +730,7 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
     }
     _sync = OnlineSyncState.inSync;
     _resolvePendingAfterSync();
+    _syncClockTimer();
     notifyListeners();
   }
 
@@ -835,6 +1019,8 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
   @override
   void dispose() {
     _disposed = true;
+    _clockTimer?.cancel();
+    _clockTimer = null;
     _presenceTimer?.cancel();
     _presenceTimer = null;
     unawaited(_subscription?.cancel());

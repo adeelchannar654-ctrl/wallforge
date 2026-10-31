@@ -4,6 +4,23 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'firestore_client.dart';
 
+/// Encodes a repository document for Firestore: the
+/// [ServerTimestamp] marker becomes a server-time stamp the
+/// backend fills in at commit.
+Map<String, dynamic> _encode(Map<String, dynamic> data) => data.map(
+  (key, value) => MapEntry(
+    key,
+    value is ServerTimestamp ? FieldValue.serverTimestamp() : value,
+  ),
+);
+
+/// Decodes a Firestore document for the repositories: stored
+/// timestamps become epoch-millisecond ints.
+Map<String, dynamic>? _decode(Map<String, dynamic>? data) => data?.map(
+  (key, value) =>
+      MapEntry(key, value is Timestamp ? value.millisecondsSinceEpoch : value),
+);
+
 /// [FirestoreClient] backed by a real Cloud Firestore instance.
 ///
 /// Uses only free-tier-compatible Firestore operations: reading and writing
@@ -28,8 +45,7 @@ class CloudFirestoreClient implements FirestoreClient {
   Future<Map<String, dynamic>?> read(String path) async {
     try {
       final snapshot = await _firestore.doc(path).get();
-      final data = snapshot.data();
-      return data == null ? null : Map<String, dynamic>.from(data);
+      return _decode(snapshot.data());
     } on Object {
       // Offline, permission-denied, missing-document and not-initialised cases
       // all degrade to "nothing stored" rather than propagating: a persistence
@@ -43,7 +59,7 @@ class CloudFirestoreClient implements FirestoreClient {
     try {
       // `set` with an explicit document id; the repositories own their own
       // document layout, so this never relies on auto-generated ids.
-      await _firestore.doc(path).set(data);
+      await _firestore.doc(path).set(_encode(data));
     } on Object {
       // Same rationale as [read]: a failed write costs persistence, not play.
     }
@@ -67,10 +83,7 @@ class CloudFirestoreClient implements FirestoreClient {
     return _firestore
         .doc(path)
         .snapshots()
-        .map((snapshot) {
-          final data = snapshot.data();
-          return data == null ? null : Map<String, dynamic>.from(data);
-        })
+        .map((snapshot) => _decode(snapshot.data()))
         .handleError((Object _) => null);
   }
 
@@ -96,8 +109,10 @@ class CloudFirestoreClient implements FirestoreClient {
       final snapshot = await query.limit(limit).get();
       return snapshot.docs
           .map(
-            (doc) =>
-                FirestoreDocument(path: doc.reference.path, data: doc.data()),
+            (doc) => FirestoreDocument(
+              path: doc.reference.path,
+              data: _decode(doc.data())!,
+            ),
           )
           .toList();
     } on Object {
@@ -122,7 +137,7 @@ class CloudFirestoreClient implements FirestoreClient {
       .snapshots()
       .map(
         (snapshot) => FirestoreSnapshot(
-          data: snapshot.data(),
+          data: _decode(snapshot.data()),
           // `metadata.isFromCache` is the honest signal for "this came off the
           // device, not the server" — the basis of the Reconnecting state.
           fromCache: snapshot.metadata.isFromCache,
@@ -141,13 +156,13 @@ class _CloudTransaction implements FirestoreTransaction {
   @override
   Future<Map<String, dynamic>?> get(String path) async {
     final snapshot = await _txn.get(_firestore.doc(path));
-    return snapshot.data();
+    return _decode(snapshot.data());
   }
 
   /// Staged, not applied: Firestore applies transaction writes at commit.
   @override
   void set(String path, Map<String, dynamic> data) =>
-      _txn.set(_firestore.doc(path), data);
+      _txn.set(_firestore.doc(path), _encode(data));
 
   @override
   void delete(String path) => _txn.delete(_firestore.doc(path));

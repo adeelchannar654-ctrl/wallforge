@@ -22,6 +22,26 @@ import 'dart:async';
 /// Phase 8+ can widen this interface (sub-collections, queries, transactions)
 /// without touching the repositories, because they only ever see this contract.
 /// The first widening was [watch], added for the online lobby.
+
+/// Marker value meaning "the server's clock at commit time"
+/// (Phase 16.5).
+///
+/// A repository places [ServerTimestamp.value] in a document map
+/// to ask the backend to stamp the field itself
+/// (`FieldValue.serverTimestamp()` on the real client; the
+/// in-memory client's injected clock in tests). On the way back
+/// out, clients decode the stored timestamp to epoch
+/// milliseconds (an `int`), so repositories only ever read ints.
+/// The Security Rules can then require a stamped field to equal
+/// `request.time`, which no client can forge — the foundation of
+/// the game clock's server-time enforcement.
+class ServerTimestamp {
+  const ServerTimestamp._();
+
+  /// The singleton marker.
+  static const ServerTimestamp value = ServerTimestamp._();
+}
+
 abstract interface class FirestoreClient {
   /// Reads the document at [path], or null when it does not exist.
   ///

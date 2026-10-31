@@ -44,13 +44,16 @@ service cloud.firestore {
 
   // The exact top-level field set `Room.toJson` writes. `abandonedById` is
   // Phase 10's one additive field; older writers omit it, so it is allowed
-  // but not required. Phase 16.5 adds `finishReason` the same way.
+  // but not required. Phase 16.5 adds `finishReason`, the clock fields
+  // (`timeControlSeconds`, `turnDeadline`) and the server stamp
+  // (`serverUpdatedAt`) the same way.
   function validRoomShape(d, code) {
     return d.keys().hasOnly([
         'code', 'status', 'boardSize', 'wallsPerPlayer', 'hostId',
         'blue', 'red', 'createdAt', 'updatedAt', 'version', 'schemaVersion',
         'boardState', 'turnNumber', 'currentPlayerId', 'winnerId',
-        'abandonedById', 'finishReason',
+        'abandonedById', 'finishReason', 'timeControlSeconds',
+        'turnDeadline', 'serverUpdatedAt',
       ])
       && d.keys().hasAll([
         'code', 'status', 'boardSize', 'wallsPerPlayer', 'hostId',
@@ -82,7 +85,38 @@ service cloud.firestore {
           || d.abandonedById == d.red.playerId)
       && (!('finishReason' in d)
           || d.finishReason == null
-          || d.finishReason in ['goal', 'resign', 'timeout', 'abandon']);
+          || d.finishReason in ['goal', 'resign', 'timeout', 'abandon'])
+      && (!('timeControlSeconds' in d)
+          || (d.timeControlSeconds is int
+              && d.timeControlSeconds >= 0 && d.timeControlSeconds <= 3600))
+      && (!('turnDeadline' in d)
+          || d.turnDeadline == null || d.turnDeadline is int)
+      && (!('serverUpdatedAt' in d) || d.serverUpdatedAt is timestamp);
+  }
+
+  // Phase 16.5 clock: a deadline written by the player who just
+  // moved must be the server's current time plus the match's
+  // per-move limit — no more, and (critically) no less. The lower
+  // bound stops a mover shrinking the opponent's clock (the
+  // mover is the waiting player after moving and could otherwise
+  // claim a timeout instantly); the upper slack absorbs honest
+  // clients' clock-estimation error, and any excess only ever
+  // gifts time to the opponent. The 2 s figures are the deadline
+  // tolerance and the claim grace (D16.5-3); they must move with
+  // `FirestoreMatchRepository.timeoutGraceMs`.
+  function deadlineInBand(d) {
+    return d.get('turnDeadline', null) is int
+      && d.turnDeadline >= request.time.toMillis()
+          + d.get('timeControlSeconds', 0) * 1000 - 2000
+      && d.turnDeadline <= request.time.toMillis()
+          + d.get('timeControlSeconds', 0) * 1000 + 15000;
+  }
+
+  // Turn-advancing and terminal writes carry the server-time
+  // stamp (written via the server-timestamp sentinel, so in the
+  // request it *is* `request.time`).
+  function serverStamped(d) {
+    return d.get('serverUpdatedAt', null) == request.time;
   }
 
   // Structural checks on a stored `GameState` snapshot (serializer shape).
@@ -194,6 +228,8 @@ service cloud.firestore {
         && after().winnerId == null
         && (!('abandonedById' in after()) || after().abandonedById == null)
         && (!('finishReason' in after()) || after().finishReason == null)
+        && after().get('timeControlSeconds', 0) in [0, 15, 30, 60]
+        && after().get('turnDeadline', null) == null
         && after().blue.ready == false && after().red.ready == false
         && after().createdAt == after().updatedAt
         && notFromTheFuture(after().createdAt)
@@ -215,6 +251,8 @@ service cloud.firestore {
         && after().winnerId == null
         && (!('abandonedById' in after()) || after().abandonedById == null)
         && (!('finishReason' in after()) || after().finishReason == null)
+        && after().get('timeControlSeconds', 0) in [0, 15, 30, 60]
+        && after().get('turnDeadline', null) == null
         && after().blue.ready == false && after().red.ready == false
         && after().createdAt == after().updatedAt
         && notFromTheFuture(after().createdAt)
@@ -232,6 +270,8 @@ service cloud.firestore {
         return after().hostId == before().hostId
           && after().boardSize == before().boardSize
           && after().wallsPerPlayer == before().wallsPerPlayer
+          && after().get('timeControlSeconds', 0)
+              == before().get('timeControlSeconds', 0)
           && after().createdAt == before().createdAt
           && before().schemaVersion in [1, 2];
       }
@@ -264,6 +304,7 @@ service cloud.firestore {
           && after().winnerId == null
           && (!('abandonedById' in after()) || after().abandonedById == null)
           && (!('finishReason' in after()) || after().finishReason == null)
+          && after().get('turnDeadline', null) == null
           && (
             // A member edits only their own seat.
             (isMember(before())
@@ -300,7 +341,11 @@ service cloud.firestore {
           && after().turnNumber == 0
           && after().currentPlayerId == after().blue.playerId
           && after().winnerId == null
-          && after().get('finishReason', null) == null;
+          && after().get('finishReason', null) == null
+          && serverStamped(after())
+          && (after().get('timeControlSeconds', 0) == 0
+              ? after().get('turnDeadline', null) == null
+              : deadlineInBand(after()));
       }
 
       // A move: §12 "Only the current participant may advance the turn" and
@@ -312,6 +357,7 @@ service cloud.firestore {
       function moveWrite() {
         return before().status == 'started'
           && after().status in ['started', 'finished']
+          && serverStamped(after())
           && uid() == before().get('currentPlayerId', null)
           && seatsUnchanged()
           && after().turnNumber == before().get('turnNumber', 0) + 1
@@ -323,11 +369,15 @@ service cloud.firestore {
               && after().boardState.status == 'inProgress'
               && after().winnerId == null
               && after().get('finishReason', null) == null
+              && (after().get('timeControlSeconds', 0) == 0
+                  ? after().get('turnDeadline', null) == null
+                  : deadlineInBand(after()))
               && after().currentPlayerId == seatedUid(after(), after().boardState.currentPlayer))
             || (after().status == 'finished'
               && after().boardState.status == 'finished'
               && after().currentPlayerId == null
               && after().finishReason == 'goal'
+              && after().get('turnDeadline', null) == null
               && after().winnerId == seatedUid(after(), after().boardState.winner))
           );
       }
@@ -342,6 +392,8 @@ service cloud.firestore {
       function abandonmentClaim() {
         return before().status == 'started'
           && after().status == 'abandoned'
+          && before().get('timeControlSeconds', 0) == 0
+          && serverStamped(after())
           && isMember(before())
           && uid() != before().get('currentPlayerId', null)
           && request.time.toMillis() - before().get('updatedAt', 0) >= 120000
@@ -369,11 +421,39 @@ service cloud.firestore {
       function resignWrite() {
         return before().status == 'started'
           && after().status == 'finished'
+          && serverStamped(after())
+          && after().get('turnDeadline', null) == null
           && isMember(before())
           && after().winnerId == opponentUidOf(before())
           && after().winnerId != null
           && after().finishReason == 'resign'
           && after().currentPlayerId == null
+          && after().boardState == before().get('boardState', null)
+          && after().turnNumber == before().get('turnNumber', 0)
+          && (!('abandonedById' in after())
+              || after().abandonedById == before().get('abandonedById', null))
+          && seatsUnchanged();
+      }
+
+      // Timeout claim (Phase 16.5): for clocked matches this
+      // replaces the abandonment heuristic. The waiting player
+      // (never the player to move) ends the match once the
+      // stored deadline plus the 2 s grace has passed *on the
+      // server's clock* — `request.time`, not any client clock,
+      // judges expiry. The claimant wins; the board is frozen.
+      function timeoutClaimWrite() {
+        return before().status == 'started'
+          && after().status == 'finished'
+          && before().get('timeControlSeconds', 0) > 0
+          && before().get('turnDeadline', null) is int
+          && request.time.toMillis() > before().turnDeadline + 2000
+          && isMember(before())
+          && uid() != before().get('currentPlayerId', null)
+          && after().winnerId == uid()
+          && after().finishReason == 'timeout'
+          && after().currentPlayerId == null
+          && after().get('turnDeadline', null) == null
+          && serverStamped(after())
           && after().boardState == before().get('boardState', null)
           && after().turnNumber == before().get('turnNumber', 0)
           && (!('abandonedById' in after())
@@ -388,7 +468,7 @@ service cloud.firestore {
           // Idempotent no-op rewrite (the repository re-writes an unchanged
           // document on a redundant ready call); members only, nothing moves.
           (after() == before() && isMember(before()))
-          || (versionBump() && (preStartChange() || startMatch() || moveWrite() || abandonmentClaim() || resignWrite()))
+          || (versionBump() && (preStartChange() || startMatch() || moveWrite() || abandonmentClaim() || resignWrite() || timeoutClaimWrite()))
         );
 
       // Deletion is the host leaving a room that never started (Phase 8's
@@ -505,6 +585,8 @@ service cloud.firestore {
           && request.resource.data.turnNumber == 0
           && request.resource.data.currentPlayerId == null
           && request.resource.data.winnerId == null
+          && request.resource.data.get('timeControlSeconds', 0) in [0, 15, 30, 60]
+          && request.resource.data.get('turnDeadline', null) == null
           && request.resource.data.blue.playerId != null
           && request.resource.data.red.playerId != null
           && (request.resource.data.blue.playerId == matchedUid

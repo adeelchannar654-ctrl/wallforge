@@ -139,6 +139,15 @@ class FeedbackController extends ChangeNotifier {
     _haptic(_haptics.selection);
   }
 
+  /// The per-move clock crossed into its last seconds (Phase
+  /// 16.5): a light tick, once per turn at the low-time
+  /// threshold. Gated like every cue — silent when effects are
+  /// off, still when haptics are off or reduced motion is on.
+  void onClockTick() {
+    _effect(FeedbackAssets.buttonPress);
+    _haptic(_haptics.selection);
+  }
+
   void _effect(String asset) {
     if (!_settings.effectsEnabled) return;
     unawaited(_sound.playEffect(asset, _settings.volume));

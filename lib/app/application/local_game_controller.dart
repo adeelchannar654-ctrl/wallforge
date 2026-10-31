@@ -8,6 +8,7 @@ import '../../domain/models/board_config.dart';
 import '../../domain/models/cell.dart';
 import '../../domain/models/finish_reason.dart';
 import '../../domain/models/game_action.dart';
+import 'match_clock.dart';
 import '../../domain/models/game_state.dart';
 import '../../domain/models/game_status.dart';
 import '../../domain/models/player_id.dart';
@@ -44,10 +45,17 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
     BoardConfig config = const BoardConfig(),
     bool versusAi = false,
     AiDifficulty aiDifficulty = AiDifficulty.easy,
-  }) {
+    int? timeControlSeconds,
+    DateTime Function()? clock,
+  }) : _now = clock ?? DateTime.now {
     _state = GameState.initial(config);
     _versusAi = versusAi;
     _aiDifficulty = aiDifficulty;
+    // Phase 16.5: an explicit control wins; otherwise the
+    // persisted Settings default is adopted when it loads.
+    _timeControlSeconds = timeControlSeconds ?? 0;
+    _clockExplicit = timeControlSeconds != null;
+    _matchClock = MatchClock(now: _now, onTimeout: _onClockTimeout);
     _recordAiPosition();
     // Blue always moves first (R-PLAYER-07), so the AI's first turn is
     // scheduled from the human's first action rather than here.
@@ -90,6 +98,32 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
   /// `inProgress`; the outcome lives here, at the match layer.
   PlayerId? _outcomeWinner;
   FinishReason? _appFinishReason;
+
+  // --- Phase 16.5: per-move clock ------------------------------------------
+
+  /// The injected wall clock (tests substitute a manual one).
+  final DateTime Function() _now;
+
+  /// The match clock state machine.
+  late final MatchClock _matchClock;
+
+  /// The resolved per-move control for this match, in seconds
+  /// (0 = off): the explicit value when one was given, else the
+  /// persisted Settings default once it has loaded.
+  int _timeControlSeconds = 0;
+  bool _clockExplicit = false;
+
+  /// The 1 Hz display/timeout ticker. Exists only while a
+  /// clocked human turn is in flight (Phase 15's invariant: an
+  /// idle or unclocked board schedules nothing).
+  Timer? _clockTimer;
+
+  /// The current live-region announcement ("10 seconds left"),
+  /// set only when a threshold is crossed — never per second.
+  String? _clockAnnouncement;
+
+  /// The last threshold announced for this turn (10, then 5).
+  int _lastAnnouncedThreshold = 0;
 
   /// Phase 5: optional offline AI opponent.
   bool _versusAi = false;
@@ -140,6 +174,141 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
       _state.status == GameStatus.finished || _outcomeWinner != null;
   PlayerId get currentPlayer => _state.currentPlayer;
 
+  // --- Phase 16.5: clock surface --------------------------------------------
+
+  /// The per-move control this match runs under, in seconds
+  /// (0 = off).
+  int get timeControlSeconds => _timeControlSeconds;
+
+  /// Whether a clocked human turn is currently being timed.
+  bool get clockArmed => _matchClock.isArmed && !isFinished;
+
+  /// Time left for the side being timed, or null when the clock
+  /// is not running (off, AI's turn, or the match is over).
+  Duration? get clockRemaining => clockArmed ? _matchClock.remaining : null;
+
+  /// The side whose clock is running.
+  PlayerId? get clockSide => clockArmed ? _matchClock.side : null;
+
+  /// Whether the running clock is in its last five seconds —
+  /// the low-time state the UI marks with an icon and text, not
+  /// colour alone.
+  bool get clockLowTime {
+    final remaining = clockRemaining;
+    return remaining != null && remaining.inSeconds <= 5;
+  }
+
+  /// The latest threshold announcement for assistive technology
+  /// ("10 seconds left" / "5 seconds left"), or null. Changes
+  /// only at the thresholds, so a live region reading it never
+  /// chatters every second.
+  String? get clockAnnouncement => _clockAnnouncement;
+
+  /// Whether the 1 Hz ticker currently exists. Exposed for the
+  /// lifecycle tests that prove an unclocked or finished board
+  /// schedules nothing.
+  bool get clockTimerActive => _clockTimer != null;
+
+  /// Starts timing the current turn if this match is clocked.
+  ///
+  /// Called by the game screen when it presents the match: a
+  /// controller also exists on Home (for statistics and the
+  /// resume card), and a clock must never run — or time out —
+  /// where nobody is playing.
+  void activateClock() {
+    _clockActivated = true;
+    _armClockForCurrentTurn();
+  }
+
+  /// Whether the game screen has presented this match (see
+  /// [activateClock]): the persisted-default adoption re-arms
+  /// only for a presented match whose first turn has not moved.
+  bool _clockActivated = false;
+
+  /// Freezes the countdown while the app is backgrounded
+  /// (D16.5-4).
+  void pauseClock() {
+    _matchClock.pause();
+    _syncClockTimer();
+  }
+
+  /// Resumes the countdown from the frozen remainder.
+  void resumeClock() {
+    _matchClock.resume();
+    _syncClockTimer();
+    notifyListeners();
+  }
+
+  void _onClockTimeout(PlayerId side) {
+    if (isFinished) return;
+    _finishByApplication(side.opponent, FinishReason.timeout);
+  }
+
+  /// (Re)arms the clock for whoever is to move, or stops it:
+  /// off, finished, and AI turns are never timed.
+  void _armClockForCurrentTurn() {
+    if (_disposed) return;
+    if (isFinished || _timeControlSeconds <= 0) {
+      _stopClock();
+      return;
+    }
+    if (_versusAi && _state.currentPlayer == kAiPlayer) {
+      _stopClock();
+      return;
+    }
+    _matchClock.startTurn(
+      _state.currentPlayer,
+      Duration(seconds: _timeControlSeconds),
+    );
+    _lastAnnouncedThreshold = 0;
+    _clockAnnouncement = null;
+    _syncClockTimer();
+  }
+
+  void _stopClock() {
+    _matchClock.stop();
+    _syncClockTimer();
+  }
+
+  /// Keeps the 1 Hz ticker in existence exactly while a clocked
+  /// human turn is in flight and unpaused.
+  void _syncClockTimer() {
+    final shouldRun =
+        _matchClock.isArmed && !_matchClock.isPaused && !_disposed;
+    if (shouldRun && _clockTimer == null) {
+      _clockTimer = Timer.periodic(
+        const Duration(seconds: 1),
+        (_) => _onClockTick(),
+      );
+    } else if (!shouldRun && _clockTimer != null) {
+      _clockTimer!.cancel();
+      _clockTimer = null;
+    }
+  }
+
+  void _onClockTick() {
+    if (_disposed) return;
+    _matchClock.tick();
+    final remaining = _matchClock.remaining;
+    if (remaining != null && _matchClock.isArmed && !isFinished) {
+      final seconds = remaining.inSeconds;
+      if (seconds <= 10 && _lastAnnouncedThreshold == 0) {
+        _lastAnnouncedThreshold = 10;
+        _clockAnnouncement = '10 seconds left';
+      } else if (seconds <= 5 && _lastAnnouncedThreshold == 10) {
+        _lastAnnouncedThreshold = 5;
+        _clockAnnouncement = '5 seconds left';
+      }
+      if (seconds <= 5 && seconds > 0) feedback?.onClockTick();
+    }
+    notifyListeners();
+  }
+
+  /// Drives one clock tick directly (tests use a manual clock
+  /// and call this instead of waiting for the 1 Hz timer).
+  @visibleForTesting
+  void debugTickClock() => _onClockTick();
+
   // --- Actions called by presentation ---------------------------------------
 
   /// Start a new match.
@@ -147,12 +316,17 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
     BoardConfig config = const BoardConfig(),
     bool versusAi = false,
     AiDifficulty aiDifficulty = AiDifficulty.easy,
+    int? timeControlSeconds,
   }) {
     _state = GameState.initial(config);
     resetInteraction();
     _showingResult = false;
     _outcomeWinner = null;
     _appFinishReason = null;
+    if (timeControlSeconds != null) {
+      _timeControlSeconds = timeControlSeconds;
+      _clockExplicit = true;
+    }
     _versusAi = versusAi;
     _aiDifficulty = aiDifficulty;
     _aiPreviousCell = null;
@@ -164,6 +338,7 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
     _resumableMatch = null;
     unawaited(_clearUnfinished());
     unawaited(persistSettings());
+    _armClockForCurrentTurn();
     notifyListeners();
     _scheduleAiTurn();
   }
@@ -206,6 +381,7 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
     _outcomeWinner = winner;
     _appFinishReason = reason;
     _showingResult = true;
+    _stopClock();
     _cancelAiTurn();
     unawaited(recordFinishedMatch());
     notifyListeners();
@@ -214,6 +390,8 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
   @override
   void dispose() {
     _disposed = true;
+    _clockTimer?.cancel();
+    _clockTimer = null;
     _cancelAiTurn();
     super.dispose();
   }
@@ -250,6 +428,7 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
   void onActionApplied() {
     if (_state.status == GameStatus.finished) {
       _showingResult = true;
+      _stopClock();
       // Phase 12: the match ending is its own event, distinct from the
       // winning action's cue, and fires exactly once — this is the only
       // place a local match transitions into the finished state.
@@ -257,6 +436,9 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
       unawaited(recordFinishedMatch());
     } else {
       _saveUnfinished();
+      // Phase 16.5: the turn — and its clock — passes to the
+      // next player (or stops, when the AI is to move).
+      _armClockForCurrentTurn();
     }
     _recordAiPosition();
     _scheduleAiTurn();
@@ -286,6 +468,16 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
       _settings = loaded;
       setConfirmWallPlacementSilently(loaded.confirmWallPlacement);
       _aiDifficulty = _difficultyFromName(loaded.aiDifficulty);
+      // Phase 16.5: adopt the persisted default clock when this
+      // match was not given an explicit control. If the game
+      // screen has already presented the match (the load raced
+      // the first frame), re-arm so the first turn is timed too.
+      if (!_clockExplicit) {
+        _timeControlSeconds = loaded.defaultTimeControlSeconds;
+        if (_clockActivated && _state.turnNumber == 0 && !isFinished) {
+          _armClockForCurrentTurn();
+        }
+      }
       // Phase 12: keep the feedback layer's snapshot at the persisted
       // values, so cues are gated correctly from the first move.
       feedback?.applySettings(loaded);
@@ -325,12 +517,20 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
     _state = match.gameState;
     _versusAi = match.versusAi;
     _aiDifficulty = _difficultyFromName(match.aiDifficulty);
+    // Phase 16.5: the resumed match keeps its time control, and
+    // the current turn restarts at a full clock (D16.5-4) — the
+    // save deliberately stores no deadline.
+    _timeControlSeconds = match.timeControlSeconds;
+    _clockExplicit = true;
+    _outcomeWinner = null;
+    _appFinishReason = null;
     resetInteraction();
     _showingResult = false;
     _aiPreviousCell = null;
     _aiVisitOrder.clear();
     _recordAiPosition();
     _resumableMatch = null;
+    _armClockForCurrentTurn();
     notifyListeners();
     _scheduleAiTurn();
     return true;
@@ -383,6 +583,7 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
           versusAi: _versusAi,
           aiDifficulty: _difficultyNameFor(_versusAi, _aiDifficulty),
           savedAtTurn: _state.turnNumber,
+          timeControlSeconds: _timeControlSeconds,
         ),
       ),
     );

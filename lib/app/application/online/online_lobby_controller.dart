@@ -211,9 +211,20 @@ class OnlineLobbyController extends ChangeNotifier {
   }
 
   /// Creates a room and starts watching it.
-  Future<void> createRoom({BoardConfig? config}) async {
+  ///
+  /// Phase 16.5: [timeControlSeconds] is the room's per-move
+  /// clock (0 = off), chosen in the lobby's create section.
+  /// Quick Match ignores it — its clock is fixed at 60 s so the
+  /// queue stays a single pool.
+  Future<void> createRoom({
+    BoardConfig? config,
+    int timeControlSeconds = 0,
+  }) async {
     final created = await _run(
-      () => rooms.create(config: config ?? boardConfig),
+      () => rooms.create(
+        config: config ?? boardConfig,
+        timeControlSeconds: timeControlSeconds,
+      ),
     );
     if (created == null) return;
     await _enterRoom(created);

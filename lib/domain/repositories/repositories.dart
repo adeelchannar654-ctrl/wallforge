@@ -90,7 +90,14 @@ abstract interface class RoomRepository {
   /// The creator takes the Blue seat because Blue moves first
   /// (`game_spec.md` R-PLAYER-07) and the existing local code already treats
   /// Blue as the first player (Q-6.2).
-  Future<RoomResult> create({required BoardConfig config});
+  ///
+  /// [timeControlSeconds] is the per-move clock chosen at
+  /// creation (Phase 16.5; 0 = off). It is part of the room's
+  /// agreed terms, like the board config, and never changes.
+  Future<RoomResult> create({
+    required BoardConfig config,
+    int timeControlSeconds = 0,
+  });
 
   /// Joins the room identified by [code], taking the free seat.
   ///

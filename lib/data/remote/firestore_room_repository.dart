@@ -72,7 +72,10 @@ class FirestoreRoomRepository implements RoomRepository {
   }
 
   @override
-  Future<RoomResult> create({required BoardConfig config}) async {
+  Future<RoomResult> create({
+    required BoardConfig config,
+    int timeControlSeconds = 0,
+  }) async {
     final uid = await userId();
     if (uid == null || uid.isEmpty) return _notAuthenticated;
     if (!config.isValid) {
@@ -122,6 +125,7 @@ class FirestoreRoomRepository implements RoomRepository {
         red: RoomSeat.empty,
         createdAtMs: now,
         updatedAtMs: now,
+        timeControlSeconds: timeControlSeconds,
       );
       // A transport failure is not a collision, so it is reported as such rather
       // than burning the remaining attempts and blaming the code space.
@@ -285,10 +289,18 @@ class FirestoreRoomRepository implements RoomRepository {
       boardState: initial,
       turnNumber: initial.turnNumber,
       currentPlayerId: bluePlayerId,
+      // Phase 16.5: a clocked match's first deadline starts now,
+      // for Blue. The write also carries the server-time stamp,
+      // so both clients can anchor their countdowns to it.
+      turnDeadlineMs: room.timeControlSeconds > 0
+          ? _nowMs + room.timeControlSeconds * 1000
+          : null,
       updatedAtMs: _nowMs,
       version: room.version + 1,
     );
-    if (!await _write(path, started.toJson())) return _networkFailure;
+    if (!await _write(path, _stamped(started.toJson()))) {
+      return _networkFailure;
+    }
     // A started room is no longer "open", so the host's pointer clears. (The
     // guest's pointer goes stale instead and self-heals on their next
     // create/join, which re-reads the room it names before believing it.)
@@ -457,6 +469,14 @@ class FirestoreRoomRepository implements RoomRepository {
   /// here: it would report a room that does not exist, or a ready state the
   /// opponent never received. So a transport failure has to surface as
   /// [RoomFailureReason.networkUnavailable].
+  /// Overlays the server-timestamp sentinel on a document being
+  /// written by a turn-advancing or terminal transition (Phase
+  /// 16.5): the backend stamps `serverUpdatedAt` itself, which
+  /// is what lets the Security Rules anchor the game clock to
+  /// server time and lets clients estimate their clock skew.
+  Map<String, dynamic> _stamped(Map<String, dynamic> json) =>
+      json..['serverUpdatedAt'] = ServerTimestamp.value;
+
   Future<bool> _write(String path, Map<String, dynamic> data) async {
     try {
       await client.write(path, data);

@@ -18,6 +18,7 @@ class UnfinishedMatch {
     required this.versusAi,
     required this.aiDifficulty,
     this.savedAtTurn = 0,
+    this.timeControlSeconds = 0,
   });
 
   /// The live match state, restored through [GameStateSerializer].
@@ -35,11 +36,17 @@ class UnfinishedMatch {
   /// The match's turn number when saved, for display and staleness checks.
   final int savedAtTurn;
 
+  /// The per-move clock the match was played under, in seconds
+  /// (Phase 16.5; 0 = off). A resumed match restarts the current
+  /// turn at a full clock (D16.5-4) — no deadline is stored.
+  final int timeControlSeconds;
+
   Map<String, dynamic> toJson() => <String, dynamic>{
     'boardSize': boardSize,
     'versusAi': versusAi,
     'aiDifficulty': aiDifficulty,
     'savedAtTurn': savedAtTurn,
+    'timeControlSeconds': timeControlSeconds,
     'gameState': GameStateSerializer.toJson(gameState),
   };
 
@@ -66,12 +73,16 @@ class UnfinishedMatch {
     if (state == null) return null;
 
     final rawDifficulty = json['aiDifficulty'];
+    final rawTimeControl = json['timeControlSeconds'];
     return UnfinishedMatch(
       gameState: state,
       boardSize: rawSize,
       versusAi: json['versusAi'] == true,
       aiDifficulty: rawDifficulty is String ? rawDifficulty : 'local',
       savedAtTurn: (rawTurn is int && rawTurn >= 0) ? rawTurn : 0,
+      timeControlSeconds: (rawTimeControl is int && rawTimeControl >= 0)
+          ? rawTimeControl
+          : 0,
     );
   }
 

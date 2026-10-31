@@ -300,6 +300,11 @@ enum AbandonmentFailureReason {
   /// opponent, and the claim belongs to whoever is waiting on them.
   notOpponentTurn,
 
+  /// The match runs under a per-move clock (Phase 16.5): expiry is
+  /// judged by the timeout claim against the turn deadline, not
+  /// by inactivity, so the abandonment claim does not apply.
+  clockedMatch,
+
   /// The stored document advanced too recently: the opponent is, as far as
   /// the shared record shows, still playing. Also the outcome when the
   /// opponent's move lands first in a claim race — the transaction re-reads
@@ -442,6 +447,97 @@ class ResignRejected extends ResignResult {
   ResignFailureReason get reason => failure.reason;
 }
 
+/// Why a timeout claim was refused (Phase 16.5).
+enum TimeoutClaimFailureReason {
+  /// No uid resolved, so there is nobody to claim for.
+  notAuthenticated,
+
+  /// The caller is not seated in this match.
+  notAMember,
+
+  /// No match document exists at that code.
+  roomNotFound,
+
+  /// The room exists but its match has not started.
+  matchNotStarted,
+
+  /// The match is already over.
+  matchAlreadyOver,
+
+  /// It is the caller's own turn — the clock that may have run
+  /// out is their own, and only the waiting player may claim.
+  notOpponentTurn,
+
+  /// The match has no per-move clock, so there is no deadline
+  /// to claim against (the abandonment claim covers that case).
+  noClock,
+
+  /// The deadline, plus its grace, has not passed yet — judged
+  /// client-side here and authoritatively by the Security
+  /// Rules against server time.
+  clockNotExpired,
+
+  /// The transport failed or Firebase is unreachable.
+  networkUnavailable,
+}
+
+/// A refused timeout claim.
+class TimeoutClaimFailure {
+  /// Creates a timeout-claim failure.
+  const TimeoutClaimFailure(this.reason, {this.message});
+
+  /// Machine-readable reason.
+  final TimeoutClaimFailureReason reason;
+
+  /// Human-readable explanation, safe to show a player.
+  final String? message;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TimeoutClaimFailure &&
+          reason == other.reason &&
+          message == other.message;
+
+  @override
+  int get hashCode => Object.hash(reason, message);
+
+  @override
+  String toString() => 'TimeoutClaimFailure(${reason.name}: $message)';
+}
+
+/// The outcome of a timeout claim.
+sealed class TimeoutClaimResult {
+  const TimeoutClaimResult._();
+
+  /// The claim landed: the match is finished, the claimant won
+  /// on time.
+  const factory TimeoutClaimResult.claimed(Room room) = TimeoutClaimed;
+
+  /// The claim was refused for this reason.
+  const factory TimeoutClaimResult.rejected(TimeoutClaimFailure failure) =
+      TimeoutClaimRejected;
+}
+
+/// A timeout claim that landed.
+class TimeoutClaimed extends TimeoutClaimResult {
+  const TimeoutClaimed(this.room) : super._();
+
+  /// The match document after the claim.
+  final Room room;
+}
+
+/// A timeout claim that was refused.
+class TimeoutClaimRejected extends TimeoutClaimResult {
+  const TimeoutClaimRejected(this.failure) : super._();
+
+  /// Why the claim was refused.
+  final TimeoutClaimFailure failure;
+
+  /// The machine-readable reason.
+  TimeoutClaimFailureReason get reason => failure.reason;
+}
+
 /// The outcome of submitting an action.
 sealed class MoveSubmission {
   const MoveSubmission._();
@@ -554,6 +650,21 @@ abstract interface class MatchRepository {
   /// can never be changed by a resign write (the Security Rules
   /// prove both).
   Future<ResignResult> resign({required String code});
+
+  /// Claims the match on time (Phase 16.5): the waiting player
+  /// ends a clocked match whose turn deadline (plus a 2-second
+  /// grace) has passed.
+  ///
+  /// One transaction, like the abandonment claim it parallels:
+  /// the caller must be the player who is *waiting*, the match
+  /// must be started and clocked, and the stored deadline must
+  /// have passed. The write finishes the match with the
+  /// claimant as winner and `FinishReason.timeout` recorded;
+  /// the board snapshot is frozen as it stood. The Security
+  /// Rules re-judge the deadline against server time
+  /// (`request.time`), so a client with a wrong clock cannot
+  /// steal a match this way.
+  Future<TimeoutClaimResult> claimTimeout({required String code});
 
   /// There is deliberately no "start" method here. Starting a match belongs to
   /// `RoomRepository.start`, the Phase 8 host-only operation, and Phase 9 taught

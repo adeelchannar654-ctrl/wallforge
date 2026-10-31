@@ -5024,3 +5024,88 @@ behaviour (Back now confirms before leaving; it walks the
 dialog). One golden master regenerated in this VM
 (`game_screen_desktop_toggle.png` — the desktop actions row
 gained RESIGN; Linux-rendered like the other masters).
+
+### Part C — per-move game clock (2026-10-31)
+
+Shipped, per D16.5-2/3/4. Constants in
+`lib/domain/models/time_control.dart` (options 0/15/30/60,
+Quick Match fixed 60, grace 2 000 ms — mirrored in the rules
+and in `FirestoreMatchRepository.timeoutGraceMs`; all three
+move together). Server-time plumbing: a `ServerTimestamp`
+marker in `firestore_client.dart`; the cloud client encodes
+it to `FieldValue.serverTimestamp()` and decodes `Timestamp`
+back to epoch-ms; the in-memory double resolves it from its
+own injectable clock. Room gained additive `timeControlSeconds`
+(0), `turnDeadlineMs`, `serverUpdatedAtMs` (schemaVersion
+stays 2; `toJson` omits the stamp — repositories overlay it).
+Every post-start write is stamped in the SAME write as the
+move: start seeds deadline = now + limit; each accepted move
+sets the next deadline; resign/timeout/abandon writes clear
+it. No extra writes anywhere (recount in Part I).
+Rules: `deadlineInBand` ([request.time + limit − 2 s,
+request.time + limit + 15 s] — the lower slack is the grace,
+the upper slack absorbs client/server write latency) and
+`serverStamped` (serverUpdatedAt == request.time) gate start
+and move writes; create allows only [0, 15, 30, 60] with a
+null deadline; the control is immutable (identityStable);
+new `timeoutClaimWrite()` (clocked, deadline int,
+request.time > deadline + 2 s, claimant is the waiting
+member, winner == claimant, reason `timeout`, board frozen,
+stamped); abandonment now requires an UNCLOCKED before-doc —
+clocked matches replace the 120 s heuristic entirely.
+Repository: `claimTimeout` mirrors the abandonment claim's
+transaction discipline with device-clock pre-checks
+(noClock / clockNotExpired / notOpponentTurn /
+matchAlreadyOver); `claimAbandonment` refuses clocked
+matches with the new `clockedMatch` reason.
+Local/vs-AI: `MatchClock` (injected time source; pause
+freezes the remainder) driven by `LocalGameController` with a
+1 Hz timer that exists ONLY while a clocked human turn is in
+flight (AI turns are never timed; finished/off boards
+schedule nothing). Backgrounding freezes the clock via the
+game screen's lifecycle observer; a cold-resumed clocked
+match restarts the current turn at a full clock; the Settings
+default (`AppSettings.defaultTimeControlSeconds`, persisted
+in the same settings blob) is adopted only when no explicit
+control was given, and re-arms turn 0 if the settings load
+raced the first frame. Announcements at 10 s and 5 s only,
+feedback tick each second ≤ 5 s through the Phase 12 layer.
+Online: `OnlineGameController` computes the countdown from
+the stored deadline against a skew estimate learned from
+each snapshot's `serverUpdatedAt` (tested at ±30 s device
+skew both directions); its own 1 Hz ticker exists only while
+a clocked match is live, and the waiting client AUTO-CLAIMS
+once per turn when the deadline + grace passes (the claim is
+a fact, not a tapping race). Online clocks do NOT pause when
+backgrounded — the deadline is server-side by design.
+Presence/abandonment UI is suppressed for clocked matches
+(`OpponentPresence.notApplicable`). UI: `ClockChip` (icon +
+m:ss; low time swaps the icon to a warning triangle and the
+semantic label says "low time" — never colour alone;
+threshold announcements ride a hidden live region); chips in
+both game screens' player bars; lobby create-card picker
+(Off/15s/30s/60s, default Off) written into the created room;
+Quick Match card now states its fixed 60 s clock; Settings
+gains the "Default move clock" row.
+JS rules tests: a clock section (create allow-list, start
+band + stamp, move band + stamp, claim happy/too-early/
+in-grace/player-to-move/stranger/wrong-winner/board-edit,
+unclocked-has-no-timeout-claim, clocked-has-no-abandonment)
+plus a FIX the clock exposed in Part B's own JS tests: the
+start, abandonment-claim, resign and game-ending-move success
+writes now carry `serverTimestamp()` — the transitions have
+required the stamp since Part B/C, and the unstamped success
+writes would have failed when run. **JS suite still not run**
+(emulator cannot boot in this VM; owner script in Part I).
+Gates: format 186 files 0 changed; analyze clean; spec
+checker OK; oracle hash unchanged; engine untouched. New
+Dart tests 34/34 (MatchClock 6, local controller 7,
+repository 12, online two-stack 5, UI 4). Full suite: one
+combined run gave 1,801 passed / 4 failed; the four failures
+did NOT reproduce in complete subset re-runs covering every
+test (application+core+data+domain 1,473/1,473 and
+presentation 332/332, both fully green) and are recorded as
+load-sensitive flakes under full-suite parallelism — the
+definitive full re-run is a Part I gate, and the one new
+test with a fixed real-time allowance (vs-AI think) was
+rewritten to poll for the AI's move instead of sleeping.

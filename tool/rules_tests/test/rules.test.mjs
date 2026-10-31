@@ -25,6 +25,7 @@ import {
   deleteDoc,
   collection,
   runTransaction,
+  serverTimestamp,
 } from 'firebase/firestore';
 
 const NOW = Date.now();
@@ -58,9 +59,18 @@ function roomDoc(overrides = {}) {
     winnerId: null,
     abandonedById: null,
     finishReason: null,
+    timeControlSeconds: 0,
+    turnDeadline: null,
     ...overrides,
   };
 }
+
+// Phase 16.5: every post-start transition (start, move, claim,
+// resign) must carry the server-time stamp — the stamp is what
+// lets the rules judge deadlines against `request.time` rather
+// than any client clock. `serverTimestamp()` in a write resolves
+// to exactly `request.time` on the server.
+const stamped = (d) => ({ ...d, serverUpdatedAt: serverTimestamp() });
 
 function boardState(overrides = {}) {
   return {
@@ -109,6 +119,7 @@ function afterFirstMove(overrides = {}) {
     currentPlayerId: 'bob',
     version: 4,
     updatedAt: NOW,
+    serverUpdatedAt: serverTimestamp(),
     ...overrides,
   });
 }
@@ -314,7 +325,7 @@ const readyRoom = () => roomDoc({
 test('start: the host starts a ready room with the true initial state', async () => {
   await seed(`matches/${CODE}`, readyRoom());
   await assertSucceeds(
-    setDoc(matchRef(alice), startedRoom({ version: 6 })),
+    setDoc(matchRef(alice), stamped(startedRoom({ version: 6 }))),
   );
 });
 
@@ -514,13 +525,13 @@ const staleStartedRoom = (overrides = {}) => startedRoom({
 test('claim: the waiting player ends a stalled match', async () => {
   await seed(`matches/${CODE}`, staleStartedRoom());
   await assertSucceeds(
-    setDoc(matchRef(alice), staleStartedRoom({
+    setDoc(matchRef(alice), stamped(staleStartedRoom({
       status: 'abandoned',
       abandonedById: 'alice',
       finishReason: 'abandon',
       updatedAt: NOW,
       version: 5,
-    })),
+    }))),
   );
 });
 
@@ -579,6 +590,7 @@ const resignAfter = (overrides = {}) => startedRoom({
   currentPlayerId: null,
   updatedAt: NOW,
   version: 4,
+  serverUpdatedAt: serverTimestamp(),
   ...overrides,
 });
 
@@ -686,12 +698,206 @@ test('move: a game-ending move must record the goal finish reason', async () => 
   });
   await seed(`matches/${CODE}`, nearlyDone);
   await assertSucceeds(
-    setDoc(matchRef(alice), { ...endingMove, finishReason: 'goal' }),
+    setDoc(matchRef(alice), {
+      ...endingMove,
+      finishReason: 'goal',
+      serverUpdatedAt: serverTimestamp(),
+    }),
   );
   await seed(`matches/${CODE}`, nearlyDone);
   await assertFails(setDoc(matchRef(alice), endingMove)); // no reason
   await assertFails(
     setDoc(matchRef(alice), { ...endingMove, finishReason: 'resign' }),
+  );
+});
+
+// --- game clock (phase 16.5) ---------------------------------------------------
+
+// A started clocked room (60 s per move), Blue (alice) to move.
+// The deadline defaults to a minute from the test's own now; the
+// emulator's request.time is the same wall clock.
+const clockedStartedRoom = (overrides = {}) => startedRoom({
+  timeControlSeconds: 60,
+  turnDeadline: Date.now() + 60000,
+  ...overrides,
+});
+
+const timeoutAfter = (overrides = {}) => clockedStartedRoom({
+  status: 'finished',
+  winnerId: 'bob', // alice's clock ran out; bob (waiting) claims
+  finishReason: 'timeout',
+  currentPlayerId: null,
+  turnDeadline: null,
+  updatedAt: NOW,
+  version: 4,
+  serverUpdatedAt: serverTimestamp(),
+  ...overrides,
+});
+
+test('clock: create accepts only the offered controls', async () => {
+  await assertSucceeds(
+    setDoc(matchRef(alice), roomDoc({ timeControlSeconds: 30 })),
+  );
+  await assertFails(
+    setDoc(matchRef(alice), roomDoc({ timeControlSeconds: 45 })),
+  );
+  await assertFails(
+    setDoc(matchRef(alice), roomDoc({ turnDeadline: Date.now() + 1000 })),
+  );
+});
+
+test('clock: start must be stamped and seed an in-band deadline', async () => {
+  const ready = roomDoc({
+    status: 'ready',
+    blue: { playerId: 'alice', ready: true },
+    red: { playerId: 'bob', ready: true },
+    timeControlSeconds: 60,
+    version: 5,
+  });
+  await seed(`matches/${CODE}`, ready);
+  await assertSucceeds(
+    setDoc(matchRef(alice), stamped(startedRoom({
+      version: 6,
+      timeControlSeconds: 60,
+      turnDeadline: Date.now() + 60000,
+    }))),
+  );
+  // No deadline at all on a clocked start.
+  await seed(`matches/${CODE}`, ready);
+  await assertFails(
+    setDoc(matchRef(alice), stamped(startedRoom({
+      version: 6,
+      timeControlSeconds: 60,
+      turnDeadline: null,
+    }))),
+  );
+  // A deadline an hour out is outside the band the limit allows.
+  await assertFails(
+    setDoc(matchRef(alice), stamped(startedRoom({
+      version: 6,
+      timeControlSeconds: 60,
+      turnDeadline: Date.now() + 3600000,
+    }))),
+  );
+  // The same write without the server stamp.
+  await assertFails(
+    setDoc(matchRef(alice), startedRoom({
+      version: 6,
+      timeControlSeconds: 60,
+      turnDeadline: Date.now() + 60000,
+    })),
+  );
+});
+
+test('clock: a move must be stamped and carry the next in-band deadline', async () => {
+  await seed(`matches/${CODE}`, clockedStartedRoom());
+  await assertSucceeds(
+    setDoc(matchRef(alice), afterFirstMove({
+      timeControlSeconds: 60,
+      turnDeadline: Date.now() + 60000,
+    })),
+  );
+  // A deadline far below the band (the mover shortening the
+  // opponent's clock) is refused.
+  await seed(`matches/${CODE}`, clockedStartedRoom());
+  await assertFails(
+    setDoc(matchRef(alice), afterFirstMove({
+      timeControlSeconds: 60,
+      turnDeadline: Date.now() + 5000,
+    })),
+  );
+  // An unstamped move is refused even with a valid deadline.
+  const unstamped = afterFirstMove({
+    timeControlSeconds: 60,
+    turnDeadline: Date.now() + 60000,
+  });
+  delete unstamped.serverUpdatedAt;
+  await assertFails(setDoc(matchRef(alice), unstamped));
+});
+
+test('clock: against an expired document the claim is the write that fits', async () => {
+  // The deadline passed ten seconds ago (on the server clock).
+  // A late move and the claim race on the same document; the
+  // transactions serialise, and whichever lands second is
+  // refused (the move because the match is finished, the claim
+  // because it already ended). Here the claim lands first.
+  await seed(`matches/${CODE}`, clockedStartedRoom({
+    turnDeadline: Date.now() - 10000,
+  }));
+  await assertSucceeds(setDoc(matchRef(bob), timeoutAfter()));
+  // The timed-out player's move now matches no transition.
+  await assertFails(
+    setDoc(matchRef(alice), afterFirstMove({
+      timeControlSeconds: 60,
+      turnDeadline: Date.now() + 60000,
+    })),
+  );
+});
+
+test('clock: the timeout claim lands only for the waiting player, after the grace', async () => {
+  // Happy path: deadline ten seconds in the past (> 2 s grace).
+  await seed(`matches/${CODE}`, clockedStartedRoom({
+    turnDeadline: Date.now() - 10000,
+  }));
+  await assertSucceeds(setDoc(matchRef(bob), timeoutAfter()));
+
+  // Too early: the deadline is still a minute away.
+  await seed(`matches/${CODE}`, clockedStartedRoom());
+  await assertFails(setDoc(matchRef(bob), timeoutAfter()));
+
+  // Inside the grace: one second past the deadline.
+  await seed(`matches/${CODE}`, clockedStartedRoom({
+    turnDeadline: Date.now() - 1000,
+  }));
+  await assertFails(setDoc(matchRef(bob), timeoutAfter()));
+
+  // The player to move cannot claim their own clock.
+  await seed(`matches/${CODE}`, clockedStartedRoom({
+    turnDeadline: Date.now() - 10000,
+  }));
+  await assertFails(
+    setDoc(matchRef(alice), timeoutAfter({ winnerId: 'alice' })),
+  );
+
+  // A stranger cannot claim, and the claimant cannot hand the
+  // win to the player who timed out.
+  await assertFails(setDoc(matchRef(carol), timeoutAfter()));
+  await assertFails(
+    setDoc(matchRef(bob), timeoutAfter({ winnerId: 'alice' })),
+  );
+
+  // The claim may not move the board while it lands.
+  await assertFails(
+    setDoc(matchRef(bob), timeoutAfter({ turnNumber: 1 })),
+  );
+});
+
+test('clock: an unclocked match has no timeout claim, and a clocked match no abandonment claim', async () => {
+  // Unclocked: no deadline exists to claim against.
+  await seed(`matches/${CODE}`, startedRoom());
+  await assertFails(
+    setDoc(matchRef(bob), startedRoom({
+      status: 'finished',
+      winnerId: 'bob',
+      finishReason: 'timeout',
+      currentPlayerId: null,
+      updatedAt: NOW,
+      version: 4,
+      serverUpdatedAt: serverTimestamp(),
+    })),
+  );
+  // Clocked: the 120 s inactivity claim no longer applies.
+  await seed(`matches/${CODE}`, clockedStartedRoom({
+    updatedAt: NOW - 121000,
+  }));
+  await assertFails(
+    setDoc(matchRef(bob), stamped(clockedStartedRoom({
+      status: 'abandoned',
+      abandonedById: 'bob',
+      finishReason: 'abandon',
+      updatedAt: NOW,
+      version: 4,
+    }))),
   );
 });
 

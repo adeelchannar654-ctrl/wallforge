@@ -1,3 +1,5 @@
+import '../models/time_control.dart';
+
 /// User-configurable application settings, as persisted.
 ///
 /// This is deliberately a pure data snapshot with a JSON round-trip so the
@@ -46,6 +48,7 @@ class AppSettings {
     this.colorAssistance = false,
     this.highContrast = false,
     this.uiScale = defaultUiScale,
+    this.defaultTimeControlSeconds = 0,
   });
 
   /// The default UI scale: unscaled.
@@ -156,6 +159,14 @@ class AppSettings {
   /// offers and the layout tests cover. Defaults to [defaultUiScale].
   final double uiScale;
 
+  /// The default per-move clock for local and vs-AI matches, in
+  /// seconds (Phase 16.5): one of 0 (off), 15, 30, 60 — validated
+  /// against `kTimeControlOptionsSeconds` by [fromJson], which
+  /// substitutes 0 for anything else. Online rooms choose their
+  /// own control at creation; this setting governs only the
+  /// modes played on this device.
+  final int defaultTimeControlSeconds;
+
   AppSettings copyWith({
     bool? confirmWallPlacement,
     String? aiDifficulty,
@@ -169,6 +180,7 @@ class AppSettings {
     bool? colorAssistance,
     bool? highContrast,
     double? uiScale,
+    int? defaultTimeControlSeconds,
   }) => AppSettings(
     confirmWallPlacement: confirmWallPlacement ?? this.confirmWallPlacement,
     aiDifficulty: aiDifficulty ?? this.aiDifficulty,
@@ -182,6 +194,8 @@ class AppSettings {
     colorAssistance: colorAssistance ?? this.colorAssistance,
     highContrast: highContrast ?? this.highContrast,
     uiScale: uiScale ?? this.uiScale,
+    defaultTimeControlSeconds:
+        defaultTimeControlSeconds ?? this.defaultTimeControlSeconds,
   );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -197,6 +211,7 @@ class AppSettings {
     'colorAssistance': colorAssistance,
     'highContrast': highContrast,
     'uiScale': uiScale,
+    'defaultTimeControlSeconds': defaultTimeControlSeconds,
   };
 
   /// Rebuilds settings from [json], substituting defaults for anything missing
@@ -216,6 +231,7 @@ class AppSettings {
     final rawColorAssistance = json['colorAssistance'];
     final rawHighContrast = json['highContrast'];
     final rawUiScale = json['uiScale'];
+    final rawTimeControl = json['defaultTimeControlSeconds'];
     final difficultyIsKnown =
         rawDifficulty is String && knownAiDifficulties.contains(rawDifficulty);
     return AppSettings(
@@ -247,6 +263,11 @@ class AppSettings {
       uiScale: rawUiScale is num
           ? rawUiScale.toDouble().clamp(defaultUiScale, maxUiScale)
           : defaults.uiScale,
+      defaultTimeControlSeconds:
+          rawTimeControl is int &&
+              kTimeControlOptionsSeconds.contains(rawTimeControl)
+          ? rawTimeControl
+          : defaults.defaultTimeControlSeconds,
     );
   }
 
@@ -264,7 +285,8 @@ class AppSettings {
       other.reducedMotion == reducedMotion &&
       other.colorAssistance == colorAssistance &&
       other.highContrast == highContrast &&
-      other.uiScale == uiScale;
+      other.uiScale == uiScale &&
+      other.defaultTimeControlSeconds == defaultTimeControlSeconds;
 
   @override
   int get hashCode => Object.hash(
@@ -280,6 +302,7 @@ class AppSettings {
     colorAssistance,
     highContrast,
     uiScale,
+    defaultTimeControlSeconds,
   );
 
   @override

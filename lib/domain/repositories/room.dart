@@ -120,6 +120,9 @@ class Room {
     this.winnerId,
     this.abandonedById,
     this.finishReason,
+    this.timeControlSeconds = 0,
+    this.turnDeadlineMs,
+    this.serverUpdatedAtMs,
   });
 
   /// The shareable room code, also the document id.
@@ -202,6 +205,33 @@ class Room {
   /// like [abandonedById]: older documents simply lack it.
   final FinishReason? finishReason;
 
+  /// The per-move time control in seconds (Phase 16.5): 0 means
+  /// the clock is off. Chosen when the room is created (Quick
+  /// Match fixes it at 60) and immutable afterwards — the rules
+  /// enforce that. Application-layer only; the engine has no
+  /// clock.
+  final int timeControlSeconds;
+
+  /// When the current turn's clock runs out, as epoch
+  /// milliseconds on the *server's* clock, or null when the
+  /// clock is off, the match has not started, or it is over.
+  ///
+  /// Written by the player who just moved (deadline for the next
+  /// player), bounded by the Security Rules against
+  /// `request.time`, and the only clock value clients count
+  /// down from.
+  final int? turnDeadlineMs;
+
+  /// The server's own timestamp of the last turn-advancing or
+  /// terminal write, decoded to epoch milliseconds, or null
+  /// before the match starts.
+  ///
+  /// Written via the server-timestamp sentinel (never by a
+  /// client's clock), so clients can estimate their clock skew
+  /// against the server from snapshots. Not part of [toJson]:
+  /// the repositories overlay the sentinel at write time.
+  final int? serverUpdatedAtMs;
+
   /// The seat for [side].
   RoomSeat seatFor(PlayerId side) => side == PlayerId.blue ? blue : red;
 
@@ -266,6 +296,9 @@ class Room {
     winnerId: winnerId,
     abandonedById: abandonedById,
     finishReason: finishReason,
+    timeControlSeconds: timeControlSeconds,
+    turnDeadlineMs: turnDeadlineMs,
+    serverUpdatedAtMs: serverUpdatedAtMs,
   );
 
   /// A copy with the given fields replaced.
@@ -294,6 +327,9 @@ class Room {
     Object? winnerId = _keep,
     Object? abandonedById = _keep,
     Object? finishReason = _keep,
+    int? timeControlSeconds,
+    Object? turnDeadlineMs = _keep,
+    Object? serverUpdatedAtMs = _keep,
   }) => Room(
     code: code,
     status: status ?? this.status,
@@ -316,6 +352,13 @@ class Room {
     finishReason: identical(finishReason, _keep)
         ? this.finishReason
         : finishReason as FinishReason?,
+    timeControlSeconds: timeControlSeconds ?? this.timeControlSeconds,
+    turnDeadlineMs: identical(turnDeadlineMs, _keep)
+        ? this.turnDeadlineMs
+        : turnDeadlineMs as int?,
+    serverUpdatedAtMs: identical(serverUpdatedAtMs, _keep)
+        ? this.serverUpdatedAtMs
+        : serverUpdatedAtMs as int?,
   );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -343,6 +386,11 @@ class Room {
     'abandonedById': abandonedById,
     // Phase 16.5. Null until the match ends; additive for the same reason.
     'finishReason': finishReason?.name,
+    // Phase 16.5 clock. `serverUpdatedAt` is deliberately absent:
+    // the repositories overlay the server-timestamp sentinel on
+    // turn-advancing and terminal writes (see the field's doc).
+    'timeControlSeconds': timeControlSeconds,
+    'turnDeadline': turnDeadlineMs,
   };
 
   static Map<String, dynamic> _seatToJson(RoomSeat seat) => <String, dynamic>{
@@ -431,8 +479,17 @@ class Room {
           ? rawAbandonedBy
           : null,
       finishReason: FinishReason.fromWire(json['finishReason']),
+      timeControlSeconds: _nonNegativeIntOr(json['timeControlSeconds'], 0),
+      turnDeadlineMs: _positiveIntOrNull(json['turnDeadline']),
+      serverUpdatedAtMs: _positiveIntOrNull(json['serverUpdatedAt']),
     );
   }
+
+  static int _nonNegativeIntOr(Object? raw, int fallback) =>
+      (raw is int && raw >= 0) ? raw : fallback;
+
+  static int? _positiveIntOrNull(Object? raw) =>
+      (raw is int && raw > 0) ? raw : null;
 
   static RoomStatus? _statusFromName(String name) {
     for (final value in RoomStatus.values) {
@@ -483,7 +540,10 @@ class Room {
           currentPlayerId == other.currentPlayerId &&
           winnerId == other.winnerId &&
           abandonedById == other.abandonedById &&
-          finishReason == other.finishReason;
+          finishReason == other.finishReason &&
+          timeControlSeconds == other.timeControlSeconds &&
+          turnDeadlineMs == other.turnDeadlineMs &&
+          serverUpdatedAtMs == other.serverUpdatedAtMs;
 
   @override
   int get hashCode => Object.hash(
@@ -502,6 +562,9 @@ class Room {
     winnerId,
     abandonedById,
     finishReason,
+    timeControlSeconds,
+    turnDeadlineMs,
+    serverUpdatedAtMs,
   );
 
   @override
