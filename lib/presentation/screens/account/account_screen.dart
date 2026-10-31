@@ -308,8 +308,12 @@ class _AccountScreenState extends State<AccountScreen> {
           onPressed: busy ? null : () => _submitEmail(controller),
         ),
         const SizedBox(height: AppSpacing.xs),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        // An OverflowBar, not a Row: at UI scale 1.5 the two
+        // buttons together are wider than a phone card, and the
+        // mode toggle must wrap rather than overflow (the
+        // Phase 16.6 matrix caught exactly that).
+        OverflowBar(
+          alignment: MainAxisAlignment.spaceBetween,
           children: [
             TextButton(
               onPressed: busy

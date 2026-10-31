@@ -161,11 +161,22 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
       body: SafeArea(
         child: ResponsiveContent(
           child: _failedToStart
-              ? const _MessageState(
-                  icon: Icons.cloud_off_outlined,
-                  message:
-                      'The leaderboard needs an online sign-in, '
-                      'which is unavailable right now.',
+              ? Column(
+                  children: [
+                    // The account prompt shows on every board
+                    // state a guest can land on, this one included
+                    // (Phase 16.6, Part H journey).
+                    if (_showPrompt)
+                      _guestPrompt(horizontal: AppSpacing.marginMobile),
+                    const Expanded(
+                      child: _MessageState(
+                        icon: Icons.cloud_off_outlined,
+                        message:
+                            'The leaderboard needs an online sign-in, '
+                            'which is unavailable right now.',
+                      ),
+                    ),
+                  ],
                 )
               : _controller == null
               ? const Center(child: CircularProgressIndicator())
@@ -183,15 +194,27 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
       LeaderboardStatus.loading => const Center(
         child: CircularProgressIndicator(),
       ),
-      LeaderboardStatus.unavailable => _MessageState(
-        icon: Icons.cloud_off_outlined,
-        message:
-            'The leaderboard could not be loaded. If this build '
-            'has only just gained the feature, its online rules '
-            'may not be switched on yet — otherwise check your '
-            'connection and try again.',
-        actionLabel: 'RETRY',
-        onAction: controller.refresh,
+      // The account prompt belongs here too (Phase 16.6): before
+      // the rules are deployed this is the branch every player
+      // lands on, and a guest deciding whether to sign in needs
+      // the same explanation as on an empty board.
+      LeaderboardStatus.unavailable => Column(
+        children: [
+          _header(controller),
+          if (_showPrompt) _guestPrompt(horizontal: AppSpacing.marginMobile),
+          Expanded(
+            child: _MessageState(
+              icon: Icons.cloud_off_outlined,
+              message:
+                  'The leaderboard could not be loaded. If this build '
+                  'has only just gained the feature, its online rules '
+                  'may not be switched on yet — otherwise check your '
+                  'connection and try again.',
+              actionLabel: 'RETRY',
+              onAction: controller.refresh,
+            ),
+          ),
+        ],
       ),
       LeaderboardStatus.empty => Column(
         children: [
