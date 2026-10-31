@@ -6,6 +6,7 @@ import '../../domain/engine/game_engine.dart';
 import '../../domain/models/action_failure.dart';
 import '../../domain/models/board_config.dart';
 import '../../domain/models/cell.dart';
+import '../../domain/models/finish_reason.dart';
 import '../../domain/models/game_action.dart';
 import '../../domain/models/game_state.dart';
 import '../../domain/models/game_status.dart';
@@ -84,6 +85,12 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
   GameState _state = GameState.initial();
   bool _showingResult = false;
 
+  /// Phase 16.5: an application-layer finish that the engine did
+  /// not produce (resign, clock timeout). The engine state stays
+  /// `inProgress`; the outcome lives here, at the match layer.
+  PlayerId? _outcomeWinner;
+  FinishReason? _appFinishReason;
+
   /// Phase 5: optional offline AI opponent.
   bool _versusAi = false;
   AiDifficulty _aiDifficulty = AiDifficulty.easy;
@@ -119,8 +126,18 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
       _state.status == GameStatus.inProgress &&
       _state.currentPlayer == kAiPlayer;
 
-  PlayerId? get winner => _state.winner;
-  bool get isFinished => _state.status == GameStatus.finished;
+  /// The winner: the engine's, for a goal finish, or the
+  /// application-layer outcome for a resign/timeout finish.
+  PlayerId? get winner => _state.winner ?? _outcomeWinner;
+
+  /// Why the match ended, when it has: `goal` for an engine
+  /// finish, the application reason for a resign/timeout.
+  FinishReason? get finishReason =>
+      _appFinishReason ??
+      (_state.status == GameStatus.finished ? FinishReason.goal : null);
+
+  bool get isFinished =>
+      _state.status == GameStatus.finished || _outcomeWinner != null;
   PlayerId get currentPlayer => _state.currentPlayer;
 
   // --- Actions called by presentation ---------------------------------------
@@ -134,6 +151,8 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
     _state = GameState.initial(config);
     resetInteraction();
     _showingResult = false;
+    _outcomeWinner = null;
+    _appFinishReason = null;
     _versusAi = versusAi;
     _aiDifficulty = aiDifficulty;
     _aiPreviousCell = null;
@@ -167,6 +186,31 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
     );
   }
 
+  /// Resigns the match for [side] (Phase 16.5): the opponent
+  /// wins, recorded with `FinishReason.resign`.
+  ///
+  /// Application-layer finish: the engine state is left exactly
+  /// as it stands (it only ever finishes on a goal), and the
+  /// outcome is carried by [_outcomeWinner]. Any pending AI turn
+  /// is cancelled, the resumable save is dropped, and the finish
+  /// is recorded through the same path a goal finish uses — so
+  /// statistics (and, later, history) see exactly one finish.
+  void resign(PlayerId side) {
+    if (isFinished || _state.status != GameStatus.inProgress) return;
+    _finishByApplication(side.opponent, FinishReason.resign);
+  }
+
+  /// Ends the match at the application layer with [winner] and
+  /// [reason] (resign now; the game clock's timeout in Part C).
+  void _finishByApplication(PlayerId winner, FinishReason reason) {
+    _outcomeWinner = winner;
+    _appFinishReason = reason;
+    _showingResult = true;
+    _cancelAiTurn();
+    unawaited(recordFinishedMatch());
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     _disposed = true;
@@ -191,6 +235,9 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
   /// state replaces the old one. This is exactly the Phase 4/5 behaviour.
   @override
   ActionFailure? attemptAction(GameAction action) {
+    // An application-layer finish (resign/timeout) ends the match
+    // even though the engine state still reads inProgress.
+    if (_outcomeWinner != null) return ActionFailure.matchFinished;
     final result = GameEngine.apply(_state, _state.currentPlayer, action);
     if (result is SuccessResult) {
       _state = result.state;
@@ -292,7 +339,7 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
   /// Records a finished match into the local statistics and drops the resumable
   /// match, since a finished match is no longer resumable.
   Future<void> recordFinishedMatch() async {
-    final winner = _state.winner;
+    final winner = this.winner;
     if (winner == null) return;
     unawaited(_clearUnfinished());
     final stats = _statisticsRepository;

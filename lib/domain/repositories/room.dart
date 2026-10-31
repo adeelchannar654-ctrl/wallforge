@@ -1,4 +1,5 @@
 import '../models/board_config.dart';
+import '../models/finish_reason.dart';
 import '../models/game_state.dart';
 import '../models/player_id.dart';
 import '../serialization/game_state_serializer.dart';
@@ -118,6 +119,7 @@ class Room {
     this.currentPlayerId,
     this.winnerId,
     this.abandonedById,
+    this.finishReason,
   });
 
   /// The shareable room code, also the document id.
@@ -191,6 +193,15 @@ class Room {
   /// an outcome the engine never produced.
   final String? abandonedById;
 
+  /// Why the match ended (Phase 16.5), or null while it has not.
+  ///
+  /// Application-layer only — the engine declares winners, never
+  /// reasons. Written by the transition that ends the match:
+  /// `goal` by the game-ending move, `resign` / `timeout` by
+  /// their claims, `abandon` alongside [abandonedById]. Additive
+  /// like [abandonedById]: older documents simply lack it.
+  final FinishReason? finishReason;
+
   /// The seat for [side].
   RoomSeat seatFor(PlayerId side) => side == PlayerId.blue ? blue : red;
 
@@ -254,6 +265,7 @@ class Room {
     currentPlayerId: currentPlayerId,
     winnerId: winnerId,
     abandonedById: abandonedById,
+    finishReason: finishReason,
   );
 
   /// A copy with the given fields replaced.
@@ -281,6 +293,7 @@ class Room {
     Object? currentPlayerId = _keep,
     Object? winnerId = _keep,
     Object? abandonedById = _keep,
+    Object? finishReason = _keep,
   }) => Room(
     code: code,
     status: status ?? this.status,
@@ -300,6 +313,9 @@ class Room {
     abandonedById: identical(abandonedById, _keep)
         ? this.abandonedById
         : abandonedById as String?,
+    finishReason: identical(finishReason, _keep)
+        ? this.finishReason
+        : finishReason as FinishReason?,
   );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -325,6 +341,8 @@ class Room {
     // Phase 10. Null unless the match was claimed as abandoned; additive, so
     // a reader on an older build simply ignores it.
     'abandonedById': abandonedById,
+    // Phase 16.5. Null until the match ends; additive for the same reason.
+    'finishReason': finishReason?.name,
   };
 
   static Map<String, dynamic> _seatToJson(RoomSeat seat) => <String, dynamic>{
@@ -412,6 +430,7 @@ class Room {
       abandonedById: (rawAbandonedBy is String && rawAbandonedBy.isNotEmpty)
           ? rawAbandonedBy
           : null,
+      finishReason: FinishReason.fromWire(json['finishReason']),
     );
   }
 
@@ -463,7 +482,8 @@ class Room {
           turnNumber == other.turnNumber &&
           currentPlayerId == other.currentPlayerId &&
           winnerId == other.winnerId &&
-          abandonedById == other.abandonedById;
+          abandonedById == other.abandonedById &&
+          finishReason == other.finishReason;
 
   @override
   int get hashCode => Object.hash(
@@ -481,6 +501,7 @@ class Room {
     currentPlayerId,
     winnerId,
     abandonedById,
+    finishReason,
   );
 
   @override

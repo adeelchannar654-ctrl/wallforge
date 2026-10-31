@@ -5,6 +5,7 @@ import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
 import '../../../domain/models/board_config.dart';
+import '../../../domain/models/finish_reason.dart';
 import '../../../domain/models/player_id.dart';
 import '../../widgets/app_chrome.dart';
 import '../../widgets/responsive_content.dart';
@@ -33,6 +34,7 @@ class MatchResultData {
     this.opponentLeft = false,
     this.roomCode,
     this.note,
+    this.finishReason,
   });
 
   final ResultMode mode;
@@ -62,6 +64,10 @@ class MatchResultData {
   /// Online only: a specific ending note (e.g. who claimed abandonment),
   /// shown in the summary instead of the generic opponent-left line.
   final String? note;
+
+  /// Why the match ended (Phase 16.5), when the caller knows:
+  /// refines the Result row ("Blue wins · Resignation").
+  final FinishReason? finishReason;
 
   /// Whether the local viewer won (always true in local mode when there is
   /// a winner — the screen is shared by both players).
@@ -115,7 +121,12 @@ class ResultScreen extends StatelessWidget {
   String get _resultText {
     final winner = data.winner;
     if (winner == null) return 'Abandoned';
-    return winner == PlayerId.blue ? 'Blue wins' : 'Red wins';
+    final base = winner == PlayerId.blue ? 'Blue wins' : 'Red wins';
+    return switch (data.finishReason) {
+      FinishReason.resign => '$base · Resignation',
+      FinishReason.timeout => '$base · Timeout',
+      _ => base,
+    };
   }
 
   String? get _summary {
@@ -225,10 +236,16 @@ class ResultScreen extends StatelessWidget {
       child: Row(
         children: [
           Expanded(child: Text(label, style: AppTypography.bodyBase)),
-          Text(
-            value,
-            style: AppTypography.numericStat.copyWith(
-              color: AppColors.onSurface,
+          const SizedBox(width: AppSpacing.md),
+          // Phase 16.5: values grew ("Red wins · Resignation"), so the
+          // value flexes and wraps instead of overflowing the row.
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: AppTypography.numericStat.copyWith(
+                color: AppColors.onSurface,
+              ),
             ),
           ),
         ],

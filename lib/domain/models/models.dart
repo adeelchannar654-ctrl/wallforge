@@ -4,6 +4,7 @@ library;
 export 'action_failure.dart';
 export 'board_config.dart';
 export 'cell.dart';
+export 'finish_reason.dart';
 export 'game_action.dart';
 export 'game_state.dart';
 export 'game_status.dart';

@@ -14,6 +14,7 @@ import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
 import '../../../domain/wallforge_domain.dart';
 import '../../board/board.dart';
+import '../../widgets/match_exit_dialogs.dart';
 import '../result/result_screen.dart';
 import 'online_rematch_section.dart';
 
@@ -83,10 +84,19 @@ class OnlineGameScreen extends StatelessWidget {
       mySide: controller.mySide,
       opponentLeft: controller.isAbandoned,
       roomCode: controller.room.code,
+      finishReason: controller.finishReason,
       note: controller.isAbandoned
           ? controller.claimedByMe
                 ? 'You claimed this match as abandoned.'
                 : 'Your opponent claimed this match as abandoned.'
+          : controller.finishReason == FinishReason.resign
+          ? controller.resignedByMe
+                ? 'You resigned.'
+                : 'Your opponent resigned.'
+          : controller.finishReason == FinishReason.timeout
+          ? controller.winner == controller.mySide
+                ? 'Your opponent ran out of time.'
+                : 'You ran out of time.'
           : null,
     );
   }
@@ -212,6 +222,19 @@ class OnlineGameScreen extends StatelessWidget {
     ),
     actions: [
       _ConnectionChip(state: controller.connection, sync: controller.sync),
+      if (!controller.isFinished && !controller.isAbandoned)
+        PopupMenuButton<String>(
+          tooltip: 'Match options',
+          color: AppColors.surface,
+          onSelected: (value) async {
+            if (value != 'resign') return;
+            final confirmed = await showResignDialog(context, online: true);
+            if (confirmed) await controller.resign();
+          },
+          itemBuilder: (context) => const [
+            PopupMenuItem<String>(value: 'resign', child: Text('Resign match')),
+          ],
+        ),
       const SizedBox(width: AppSpacing.md),
     ],
   );

@@ -318,7 +318,13 @@ void main() {
       await tester.pump();
       expect(controller.state.turnNumber, 0);
 
+      // Phase 16.5: leaving an active match confirms first —
+      // the dialog offers leave-saved and resign alongside
+      // keep-playing.
       await tester.tap(find.text('BACK'));
+      await tester.pumpAndSettle();
+      expect(find.text('Leave this match?'), findsOneWidget);
+      await tester.tap(find.text('LEAVE (SAVED)'));
       await tester.pumpAndSettle();
       expect(find.text('OPEN'), findsOneWidget);
     });

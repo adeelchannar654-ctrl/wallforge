@@ -315,11 +315,13 @@ class FirestoreRoomRepository implements RoomRepository {
     if (room.status == RoomStatus.started ||
         room.status == RoomStatus.finished ||
         room.status == RoomStatus.abandoned) {
-      // Leaving after the start is a disconnect. Phase 10 added the
-      // abandonment claim for the *waiting* player (see
-      // `FirestoreMatchRepository.claimAbandonment`); the player who is
-      // leaving a live match still just closes it, so this stays a plain
-      // refusal rather than a half-implemented forfeit.
+      // Leaving a *started* match is resigning, and since Phase 16.5
+      // that is a real operation — `MatchRepository.resign`, one
+      // guarded transaction that finishes the match for the
+      // opponent — not something a room-level "leave" should
+      // silently perform. The game screen offers Resign explicitly,
+      // with a confirmation; this method keeps refusing, and the
+      // refusal now names the real path instead of a placeholder.
       //
       // A *finished* room is included for a different reason, and it matters:
       // without it the host branch below deletes the document, so a completed
@@ -327,7 +329,7 @@ class FirestoreRoomRepository implements RoomRepository {
       // third player join a match that already has a winner.
       return const RoomResult.failure(
         RoomFailureReason.roomAlreadyStarted,
-        message: 'The match already started. Disconnect handling comes later.',
+        message: 'The match already started. Use Resign to end it.',
       );
     }
 

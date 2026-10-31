@@ -17,6 +17,7 @@ import '../../../domain/models/game_action.dart';
 import '../../../domain/models/game_status.dart';
 import '../../../domain/models/player_id.dart';
 import '../../board/board.dart';
+import '../../widgets/match_exit_dialogs.dart';
 import '../result/result_screen.dart';
 
 /// Interactive local game screen — pass-and-play between two humans.
@@ -178,7 +179,37 @@ class GameScreen extends StatelessWidget {
       config: config,
       mySide: controller.versusAi ? PlayerId.blue : null,
       aiDifficulty: controller.versusAi ? controller.aiDifficulty : null,
+      finishReason: controller.finishReason,
     );
+  }
+
+  /// The side that resigns from the RESIGN button: in a vs-AI
+  /// match the human; in pass-and-play, the player to move (the
+  /// natural reading of "I give up" on a shared screen).
+  PlayerId get _resigningSide =>
+      controller.versusAi ? PlayerId.blue : controller.currentPlayer;
+
+  Future<void> _onResignPressed(BuildContext context) async {
+    final confirmed = await showResignDialog(context, online: false);
+    if (!confirmed || !context.mounted) return;
+    controller.resign(_resigningSide);
+  }
+
+  Future<void> _onBackPressed(BuildContext context) async {
+    if (controller.isFinished) {
+      Navigator.of(context).pop();
+      return;
+    }
+    final choice = await showLeaveMatchDialog(context);
+    if (!context.mounted) return;
+    switch (choice) {
+      case LeaveChoice.keepPlaying:
+        break;
+      case LeaveChoice.leaveSaved:
+        Navigator.of(context).pop();
+      case LeaveChoice.resign:
+        controller.resign(_resigningSide);
+    }
   }
 
   Widget _buildBoardArea() {
@@ -443,10 +474,16 @@ class GameScreen extends StatelessWidget {
             AppColors.onSurfaceVariant,
             controller.restart,
           ),
+          if (!controller.isFinished)
+            _buildButton(
+              'RESIGN',
+              AppColors.secondaryContainer,
+              () => _onResignPressed(context),
+            ),
           _buildButton(
             'BACK',
             AppColors.onSurfaceVariant,
-            () => Navigator.of(context).pop(),
+            () => _onBackPressed(context),
           ),
         ],
       ],

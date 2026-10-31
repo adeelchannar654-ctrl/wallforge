@@ -366,6 +366,82 @@ class AbandonmentRejected extends AbandonmentResult {
   AbandonmentFailureReason get reason => failure.reason;
 }
 
+/// Why a resignation was refused (Phase 16.5).
+enum ResignFailureReason {
+  /// No uid resolved, so there is nobody to resign for.
+  notAuthenticated,
+
+  /// The caller is not seated in this match.
+  notAMember,
+
+  /// No match document exists at that code.
+  roomNotFound,
+
+  /// The room exists but its match has not started.
+  matchNotStarted,
+
+  /// The match is already over.
+  matchAlreadyOver,
+
+  /// The transport failed or Firebase is unreachable.
+  networkUnavailable,
+}
+
+/// A refused resignation.
+class ResignFailure {
+  /// Creates a resign failure.
+  const ResignFailure(this.reason, {this.message});
+
+  /// Machine-readable reason.
+  final ResignFailureReason reason;
+
+  /// Human-readable explanation, safe to show a player.
+  final String? message;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ResignFailure &&
+          reason == other.reason &&
+          message == other.message;
+
+  @override
+  int get hashCode => Object.hash(reason, message);
+
+  @override
+  String toString() => 'ResignFailure(${reason.name}: $message)';
+}
+
+/// The outcome of a resignation.
+sealed class ResignResult {
+  const ResignResult._();
+
+  /// The resignation landed: the match is finished, the opponent won.
+  const factory ResignResult.resigned(Room room) = ResignSuccess;
+
+  /// The resignation was refused for this reason.
+  const factory ResignResult.rejected(ResignFailure failure) = ResignRejected;
+}
+
+/// A resignation that landed.
+class ResignSuccess extends ResignResult {
+  const ResignSuccess(this.room) : super._();
+
+  /// The match document after the resignation.
+  final Room room;
+}
+
+/// A resignation that was refused.
+class ResignRejected extends ResignResult {
+  const ResignRejected(this.failure) : super._();
+
+  /// Why the resignation was refused.
+  final ResignFailure failure;
+
+  /// The machine-readable reason.
+  ResignFailureReason get reason => failure.reason;
+}
+
 /// The outcome of submitting an action.
 sealed class MoveSubmission {
   const MoveSubmission._();
@@ -464,6 +540,20 @@ abstract interface class MatchRepository {
   /// claim lands first, the move is refused because the room is no longer
   /// [RoomStatus.started]. There is no interleaving in which both land.
   Future<AbandonmentResult> claimAbandonment({required String code});
+
+  /// Resigns the match for the signed-in player (Phase 16.5).
+  ///
+  /// One transaction on the match document: the caller must be a
+  /// seated member of a *started* match; the write finishes the
+  /// match with the opponent as winner and
+  /// `FinishReason.resign` recorded. The board snapshot is frozen
+  /// exactly as it stood — resigning is not a move, and the
+  /// engine state is deliberately left `inProgress`; the outcome
+  /// lives at the match layer (see `FinishReason`). A finished
+  /// match cannot be resigned, and the winner of a finished match
+  /// can never be changed by a resign write (the Security Rules
+  /// prove both).
+  Future<ResignResult> resign({required String code});
 
   /// There is deliberately no "start" method here. Starting a match belongs to
   /// `RoomRepository.start`, the Phase 8 host-only operation, and Phase 9 taught

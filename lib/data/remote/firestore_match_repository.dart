@@ -3,6 +3,7 @@ import 'dart:async';
 import '../../core/logging/app_logger.dart';
 import '../../domain/engine/game_engine.dart';
 import '../../domain/models/action_failure.dart';
+import '../../domain/models/finish_reason.dart';
 import '../../domain/models/game_action.dart';
 import '../../domain/models/game_status.dart';
 import '../../domain/repositories/match.dart';
@@ -247,6 +248,8 @@ class FirestoreMatchRepository implements MatchRepository {
               : room.seatFor(next.currentPlayer).playerId,
           // Derived from the engine's winner, never declared by a client.
           winnerId: isFinished ? room.seatFor(next.winner!).playerId : null,
+          // Phase 16.5: a game-ending move records the goal finish.
+          finishReason: isFinished ? FinishReason.goal : null,
           updatedAtMs: _nowMs,
           version: room.version + 1,
         );
@@ -327,6 +330,7 @@ class FirestoreMatchRepository implements MatchRepository {
         final claimed = room.copyWith(
           status: RoomStatus.abandoned,
           abandonedById: uid,
+          finishReason: FinishReason.abandon,
           updatedAtMs: _nowMs,
           version: room.version + 1,
         );
@@ -337,6 +341,81 @@ class FirestoreMatchRepository implements MatchRepository {
       return _claimReject(AbandonmentFailureReason.networkUnavailable);
     }
   }
+
+  @override
+  Future<ResignResult> resign({required String code}) async {
+    final uid = await userId();
+    if (uid == null || uid.isEmpty) {
+      return const ResignResult.rejected(
+        ResignFailure(
+          ResignFailureReason.notAuthenticated,
+          message: 'Sign in to play online.',
+        ),
+      );
+    }
+
+    final matchPath = _matchPath(code);
+    try {
+      return await client.runTransaction<ResignResult>((txn) async {
+        final rawRoom = await txn.get(matchPath);
+        if (rawRoom == null) {
+          return _resignReject(ResignFailureReason.roomNotFound);
+        }
+        final room = Room.fromJson(rawRoom);
+        if (room == null) {
+          return _resignReject(ResignFailureReason.roomNotFound);
+        }
+        if (!room.isMember(uid)) {
+          return _resignReject(ResignFailureReason.notAMember);
+        }
+        if (room.status == RoomStatus.finished ||
+            room.status == RoomStatus.abandoned) {
+          return _resignReject(ResignFailureReason.matchAlreadyOver);
+        }
+        if (room.status != RoomStatus.started) {
+          return _resignReject(ResignFailureReason.matchNotStarted);
+        }
+        // The winner is always the *other* seat — a player can only
+        // ever resign their own side, so the write below can never
+        // crown the caller. The Security Rules prove the same
+        // property server-side.
+        final opponent = room.opponentOf(uid);
+        if (opponent == null) {
+          return _resignReject(ResignFailureReason.matchNotStarted);
+        }
+        final resigned = room.copyWith(
+          status: RoomStatus.finished,
+          winnerId: opponent,
+          currentPlayerId: null,
+          finishReason: FinishReason.resign,
+          updatedAtMs: _nowMs,
+          version: room.version + 1,
+        );
+        txn.set(matchPath, resigned.toJson());
+        return ResignResult.resigned(resigned);
+      });
+    } on Object {
+      return _resignReject(ResignFailureReason.networkUnavailable);
+    }
+  }
+
+  static ResignResult _resignReject(ResignFailureReason reason) =>
+      ResignResult.rejected(
+        ResignFailure(reason, message: resignMessageFor(reason)),
+      );
+
+  /// Player-facing wording for each refused resignation.
+  static String resignMessageFor(ResignFailureReason reason) =>
+      switch (reason) {
+        ResignFailureReason.notAuthenticated => 'Sign in to play online.',
+        ResignFailureReason.notAMember => 'You are not in this match.',
+        ResignFailureReason.roomNotFound =>
+          'That match is no longer available.',
+        ResignFailureReason.matchNotStarted => 'The match has not started yet.',
+        ResignFailureReason.matchAlreadyOver => 'This match is already over.',
+        ResignFailureReason.networkUnavailable =>
+          'Could not reach the server. Check your connection.',
+      };
 
   static AbandonmentResult _claimReject(AbandonmentFailureReason reason) =>
       AbandonmentResult.rejected(

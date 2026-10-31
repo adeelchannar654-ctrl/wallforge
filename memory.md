@@ -4976,3 +4976,51 @@ full suite re-run recorded with Part A's commit.
   in-memory double plus rules tests written for the owner to
   run where the emulator works. That gap is stated wherever
   it matters, never papered over.
+
+### Part B — resign and finish reasons (2026-10-31)
+
+Shipped: `FinishReason` {goal, resign, timeout, abandon}
+(application layer, `lib/domain/models/finish_reason.dart`,
+exported via the models barrel). Room gained an additive
+optional `finishReason` (toJson/fromJson/copyWith/equality;
+`schemaVersion` stays 2). The game-ending move write records
+`goal`; the abandonment claim now records `abandon` in the
+same write as before. `MatchRepository.resign` (mirrors the
+claim's transaction discipline): member + started only, winner
+is always the other seat, board frozen, `currentPlayerId`
+cleared. Local/vs-AI: `LocalGameController.resign(side)` sets
+an application-layer outcome (engine state untouched),
+cancels the AI think, refuses further actions with
+`matchFinished`, and records the finish through the existing
+statistics path exactly once. Online controller: `isFinished`
+now also honours the room's finished status, `winner` falls
+back to the document only for resign/timeout finishes (the
+rules guarantee that winner), and `_verify` accepts exactly
+that shape and nothing more. UI: RESIGN button + leave-match
+confirm dialog (leave-saved vs resign kept distinct) on the
+local game screen; Resign in the online screen's app-bar menu
+with the same confirmation; the room repository's refusal now
+points at Resign (the "half-implemented forfeit" comment is
+gone). Result screen shows the reason ("Red wins ·
+Resignation") — which exposed a real overflow: `_statRow`'s
+value now flexes (390 px, long values).
+Rules: `finishReason` added to the shape (null or one of the
+four); move writes must carry `goal` on a finish and null
+while started; the claim must write `abandon`; new
+`resignWrite()` transition (member, winner == other seat,
+board/turn frozen, reason `resign`). Rules tests (JS) updated
+(claim docs carry the reason) and extended: resign happy path
+for both seats, self-crowning/stranger/board-edit denials,
+resign-after-finish denial, game-ending move reason
+requirement — **written, not run** (emulator cannot boot in
+this VM; owner runs them with the Part I script).
+Gates: format 178 files 0 changed; analyze clean; new tests
+11/11 (local resign incl. AI-think cancellation, two-stack
+online resign, repository refusals, UI flows); affected
+suites green (online controller, presence, local controller,
+integration, persistence, rematch, quick match, navigation,
+game screens). One existing test updated for the new intended
+behaviour (Back now confirms before leaving; it walks the
+dialog). One golden master regenerated in this VM
+(`game_screen_desktop_toggle.png` — the desktop actions row
+gained RESIGN; Linux-rendered like the other masters).

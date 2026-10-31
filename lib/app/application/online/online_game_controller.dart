@@ -166,6 +166,8 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
   bool _recovering = false;
   bool _claiming = false;
   AbandonmentFailure? _claimFailure;
+  bool _resigning = false;
+  ResignFailure? _resignFailure;
   OpponentPresence _lastPresence = OpponentPresence.notApplicable;
   Timer? _presenceTimer;
 
@@ -198,8 +200,12 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
   /// Current turn owner.
   PlayerId get currentPlayer => _state.currentPlayer;
 
-  /// Whether the match is over.
-  bool get isFinished => _state.status == GameStatus.finished;
+  /// Whether the match is over: the engine finished it, or the
+  /// room document did (resign/timeout — Phase 16.5 finishes that
+  /// leave the board snapshot `inProgress` on purpose).
+  bool get isFinished =>
+      _state.status == GameStatus.finished ||
+      _room.status == RoomStatus.finished;
 
   /// Whether the match ended by an abandonment claim (Phase 10) rather than
   /// by play. Terminal, like [isFinished], but with no winner.
@@ -241,7 +247,33 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
   AbandonmentFailure? get claimFailure => _claimFailure;
 
   /// The winner, from the engine. Never from the document.
-  PlayerId? get winner => _state.winner;
+  ///
+  /// The one exception is an application-layer finish (Phase
+  /// 16.5): a resign or timeout leaves the engine state
+  /// unfinished by design, so the winner can only come from the
+  /// document — where the Security Rules guarantee it is the
+  /// member who did not resign / was not to move, which is why
+  /// believing it in exactly this case is sound.
+  PlayerId? get winner =>
+      _state.winner ??
+      ((_room.status == RoomStatus.finished &&
+              (_room.finishReason == FinishReason.resign ||
+                  _room.finishReason == FinishReason.timeout) &&
+              _room.winnerId != null)
+          ? _room.sideFor(_room.winnerId!)
+          : null);
+
+  /// Why the match ended, when it has (Phase 16.5).
+  FinishReason? get finishReason =>
+      _room.finishReason ??
+      (_state.status == GameStatus.finished ? FinishReason.goal : null) ??
+      (isAbandoned ? FinishReason.abandon : null);
+
+  /// Whether this client resigned the match.
+  bool get resignedByMe =>
+      _room.finishReason == FinishReason.resign &&
+      winner != null &&
+      winner != mySide;
 
   /// This client's colour, or null before the room is known.
   PlayerId? get mySide => _room.sideFor(uid);
@@ -568,12 +600,26 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
 
     // A declared winner is never believed. If the document and the state
     // disagree, that is corruption, not news.
+    //
+    // Phase 16.5 exception, deliberately narrow: a resign/timeout
+    // finish leaves the engine state unfinished *by design* and
+    // declares its winner only in the document. That shape is
+    // accepted only when the room itself is finished with one of
+    // those two reasons and the declared winner is seated — the
+    // Security Rules guarantee the winner is the member who did
+    // not resign / was not to move.
     final declared = document.declaredWinnerId;
     if (declared != null) {
       final derived = state.status == GameStatus.finished
           ? incoming.seatFor(state.winner!).playerId
           : null;
-      if (derived != declared) return _Verdict.desync;
+      final appLayerFinish =
+          incoming.status == RoomStatus.finished &&
+          state.status != GameStatus.finished &&
+          (incoming.finishReason == FinishReason.resign ||
+              incoming.finishReason == FinishReason.timeout) &&
+          incoming.sideFor(declared) != null;
+      if (!appLayerFinish && derived != declared) return _Verdict.desync;
     }
 
     // Time never runs backwards.
@@ -756,6 +802,35 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
     }
     notifyListeners();
   }
+
+  /// Resigns the match (Phase 16.5): the opponent wins.
+  ///
+  /// The outcome arrives through the listener like every other
+  /// match fact; a refused resignation is kept as [resignFailure]
+  /// for the UI to state plainly.
+  Future<void> resign() async {
+    if (_resigning || isFinished || isAbandoned) return;
+    _resigning = true;
+    _resignFailure = null;
+    notifyListeners();
+    final result = await matches.resign(code: code);
+    if (_disposed) return;
+    _resigning = false;
+    switch (result) {
+      case ResignSuccess():
+        await resync();
+      case ResignRejected(:final failure):
+        _resignFailure = failure;
+        _log.log('resign refused: ${failure.reason.name}');
+    }
+    notifyListeners();
+  }
+
+  /// Whether a resignation is in flight.
+  bool get isResigning => _resigning;
+
+  /// The last refused resignation, or null.
+  ResignFailure? get resignFailure => _resignFailure;
 
   @override
   void dispose() {

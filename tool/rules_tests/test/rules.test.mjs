@@ -57,6 +57,7 @@ function roomDoc(overrides = {}) {
     currentPlayerId: null,
     winnerId: null,
     abandonedById: null,
+    finishReason: null,
     ...overrides,
   };
 }
@@ -516,6 +517,7 @@ test('claim: the waiting player ends a stalled match', async () => {
     setDoc(matchRef(alice), staleStartedRoom({
       status: 'abandoned',
       abandonedById: 'alice',
+      finishReason: 'abandon',
       updatedAt: NOW,
       version: 5,
     })),
@@ -529,6 +531,7 @@ test('claim: too early, on your own turn, or as a stranger is denied', async () 
     setDoc(matchRef(alice), staleStartedRoom({
       status: 'abandoned',
       abandonedById: 'alice',
+      finishReason: 'abandon',
       updatedAt: NOW,
       version: 5,
     })),
@@ -539,6 +542,7 @@ test('claim: too early, on your own turn, or as a stranger is denied', async () 
     setDoc(matchRef(bob), staleStartedRoom({
       status: 'abandoned',
       abandonedById: 'bob',
+      finishReason: 'abandon',
       updatedAt: NOW,
       version: 5,
     })),
@@ -548,6 +552,7 @@ test('claim: too early, on your own turn, or as a stranger is denied', async () 
     setDoc(matchRef(carol), staleStartedRoom({
       status: 'abandoned',
       abandonedById: 'carol',
+      finishReason: 'abandon',
       updatedAt: NOW,
       version: 5,
     })),
@@ -557,10 +562,136 @@ test('claim: too early, on your own turn, or as a stranger is denied', async () 
     setDoc(matchRef(alice), staleStartedRoom({
       status: 'abandoned',
       abandonedById: 'alice',
+      finishReason: 'abandon',
       winnerId: 'alice',
       updatedAt: NOW,
       version: 5,
     })),
+  );
+});
+
+// --- resignation (phase 16.5) --------------------------------------------------
+
+const resignAfter = (overrides = {}) => startedRoom({
+  status: 'finished',
+  winnerId: 'bob', // alice (Blue) resigns, so bob wins
+  finishReason: 'resign',
+  currentPlayerId: null,
+  updatedAt: NOW,
+  version: 4,
+  ...overrides,
+});
+
+test('resign: a member concedes and the opponent wins', async () => {
+  await seed(`matches/${CODE}`, startedRoom());
+  await assertSucceeds(setDoc(matchRef(alice), resignAfter()));
+  // Either seat may resign: bob concedes to alice.
+  await seed(`matches/${CODE}`, startedRoom());
+  await assertSucceeds(
+    setDoc(matchRef(bob), resignAfter({ winnerId: 'alice' })),
+  );
+});
+
+test('resign: crowning yourself, strangers, and board edits are denied', async () => {
+  await seed(`matches/${CODE}`, startedRoom());
+  // The resigner can never name themselves the winner.
+  await assertFails(
+    setDoc(matchRef(alice), resignAfter({ winnerId: 'alice' })),
+  );
+  // A non-member cannot resign anyone.
+  await assertFails(
+    setDoc(matchRef(carol), resignAfter({ winnerId: 'alice' })),
+  );
+  // Resigning is not a move: the board may not change in the same write.
+  await assertFails(
+    setDoc(matchRef(alice), resignAfter({
+      boardState: boardState({
+        currentPlayer: 'red',
+        pawnPositions: {
+          blue: { row: 7, column: 4 },
+          red: { row: 0, column: 4 },
+        },
+        turnNumber: 1,
+      }),
+      turnNumber: 1,
+    })),
+  );
+  // The finish reason must be the resignation itself.
+  await assertFails(
+    setDoc(matchRef(alice), resignAfter({ finishReason: 'goal' })),
+  );
+});
+
+test('resign: a finished match cannot be resigned or re-decided', async () => {
+  await seed(`matches/${CODE}`, startedRoom({
+    status: 'finished',
+    boardState: boardState({
+      currentPlayer: 'red',
+      pawnPositions: {
+        blue: { row: 0, column: 4 },
+        red: { row: 1, column: 4 },
+      },
+      turnNumber: 9,
+      status: 'finished',
+      winner: 'blue',
+    }),
+    turnNumber: 9,
+    currentPlayerId: null,
+    winnerId: 'alice',
+    finishReason: 'goal',
+    version: 12,
+  }));
+  // Bob "resigning" now would flip the winner — refused, like every
+  // other write to a finished match.
+  await assertFails(
+    setDoc(matchRef(bob), resignAfter({
+      winnerId: 'alice',
+      turnNumber: 9,
+      version: 13,
+    })),
+  );
+});
+
+test('move: a game-ending move must record the goal finish reason', async () => {
+  // One ply from the end: blue at row 1, to move.
+  const nearlyDone = startedRoom({
+    boardState: boardState({
+      currentPlayer: 'blue',
+      pawnPositions: {
+        blue: { row: 1, column: 4 },
+        red: { row: 5, column: 4 },
+      },
+      turnNumber: 8,
+    }),
+    turnNumber: 8,
+    currentPlayerId: 'alice',
+    version: 11,
+  });
+  const endingMove = startedRoom({
+    status: 'finished',
+    boardState: boardState({
+      currentPlayer: 'red',
+      pawnPositions: {
+        blue: { row: 0, column: 4 },
+        red: { row: 5, column: 4 },
+      },
+      turnNumber: 9,
+      status: 'finished',
+      winner: 'blue',
+    }),
+    turnNumber: 9,
+    currentPlayerId: null,
+    winnerId: 'alice',
+    version: 12,
+  });
+  await seed(`matches/${CODE}`, nearlyDone);
+  await assertSucceeds(
+    setDoc(matchRef(alice), { ...endingMove, finishReason: 'goal' }),
+  );
+  await seed(`matches/${CODE}`, nearlyDone);
+  await assertFails(setDoc(matchRef(alice), endingMove)); // no reason
+  await assertFails(
+    setDoc(matchRef(alice), { ...endingMove, finishReason: 'resign' }),
   );
 });
 

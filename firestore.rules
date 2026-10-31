@@ -44,13 +44,13 @@ service cloud.firestore {
 
   // The exact top-level field set `Room.toJson` writes. `abandonedById` is
   // Phase 10's one additive field; older writers omit it, so it is allowed
-  // but not required.
+  // but not required. Phase 16.5 adds `finishReason` the same way.
   function validRoomShape(d, code) {
     return d.keys().hasOnly([
         'code', 'status', 'boardSize', 'wallsPerPlayer', 'hostId',
         'blue', 'red', 'createdAt', 'updatedAt', 'version', 'schemaVersion',
         'boardState', 'turnNumber', 'currentPlayerId', 'winnerId',
-        'abandonedById',
+        'abandonedById', 'finishReason',
       ])
       && d.keys().hasAll([
         'code', 'status', 'boardSize', 'wallsPerPlayer', 'hostId',
@@ -79,7 +79,10 @@ service cloud.firestore {
       && (!('abandonedById' in d)
           || d.abandonedById == null
           || d.abandonedById == d.blue.playerId
-          || d.abandonedById == d.red.playerId);
+          || d.abandonedById == d.red.playerId)
+      && (!('finishReason' in d)
+          || d.finishReason == null
+          || d.finishReason in ['goal', 'resign', 'timeout', 'abandon']);
   }
 
   // Structural checks on a stored `GameState` snapshot (serializer shape).
@@ -190,6 +193,7 @@ service cloud.firestore {
         && after().currentPlayerId == null
         && after().winnerId == null
         && (!('abandonedById' in after()) || after().abandonedById == null)
+        && (!('finishReason' in after()) || after().finishReason == null)
         && after().blue.ready == false && after().red.ready == false
         && after().createdAt == after().updatedAt
         && notFromTheFuture(after().createdAt)
@@ -210,6 +214,7 @@ service cloud.firestore {
         && after().currentPlayerId == null
         && after().winnerId == null
         && (!('abandonedById' in after()) || after().abandonedById == null)
+        && (!('finishReason' in after()) || after().finishReason == null)
         && after().blue.ready == false && after().red.ready == false
         && after().createdAt == after().updatedAt
         && notFromTheFuture(after().createdAt)
@@ -258,6 +263,7 @@ service cloud.firestore {
           && after().currentPlayerId == null
           && after().winnerId == null
           && (!('abandonedById' in after()) || after().abandonedById == null)
+          && (!('finishReason' in after()) || after().finishReason == null)
           && (
             // A member edits only their own seat.
             (isMember(before())
@@ -293,7 +299,8 @@ service cloud.firestore {
           && isInitialBoardState(after().boardState, after())
           && after().turnNumber == 0
           && after().currentPlayerId == after().blue.playerId
-          && after().winnerId == null;
+          && after().winnerId == null
+          && after().get('finishReason', null) == null;
       }
 
       // A move: §12 "Only the current participant may advance the turn" and
@@ -315,10 +322,12 @@ service cloud.firestore {
             (after().status == 'started'
               && after().boardState.status == 'inProgress'
               && after().winnerId == null
+              && after().get('finishReason', null) == null
               && after().currentPlayerId == seatedUid(after(), after().boardState.currentPlayer))
             || (after().status == 'finished'
               && after().boardState.status == 'finished'
               && after().currentPlayerId == null
+              && after().finishReason == 'goal'
               && after().winnerId == seatedUid(after(), after().boardState.winner))
           );
       }
@@ -337,10 +346,38 @@ service cloud.firestore {
           && uid() != before().get('currentPlayerId', null)
           && request.time.toMillis() - before().get('updatedAt', 0) >= 120000
           && after().abandonedById == uid()
+          && after().finishReason == 'abandon'
           && after().boardState == before().get('boardState', null)
           && after().turnNumber == before().get('turnNumber', 0)
           && after().currentPlayerId == before().get('currentPlayerId', null)
           && after().winnerId == before().get('winnerId', null)
+          && seatsUnchanged();
+      }
+
+      // Resignation (Phase 16.5): a seated member ends a started
+      // match by conceding. The winner written must be the OTHER
+      // seat's player — the resigner can never crown themselves —
+      // the board is frozen exactly as it stood (resigning is not
+      // a move, so the engine state stays `inProgress`), and the
+      // finish reason is recorded. A finished or abandoned match
+      // matches no transition, so a resign write after the end —
+      // or one trying to change a decided winner — is refused.
+      function opponentUidOf(d) {
+        return d.blue.playerId == uid() ? d.red.playerId : d.blue.playerId;
+      }
+
+      function resignWrite() {
+        return before().status == 'started'
+          && after().status == 'finished'
+          && isMember(before())
+          && after().winnerId == opponentUidOf(before())
+          && after().winnerId != null
+          && after().finishReason == 'resign'
+          && after().currentPlayerId == null
+          && after().boardState == before().get('boardState', null)
+          && after().turnNumber == before().get('turnNumber', 0)
+          && (!('abandonedById' in after())
+              || after().abandonedById == before().get('abandonedById', null))
           && seatsUnchanged();
       }
 
@@ -351,7 +388,7 @@ service cloud.firestore {
           // Idempotent no-op rewrite (the repository re-writes an unchanged
           // document on a redundant ready call); members only, nothing moves.
           (after() == before() && isMember(before()))
-          || (versionBump() && (preStartChange() || startMatch() || moveWrite() || abandonmentClaim()))
+          || (versionBump() && (preStartChange() || startMatch() || moveWrite() || abandonmentClaim() || resignWrite()))
         );
 
       // Deletion is the host leaving a room that never started (Phase 8's
