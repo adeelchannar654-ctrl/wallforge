@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../../../app/theme/app_breakpoints.dart';
 
 import '../../../app/application/achievements/achievements_service.dart';
+import '../../../app/application/online/leaderboard_submitter.dart';
 import '../../../app/application/online/online_game_controller.dart';
+import '../../../app/build_info.dart';
 import '../../../core/feedback/feedback_controller.dart';
 import '../../../core/feedback/feedback_scope.dart';
 import '../../../app/application/online/online_lobby_controller.dart';
@@ -15,8 +17,11 @@ import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
 import '../../../data/local/shared_preferences_achievements_repository.dart';
 import '../../../data/local/shared_preferences_history_repository.dart';
+import '../../../data/local/shared_preferences_leaderboard_name_repository.dart';
 import '../../../data/local/shared_preferences_settings_repository.dart';
 import '../../../data/local/shared_preferences_statistics_repository.dart';
+import '../../../data/remote/cloud_firestore_client.dart';
+import '../../../data/remote/firestore_leaderboard_repository.dart';
 import '../../../domain/wallforge_domain.dart';
 import '../../widgets/app_chrome.dart';
 import '../../widgets/responsive_content.dart';
@@ -388,6 +393,18 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
         statistics: const SharedPreferencesStatisticsRepository(),
         store: const SharedPreferencesAchievementsRepository(),
       ),
+      // Phase 16.5, Part H: absent entirely when the flag is
+      // off, so a flag-off build submits nothing.
+      leaderboardSubmitter: kFeatureLeaderboard
+          ? LeaderboardSubmitter(
+              repository: FirestoreLeaderboardRepository(
+                client: CloudFirestoreClient(),
+                userId: () async => controller.uid,
+              ),
+              names: const SharedPreferencesLeaderboardNameRepository(),
+              myUid: controller.uid!,
+            )
+          : null,
     );
     // The match controller fires its cues through the app's feedback
     // layer, with the settings snapshot just loaded applied to it.

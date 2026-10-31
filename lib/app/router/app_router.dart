@@ -17,6 +17,7 @@ import '../../app/application/match_setup.dart';
 import '../../presentation/screens/ai/ai_difficulty_screen.dart';
 import '../../presentation/screens/game/game_screen.dart';
 import '../../presentation/screens/achievements/achievements_screen.dart';
+import '../../presentation/screens/leaderboard/leaderboard_screen.dart';
 import '../../presentation/screens/history/history_detail_screen.dart';
 import '../../presentation/screens/history/history_screen.dart';
 import '../../presentation/screens/home/home_screen.dart';
@@ -92,6 +93,9 @@ class AppRoutes {
 
   /// The achievements catalogue and unlocks (Phase 16.5).
   static const String achievements = '/achievements';
+
+  /// The weekly leaderboard (Phase 16.5, flag-gated).
+  static const String leaderboard = '/leaderboard';
 }
 
 /// Arguments for the `/online/game` route: the match controller the lobby
@@ -223,6 +227,8 @@ class AppRouter {
         );
       case AppRoutes.achievements:
         return _page(settings, const AchievementsScreen());
+      case AppRoutes.leaderboard:
+        return _page(settings, const LeaderboardScreen());
       case AppRoutes.settings:
         return _page(settings, const SettingsScreen());
       default:

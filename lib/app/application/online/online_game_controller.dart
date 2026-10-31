@@ -7,6 +7,7 @@ import '../../../domain/wallforge_domain.dart';
 import '../achievements/achievements_service.dart';
 import '../action_inference.dart';
 import '../game_interaction.dart';
+import 'leaderboard_submitter.dart';
 
 /// The five connection states `design.md` §19 requires.
 ///
@@ -121,6 +122,7 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
     this.movementAssistance = false,
     MatchHistoryRepository? history,
     AchievementsService? achievements,
+    this.leaderboardSubmitter,
   }) : _state = initialState ?? GameState.initial(),
        _clock = clock ?? DateTime.now,
        _historyRepository = history,
@@ -165,6 +167,11 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
   /// The achievements service (Phase 16.5, Part F), evaluated
   /// after a finish is recorded.
   final AchievementsService? _achievementsService;
+
+  /// The leaderboard submitter (Phase 16.5, Part H), fired
+  /// once when the match ends. Null when the feature flag is
+  /// off or the screen did not wire it.
+  final LeaderboardSubmitter? leaderboardSubmitter;
 
   /// Set by the game screen: called with the achievements a
   /// recorded finish just unlocked, for the unlock toast.
@@ -527,6 +534,11 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
     if (_historyRecorded || !(isFinished || isAbandoned)) return;
     _historyRecorded = true;
     unawaited(_recordHistory());
+    // Phase 16.5, Part H: the same terminal snapshot feeds
+    // the weekly leaderboard (best-effort, flag-gated by the
+    // wiring — the submitter is simply absent when off).
+    final submitter = leaderboardSubmitter;
+    if (submitter != null) unawaited(submitter.submit(_room));
   }
 
   Future<void> _recordHistory() async {

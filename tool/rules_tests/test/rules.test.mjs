@@ -26,6 +26,7 @@ import {
   collection,
   runTransaction,
   serverTimestamp,
+  Timestamp,
 } from 'firebase/firestore';
 
 const NOW = Date.now();
@@ -1073,4 +1074,237 @@ test('users: private documents belong to their owner only', async () => {
   await assertSucceeds(setDoc(settings(alice, 'alice'), { schemaVersion: 1 }));
   await assertFails(setDoc(settings(bob, 'alice'), { schemaVersion: 1 }));
   await assertFails(getDoc(settings(bob, 'alice')));
+});
+
+// --- weekly leaderboard (phase 16.5) ---------------------------------------------
+
+function currentWeekStartMs() {
+  const dayMs = 86400000;
+  const weekMs = 604800000;
+  const mondayResidue = 345600000;
+  const nowMs = Date.now();
+  const dayStart = nowMs - (nowMs % dayMs);
+  const residue = dayStart % weekMs;
+  const sinceMonday = residue >= mondayResidue
+    ? residue - mondayResidue
+    : residue + (weekMs - mondayResidue);
+  return dayStart - sinceMonday;
+}
+
+const WEEK = currentWeekStartMs();
+const entryRef = (db, uid, week = WEEK) =>
+  doc(db, `leaderboards/${week}/entries/${uid}`);
+
+// A finished match: alice (Blue) beat bob in 14 plies, server
+// stamped inside the current week.
+function finishedMatchDoc(overrides = {}) {
+  return roomDoc({
+    code: 'FIN123',
+    status: 'finished',
+    blue: { playerId: 'alice', ready: true },
+    red: { playerId: 'bob', ready: true },
+    boardState: boardState({ turnNumber: 14, status: 'finished', winner: 'blue' }),
+    turnNumber: 14,
+    currentPlayerId: null,
+    winnerId: 'alice',
+    finishReason: 'goal',
+    version: 20,
+    serverUpdatedAt: Timestamp.fromMillis(Date.now()),
+    ...overrides,
+  });
+}
+
+// Alice's entry after counting FIN123 (her win).
+function entryDoc(overrides = {}) {
+  return {
+    uid: 'alice',
+    displayName: 'Swift Falcon 42',
+    points: 3,
+    wins: 1,
+    losses: 0,
+    countedMatches: { FIN123: 'bob' },
+    opponentCounts: { bob: 1 },
+    weekStartMs: WEEK,
+    lastCountedMatch: 'FIN123',
+    ...overrides,
+  };
+}
+
+test('leaderboard: a valid first entry counts the finished match', async () => {
+  await seed('matches/FIN123', finishedMatchDoc());
+  await assertSucceeds(setDoc(entryRef(alice, 'alice'), entryDoc()));
+  // Bob's side of the same match: a loss is worth 1.
+  await assertSucceeds(
+    setDoc(entryRef(bob, 'bob'), entryDoc({
+      uid: 'bob',
+      displayName: 'Iron Raven 07',
+      points: 1,
+      wins: 0,
+      losses: 1,
+      countedMatches: { FIN123: 'alice' },
+      opponentCounts: { alice: 1 },
+    })),
+  );
+  // Signed-in players may read the board; anonymous may not.
+  await assertSucceeds(getDoc(entryRef(bob, 'alice')));
+  await assertFails(getDoc(entryRef(anon, 'alice')));
+});
+
+test('leaderboard: forged points, wrong player, wrong week are denied', async () => {
+  await seed('matches/FIN123', finishedMatchDoc());
+  // Bob claims a win's 3 points for a match he lost.
+  await assertFails(
+    setDoc(entryRef(bob, 'bob'), entryDoc({
+      uid: 'bob',
+      countedMatches: { FIN123: 'alice' },
+      opponentCounts: { alice: 1 },
+    })),
+  );
+  // Alice writes into Bob's entry.
+  await assertFails(
+    setDoc(entryRef(alice, 'bob'), entryDoc({ uid: 'bob' })),
+  );
+  // Last week's bucket is closed: request.time is not in it.
+  const lastWeek = WEEK - 604800000;
+  await assertFails(
+    setDoc(entryRef(alice, 'alice', lastWeek), entryDoc({
+      weekStartMs: lastWeek,
+    })),
+  );
+  // A free-text or malformed display name is refused.
+  await assertFails(
+    setDoc(entryRef(alice, 'alice'), entryDoc({ displayName: 'hax0r' })),
+  );
+  await assertFails(
+    setDoc(entryRef(alice, 'alice'), entryDoc({
+      displayName: 'lower case 42',
+    })),
+  );
+});
+
+test('leaderboard: uncountable matches are denied', async () => {
+  // An unfinished match.
+  await seed('matches/FIN123', finishedMatchDoc({
+    status: 'started',
+    winnerId: null,
+    boardState: boardState({ turnNumber: 14 }),
+  }));
+  await assertFails(setDoc(entryRef(alice, 'alice'), entryDoc()));
+  // A finished match under the 10-ply minimum.
+  await seed('matches/FIN123', finishedMatchDoc({
+    boardState: boardState({ turnNumber: 9, status: 'finished', winner: 'blue' }),
+    turnNumber: 9,
+  }));
+  await assertFails(setDoc(entryRef(alice, 'alice'), entryDoc()));
+  // An abandoned match (no winner).
+  await seed('matches/FIN123', finishedMatchDoc({
+    winnerId: null,
+    finishReason: 'abandon',
+  }));
+  await assertFails(setDoc(entryRef(alice, 'alice'), entryDoc()));
+  // A match the writer did not play in.
+  await seed('matches/FIN123', finishedMatchDoc());
+  await assertFails(
+    setDoc(entryRef(carol, 'carol'), entryDoc({ uid: 'carol' })),
+  );
+});
+
+test('leaderboard: updates must count exactly one new real match', async () => {
+  await seed('matches/FIN123', finishedMatchDoc());
+  await seed(`leaderboards/${WEEK}/entries/alice`, entryDoc());
+  // A second counted match (alice beats bob again, 12 plies).
+  await seed('matches/FIN124', finishedMatchDoc({
+    code: 'FIN124',
+    boardState: boardState({ turnNumber: 12, status: 'finished', winner: 'blue' }),
+    turnNumber: 12,
+  }));
+  const grown = entryDoc({
+    points: 6,
+    wins: 2,
+    countedMatches: { FIN123: 'bob', FIN124: 'bob' },
+    opponentCounts: { bob: 2 },
+    lastCountedMatch: 'FIN124',
+  });
+  await assertSucceeds(setDoc(entryRef(alice, 'alice'), grown));
+  // The same match counted twice.
+  await assertFails(
+    setDoc(entryRef(alice, 'alice'), entryDoc({
+      points: 6,
+      wins: 2,
+      countedMatches: { FIN123: 'bob', FIN124: 'bob' },
+      opponentCounts: { bob: 2 },
+      lastCountedMatch: 'FIN123',
+    })),
+  );
+  // Points without a new match.
+  await assertFails(
+    setDoc(entryRef(alice, 'alice'), entryDoc({ points: 99 })),
+  );
+});
+
+test('leaderboard: the caps bind — 3 per opponent, 20 per week', async () => {
+  await seed('matches/FIN124', finishedMatchDoc({
+    code: 'FIN124',
+    boardState: boardState({ turnNumber: 12, status: 'finished', winner: 'blue' }),
+    turnNumber: 12,
+  }));
+  // Three already counted against bob: a fourth is refused.
+  await seed(`leaderboards/${WEEK}/entries/alice`, entryDoc({
+    points: 9,
+    wins: 3,
+    countedMatches: { A1: 'bob', A2: 'bob', A3: 'bob' },
+    opponentCounts: { bob: 3 },
+    lastCountedMatch: 'A3',
+  }));
+  await assertFails(
+    setDoc(entryRef(alice, 'alice'), entryDoc({
+      points: 12,
+      wins: 4,
+      countedMatches: { A1: 'bob', A2: 'bob', A3: 'bob', FIN124: 'bob' },
+      opponentCounts: { bob: 4 },
+      lastCountedMatch: 'FIN124',
+    })),
+  );
+  // Twenty already counted: a twenty-first is refused.
+  const twenty = {};
+  const counts = {};
+  for (let i = 0; i < 20; i++) {
+    twenty[`M${i}`] = `opp${i}`;
+    counts[`opp${i}`] = 1;
+  }
+  await seed(`leaderboards/${WEEK}/entries/alice`, entryDoc({
+    points: 60,
+    wins: 20,
+    countedMatches: twenty,
+    opponentCounts: counts,
+    lastCountedMatch: 'M19',
+  }));
+  await assertFails(
+    setDoc(entryRef(alice, 'alice'), entryDoc({
+      points: 63,
+      wins: 21,
+      countedMatches: { ...twenty, FIN124: 'bob' },
+      opponentCounts: { ...counts, bob: 1 },
+      lastCountedMatch: 'FIN124',
+    })),
+  );
+});
+
+test('leaderboard: a rename-only update is allowed, nothing more', async () => {
+  await seed('matches/FIN123', finishedMatchDoc());
+  await seed(`leaderboards/${WEEK}/entries/alice`, entryDoc());
+  await assertSucceeds(
+    setDoc(entryRef(alice, 'alice'), entryDoc({
+      displayName: 'Amber Otter 31',
+    })),
+  );
+  // A rename smuggling a points change is refused.
+  await assertFails(
+    setDoc(entryRef(alice, 'alice'), entryDoc({
+      displayName: 'Amber Otter 31',
+      points: 30,
+    })),
+  );
+  // Entries are never deletable by a client.
+  await assertFails(deleteDoc(entryRef(alice, 'alice')));
 });

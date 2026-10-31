@@ -635,6 +635,161 @@ service cloud.firestore {
       }
     }
 
+    // ------------------------------------------------------ weekly leaderboard
+
+    // Phase 16.5, Part H. Buckets are weeks: {weekId} is the
+    // week's Monday 00:00 UTC in epoch milliseconds, repeated
+    // in the entry as weekStartMs. A new week is a new bucket
+    // — nothing is ever reset or deleted.
+    //
+    // An entry write counts exactly ONE finished match. The
+    // validation reads that match (one billed get()) and
+    // checks: it is finished with a decisive winner; both
+    // seats are distinct and one of them is the writer; the
+    // claimed opponent is the other seat; it ran 10+ plies;
+    // it ended inside this week (by its server stamp). The
+    // points delta must equal what the match entitles (3 win
+    // / 1 loss), the counted-matches map must gain exactly
+    // that one key, the per-opponent count must rise by one
+    // and stay ≤ 3, and the week cap is 20. A rename-only
+    // update (a regenerated display name) is the one other
+    // legal write.
+    //
+    // Residual surface, stated in security_model.md: two
+    // colluding accounts can still farm each other up to the
+    // caps (3 counted matches per pairing per week). Real
+    // prevention needs a server; the caps bound the damage.
+    match /leaderboards/{weekId} {
+      match /entries/{entryUid} {
+        function lbAfter() { return request.resource.data; }
+        function lbBefore() { return resource.data; }
+
+        function lbShape(d) {
+          return d.keys().hasOnly([
+              'uid', 'displayName', 'points', 'wins', 'losses',
+              'countedMatches', 'opponentCounts', 'weekStartMs',
+              'lastCountedMatch',
+            ])
+            && d.keys().hasAll([
+              'uid', 'displayName', 'points', 'wins', 'losses',
+              'countedMatches', 'opponentCounts', 'weekStartMs',
+              'lastCountedMatch',
+            ])
+            && d.uid is string && d.uid == entryUid
+            && d.displayName is string
+            && d.displayName.matches(
+                '^[A-Z][a-z]+ [A-Z][a-z]+ [0-9][0-9]$')
+            && d.points is int && d.points >= 0
+            && d.wins is int && d.wins >= 0
+            && d.losses is int && d.losses >= 0
+            && d.countedMatches is map
+            && d.opponentCounts is map
+            && d.weekStartMs is int
+            && d.lastCountedMatch is string;
+        }
+
+        // The entry's week is a Monday 00:00 UTC (the epoch
+        // was a Thursday, so Mondays sit at ms % 604800000 ==
+        // 345600000), it is the bucket in the path, and it
+        // contains the request's server time.
+        function lbWeekCurrent(d) {
+          return d.weekStartMs % 604800000 == 345600000
+            && string(d.weekStartMs) == weekId
+            && d.weekStartMs <= request.time.toMillis()
+            && request.time.toMillis() < d.weekStartMs + 604800000;
+        }
+
+        // What counting [matchId] entitles the writer to: 3
+        // for their win, 1 for their loss, 0 when the match
+        // cannot count at all. One get() per write.
+        function lbEntitlement(matchId, claimedOpponent) {
+          let m = get(/databases/$(database)/documents/matches/$(matchId)).data;
+          return (m.status == 'finished'
+              && m.winnerId != null
+              && m.blue.playerId != m.red.playerId
+              && (m.blue.playerId == uid() || m.red.playerId == uid())
+              && (m.blue.playerId == uid()
+                  ? m.red.playerId : m.blue.playerId) == claimedOpponent
+              && m.get('boardState', null) != null
+              && m.boardState.turnNumber >= 10
+              && m.get('serverUpdatedAt', null) is timestamp
+              && m.serverUpdatedAt.toMillis() >= lbAfter().weekStartMs
+              && m.serverUpdatedAt.toMillis()
+                  < lbAfter().weekStartMs + 604800000)
+            ? (m.winnerId == uid() ? 3 : 1)
+            : 0;
+        }
+
+        function lbCreateValid() {
+          let d = lbAfter();
+          let mid = d.lastCountedMatch;
+          let ent = lbEntitlement(mid, d.countedMatches.get(mid, ''));
+          return lbShape(d)
+            && lbWeekCurrent(d)
+            && d.uid == uid()
+            && ent > 0
+            && d.points == ent
+            && d.countedMatches.size() == 1
+            && (ent == 3
+                ? (d.wins == 1 && d.losses == 0)
+                : (d.wins == 0 && d.losses == 1))
+            && d.opponentCounts.size() == 1
+            && d.opponentCounts.get(d.countedMatches[mid], 0) == 1;
+        }
+
+        function lbUpdateValid() {
+          let d = lbAfter();
+          let b = lbBefore();
+          let mid = d.lastCountedMatch;
+          let opp = d.countedMatches.get(mid, '');
+          let ent = lbEntitlement(mid, opp);
+          return lbShape(d)
+            && lbWeekCurrent(d)
+            && d.uid == uid()
+            && d.weekStartMs == b.weekStartMs
+            && ent > 0
+            && !(mid in b.countedMatches)
+            && d.countedMatches.size() == b.countedMatches.size() + 1
+            && d.countedMatches.size() <= 20
+            && d.countedMatches.diff(b.countedMatches)
+                .removedKeys().size() == 0
+            && d.countedMatches.diff(b.countedMatches)
+                .changedKeys().size() == 0
+            && d.points == b.points + ent
+            && (ent == 3
+                ? (d.wins == b.wins + 1 && d.losses == b.losses)
+                : (d.losses == b.losses + 1 && d.wins == b.wins))
+            && d.opponentCounts.get(opp, 0)
+                == b.opponentCounts.get(opp, 0) + 1
+            && d.opponentCounts.get(opp, 0) <= 3
+            && d.opponentCounts.diff(b.opponentCounts)
+                .affectedKeys() == [opp].toSet();
+        }
+
+        // A regenerated name on its own: nothing else moves.
+        function lbRenameValid() {
+          let d = lbAfter();
+          let b = lbBefore();
+          return lbShape(d)
+            && lbWeekCurrent(d)
+            && d.uid == uid()
+            && d.weekStartMs == b.weekStartMs
+            && d.points == b.points
+            && d.wins == b.wins
+            && d.losses == b.losses
+            && d.countedMatches == b.countedMatches
+            && d.opponentCounts == b.opponentCounts
+            && d.lastCountedMatch == b.lastCountedMatch;
+        }
+
+        allow read: if signedIn();
+        allow create: if signedIn() && lbCreateValid();
+        allow update: if signedIn()
+          && (lbUpdateValid() || lbRenameValid());
+        allow delete: if false;
+      }
+    }
+
     // ------------------------------------------------------ per-player private
 
     // Phase 6/7 persistence: settings, statistics and the unfinished match are

@@ -5374,3 +5374,98 @@ passes; full presentation suite green serially (626 tests
 — an earlier parallel run under triple job contention
 showed 24 timing failures that do not reproduce serially,
 the Part C flake pattern again).
+
+### Part H — weekly leaderboard (2026-10-31)
+
+Shipped, per D16.5-9, behind the flag
+(`kFeatureLeaderboard` in build_info.dart:
+`--dart-define=FEATURE_LEADERBOARD`, default on in debug,
+OFF in release unless explicitly enabled; the Home card,
+the route's use, and the online submitter all vanish with
+it — a flag-off build submits nothing and shows no entry
+point).
+**Owner prerequisites (also at the top of the final
+report):** the Phase 10 rules and these leaderboard rules
+must be deployed by the owner (`firebase deploy --only
+firestore:rules`) before any of this works live; the board
+may eventually need the Blaze plan as volume grows. Until
+then the screen degrades gracefully (below).
+Design as built: buckets `leaderboards/{weekStartMs}/
+///entries/{uid}` where the id is the week's Monday 00:00
+UTC in epoch ms. Week arithmetic is shared verbatim with
+the rules: a Monday start satisfies
+`ms % 604800000 == 345600000` (the epoch was a Thursday),
+so the rules prove "current week" with integer arithmetic
+against `request.time` — no date parsing, no reset job, a
+new week simply starts empty. Identity: the anonymous uid
+plus a GENERATED display name (Adjective + Noun + two
+digits, FNV-1a over uid + a locally stored generation;
+regenerable) — never free text, so no moderation is
+needed; the rules validate the exact shape. Anonymous uids
+are lost on reinstall, which is acceptable for weekly
+boards and stated in the ledger (account linking is out of
+scope). What counts: finished online matches between two
+distinct players, decisive result only (abandonments
+never), win 3 / loss 1, ≥ 10 plies, ≤ 20 counted per player
+per week, ≤ 3 per opponent per week. `countedMatches` is a
+MAP (match id → opponent uid) because a map diff is the
+one shape rules can prove "exactly one new key, none
+changed or removed" for.
+Rules: one `get()` of the finished match per entry write
+validates seats, distinctness, the claimed opponent, the
+10-ply floor and the in-week server stamp; the points
+delta must equal the entitlement the match proves; a
+rename-only update (regeneration) is the one other legal
+write; reads are signed-in only; deletes never. The JS
+rules matrix covers the valid create (both sides), forged
+delta, wrong uid, closed week, bad names, unfinished /
+short / abandoned / not-a-participant matches, duplicate
+counting, both caps, rename-only vs rename-plus-points,
+signed-in read vs anonymous — **written, not run**
+(emulator).
+Client: `FirestoreLeaderboardRepository` over the shared
+client (its in-memory double serves the tests);
+`FirestoreClient.query` gained compound ordering (points
+desc, wins desc, uid asc) implemented in both clients and
+the four test doubles. The online controller submits at
+the terminal snapshot through `LeaderboardSubmitter`
+(best-effort: offline or undeployed rules = silently not
+counted, no retry queue — a stated limitation). The board
+screen: 5-minute in-memory cache shared across visits (a
+load costs ≤ 54 reads: top 50 + own entry + last week's
+top 3; the manual refresh honours the same interval and
+says how long is left), reset countdown in words (Mon
+00:00 UTC), ranks and W/L as text, my row carried by a YOU
+tag + heavier outline (never colour alone), a pinned "50+"
+row when outside the fetched top, last week's podium, and
+the counting rules + residual-cheating text on the face of
+the screen. The Top-10 achievement unlocks only from this
+screen's fetched rank (Part F hook, proven in tests at
+rank 2 and refused at rank 11).
+**Residual cheating surface (also in the in-app text and
+the final report):** two colluding accounts can farm each
+other up to the caps (3 counted matches per pairing per
+week, 20 per week); a determined client can also simply
+play real matches against alts. The rules make every
+counted match a REAL finished match, which bounds farming
+to actual play within the caps; eliminating it needs a
+server (out of scope on Spark).
+One honest limit: through the project's FirestoreClient
+(whose Phase 7 discipline degrades every failure to an
+empty result), a not-yet-deployed ruleset is
+indistinguishable from an empty board on a real device —
+the screen's empty state is what shows; the unavailable
+state covers failures the client propagates (and the
+in-memory double's). The repository's reads deliberately
+do not swallow, so the controller can tell the two apart
+whenever the client lets it.
+Tests: 25 new Dart (repository 12: week math incl. the
+residue identity, name shape/determinism/regeneration,
+counting, duplicate/short/week-cap/opponent-cap, ordering
+with the compound tie-break, rename; controller 7: states,
+exact fetch counts + shared-cache TTL behaviour, 50+,
+top-10 hook both ways, regenerate, reset countdown; UI 5;
+online end-to-end 2: a 12-ply resign finish boards both
+players mirrored, a short match and an abandonment board
+nobody). Gates: format 221 files 0 changed; analyze clean;
+affected suites green (530).

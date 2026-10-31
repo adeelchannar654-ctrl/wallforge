@@ -99,6 +99,7 @@ abstract interface class FirestoreClient {
     String? orderBy,
     int limit = 10,
     String? startAfterDocumentId,
+    List<QueryOrder>? orderBys,
   });
 
   /// Runs [action] as an atomic transaction, retrying it on conflict.
@@ -163,6 +164,20 @@ class FirestoreSnapshot {
 
 /// A document returned by [FirestoreClient.query], carrying the path needed to
 /// address it again.
+/// One ordering term for [FirestoreClient.query] (Phase 16.5):
+/// a field and its direction. A list of these gives a compound
+/// ordering (the leaderboard's points desc, wins desc, uid
+/// asc) from one query.
+class QueryOrder {
+  const QueryOrder(this.field, {this.descending = false});
+
+  /// The document field to order by.
+  final String field;
+
+  /// Whether this term sorts descending.
+  final bool descending;
+}
+
 class FirestoreDocument {
   const FirestoreDocument({required this.path, required this.data});
 

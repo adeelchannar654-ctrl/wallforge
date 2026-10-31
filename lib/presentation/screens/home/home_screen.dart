@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/application/achievements/achievements_service.dart';
 import '../../../app/application/local_game_controller.dart';
+import '../../../app/build_info.dart';
 import '../../../app/router/app_router.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_radii.dart';
@@ -237,6 +238,10 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                 ],
                 const SizedBox(height: AppSpacing.md),
                 _buildHistoryCard(),
+                if (kFeatureLeaderboard) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  _buildLeaderboardCard(),
+                ],
                 const SizedBox(height: AppSpacing.xxl),
               ],
             ),
@@ -387,6 +392,29 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
             const SizedBox(height: AppSpacing.sm),
             Text(
               'Every finished match on this device, online included.',
+              style: AppTypography.bodyBase.copyWith(
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Phase 16.5, Part H: the weekly leaderboard doorway —
+  /// exists only when the feature is compiled in.
+  Widget _buildLeaderboardCard() {
+    return AppCard(
+      child: InkWell(
+        onTap: () => Navigator.of(context).pushNamed(AppRoutes.leaderboard),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SectionTitle('WEEKLY LEADERBOARD'),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'This week\'s online standings. Resets every Monday.',
               style: AppTypography.bodyBase.copyWith(
                 color: AppColors.onSurfaceVariant,
               ),

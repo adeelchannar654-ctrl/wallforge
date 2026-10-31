@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 /// The build identifier shown in Settings → Account (Phase 16 A.1),
 /// so the owner — and any bug report — can state exactly which build
 /// is running. Injected at build/run time:
@@ -28,3 +30,14 @@ class BuildInfo {
   /// The label for this build.
   static String get label => labelFor(gitSha);
 }
+
+/// Whether the weekly leaderboard is compiled in (Phase 16.5,
+/// Part H): `--dart-define=FEATURE_LEADERBOARD=true` enables
+/// it; debug builds default to on, release builds to OFF
+/// unless explicitly enabled — so Phase 17 can ship without
+/// it if the owner has not deployed the leaderboard rules or
+/// decided on billing.
+const bool kFeatureLeaderboard = bool.fromEnvironment(
+  'FEATURE_LEADERBOARD',
+  defaultValue: kDebugMode,
+);

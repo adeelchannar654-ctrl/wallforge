@@ -189,12 +189,21 @@ class InMemoryFirestoreClient implements FirestoreClient {
     String? orderBy,
     int limit = 10,
     String? startAfterDocumentId,
+    List<QueryOrder>? orderBys,
   }) async {
     _maybeFail();
     var entries = documents.entries
         .where((e) => _isInCollection(e.key, collectionPath))
         .toList();
-    if (orderBy != null) {
+    if (orderBys != null) {
+      entries.sort((a, b) {
+        for (final term in orderBys) {
+          final compared = _compareBy(a.value, b.value, term.field);
+          if (compared != 0) return term.descending ? -compared : compared;
+        }
+        return 0;
+      });
+    } else if (orderBy != null) {
       entries.sort((a, b) => _compareBy(a.value, b.value, orderBy));
     }
     if (startAfterDocumentId != null) {

@@ -812,6 +812,7 @@ class _WriteFailingClient implements FirestoreClient {
     String? orderBy,
     int limit = 10,
     String? startAfterDocumentId,
+    List<QueryOrder>? orderBys,
   }) => inner.query(
     collectionPath: collectionPath,
     orderBy: orderBy,

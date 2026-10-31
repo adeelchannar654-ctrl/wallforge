@@ -27,12 +27,14 @@ class _InterleavingClient implements FirestoreClient {
     String? orderBy,
     int limit = 10,
     String? startAfterDocumentId,
+    List<QueryOrder>? orderBys,
   }) async {
     await _maybeInterleave();
     return inner.query(
       collectionPath: collectionPath,
       orderBy: orderBy,
       limit: limit,
+      orderBys: orderBys,
     );
   }
 

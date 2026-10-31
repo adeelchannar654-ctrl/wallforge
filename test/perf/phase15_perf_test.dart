@@ -81,12 +81,14 @@ class CountingFirestoreClient implements FirestoreClient {
     String? orderBy,
     int limit = 10,
     String? startAfterDocumentId,
+    List<QueryOrder>? orderBys,
   }) {
     queries++;
     return inner.query(
       collectionPath: collectionPath,
       orderBy: orderBy,
       limit: limit,
+      orderBys: orderBys,
       startAfterDocumentId: startAfterDocumentId,
     );
   }
