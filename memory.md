@@ -5536,3 +5536,386 @@ architecture.md §11 (new fields, leaderboard documents,
 local stores), design.md §33 (the new surfaces),
 security_model.md (above). Pushed to GitHub at the end of
 this part; the remote HEAD is stated in the final report.
+
+---
+
+# 13ab. Phase 16.6 Record — Accounts and Sign-in (guest stays the default) (2026-11-01)
+
+## Source ledger — what was read, in full, before any change
+
+- `PRD.md` (390 lines), `architecture.md` (807), `rules.md` (806),
+  `design.md` (907), `phase.md` (1,719), `security_model.md` (389),
+  `firestore.rules` (818) — all read in full.
+- `memory.md`: the Phase 7/8 auth record (§13o/§13p, via the
+  `phase.md` results and §13p's auth section), Phase 16.5's
+  §13aa decisions D16.5-1…9 (leaderboard shape, display names,
+  local stores, finish gate).
+- Code read in full: `lib/domain/repositories/auth.dart`,
+  `lib/data/remote/firebase_auth_gateway.dart`,
+  `lib/app/build_info.dart`, `lib/app/application/online/
+  online_lobby_controller.dart`, `online_lobby_factory.dart`,
+  `lib/domain/repositories/leaderboard.dart`,
+  `leaderboard_submitter.dart`, `lib/main.dart`,
+  `lib/app/app.dart`, `lib/app/router/app_router.dart`,
+  `profile_screen.dart`, `settings_screen.dart`,
+  `leaderboard_screen.dart`, `persistence_factory.dart`,
+  `repositories.dart` (the local repository contracts),
+  `match_statistics.dart`, `pubspec.yaml`.
+- Verified by grep: every `uid` consumer; every `AuthGateway`
+  fake in the test tree; the rules suite's auth contexts;
+  `recordIfNew` call sites.
+
+## What already existed (Step 0 report — read, not guessed)
+
+- **Identity today**: `AuthGateway` (`lib/domain/repositories/
+  auth.dart`) — `signInAnonymously`, `current`, `signOut`,
+  `authStateChanges`, `currentUid`. `AuthState` is
+  `signedIn(uid) | signedOut | unavailable(reason)`; it
+  carries no provider or verification information.
+  `FirebaseAuthGateway` resolves `FirebaseAuth.instance`
+  lazily, never throws, degrades to `unavailable`.
+- **How the uid is obtained and cached**: nobody caches it
+  long-term. Every Firestore repository (rooms, matches,
+  matchmaking, settings, statistics, unfinished match,
+  leaderboard) is handed `auth.currentUid` as a
+  `UserIdResolver` and awaits it **per operation**, so a uid
+  change propagates to repositories automatically. The two
+  places that hold a uid snapshot are controllers:
+  `OnlineLobbyController._authState` (refreshed on its own
+  `signIn()` call) and the `OnlineGameController`'s fixed
+  `uid` field for the life of one match — the second is
+  exactly why Part C's guard exists. `LeaderboardScreen`
+  builds its own gateway and signs in anonymously on open.
+- **Auth failure / offline today**: sign-in failure resolves
+  to `AuthState.unavailable`; the lobby shows "Could not
+  sign in. Online play is unavailable." and local play is
+  untouched. An unconfigured build behaves the same way.
+  That degradation contract is preserved for every new
+  operation: failures are typed values, never throws.
+- **Display name**: generated from the uid (`generateDisplay
+  Name(uid, generation)`, FNV-1a; Adjective + Noun + two
+  digits), generation stored **locally, keyed by uid**, in
+  `SharedPreferencesLeaderboardNameRepository`
+  (`wallforge.leaderboard_name.v1`). It is not stored in
+  Firestore except inside a leaderboard entry document.
+- **Local stores** (all `shared_preferences`, none keyed by
+  uid — the keys are global): settings
+  (`wallforge.settings.v1`), statistics
+  (`wallforge.statistics.v1`), unfinished match
+  (`wallforge.unfinished_match.v1`), history + finish gate
+  (`wallforge.history.v1`, bounded 100), achievements
+  (`wallforge.achievements.v1`), leaderboard name
+  generations (`wallforge.leaderboard_name.v1`). The
+  Phase 7 Firestore-backed settings/statistics/unfinished
+  repositories **are** keyed by uid (`users/{uid}/…`) but
+  are not the app's default path (Q-7.1: local is default).
+- **The history finish gate** lives inside
+  `MatchHistoryRepository` implementations; the interface
+  exposes no way to read or extend the gate set — Part E
+  adds exactly that (see D16.6-8).
+- **Rules**: `users/{userId}/{document=**}` is owner-only
+  with **no shape validation** — Phase 7's three documents
+  (settings/statistics/unfinishedMatch) are the only writers.
+  The leaderboard block validates entries thoroughly but
+  requires only `signedIn()` — an anonymous guest may write.
+  The rules suite (`tool/rules_tests/test/rules.test.mjs`)
+  authenticates with `authenticatedContext(uid)` and no
+  explicit provider claim.
+
+## Baseline (Part A.1, real output, 2026-11-01)
+
+- Remote `main` verified by `git ls-remote`:
+  `05f90622a46b003481f1f292bf3cea20b302ce32` — the Phase 16.5
+  head. Local tree clean.
+- `dart format --set-exit-if-changed lib test` → Formatted
+  224 files (0 changed).
+- `flutter analyze` → No issues found!
+- `python3 tool/spec_verification/check_spec_consistency.py`
+  → OK: spec is consistent with the reference engine.
+- Oracle: SHA-256 `6f1e3c05…94ba96`, 1,229,568 bytes —
+  unchanged.
+- Mojibake scan over tracked files → clean.
+- `flutter test` → 1,948 tests, all passed — identical to the Phase 16.5 final count, verified independently at this phase's start, not taken from the prompt.
+- Rules suite: **not run** — the Firestore emulator cannot
+  boot in this VM (Java networking blocked; TOOLS.md), the
+  same recorded limitation as Phases 16/16.5. All rules work
+  is "written, not run" and the owner script carries the run.
+
+## Decisions (D16.6)
+
+- **D16.6-1 Providers.** Google Sign-In and Email+Password
+  (verification + reset). Phone rejected (per-SMS billing);
+  email-link rejected (Spark's auth-email quota is a handful
+  per day — see the limits actually read, below); Facebook
+  not requested. **Apple deferred**: App Store Review
+  Guideline 4.8 (quoted below, verified 2026-11-01) requires
+  Sign in with Apple on iOS when other third-party sign-in is
+  offered, so an iOS release needs Apple sign-in added or a
+  recorded exception — the provider model is a list, so
+  adding it later touches the gateway and one UI row, not
+  the state model. iOS is not shipped in this phase.
+- **D16.6-2 State model.** `AuthState` gains, on the signed-in
+  state only: `kind` (`guest` | `account`), `providerId`
+  (Firebase's own ids: `anonymous`, `google.com`,
+  `password`), `email` (nullable, **memory only** — never
+  persisted, logged or written to Firestore), and
+  `emailVerified`. Existing constructors keep their shapes,
+  so every existing fake and test compiles unchanged. One
+  stream: the gateway's existing `authStateChanges`, now
+  carrying the richer state; the `AccountController`
+  subscribes exactly once and cancels on dispose.
+- **D16.6-3 Gateway shape.** The account operations are
+  declared as `AccountAuthGateway extends AuthGateway` in the
+  same domain file; `FirebaseAuthGateway` implements both,
+  and one shared fake (`test/support/
+  fake_account_auth_gateway.dart`) implements both for the
+  new tests. Reasoning: the lobby and game controllers must
+  never depend on account operations (interface segregation
+  is this codebase's established pattern — every repository
+  is a narrow port), and forcing the ~10 existing test-local
+  `AuthGateway` fakes to stub nine account methods they never
+  exercise is churn without testing value. The state model —
+  the part that must be unified — is unified.
+- **D16.6-4 Link first, conflict is a choice.** Every
+  "connect" action from a guest attempts **linking** first,
+  so the uid survives. `credential-already-in-use` /
+  `email-already-in-use` from a link becomes the typed error
+  `credentialInUseByOtherAccount` and the UI offers exactly
+  two choices: sign in to that existing account (guest
+  identity left behind; local data untouched — see
+  D16.6-6) or cancel. Nothing ever auto-merges. The
+  password for an email conflict resolution is held only in
+  the sign-in form's memory and dropped on cancel/dispose.
+- **D16.6-5 Enumeration safety.** With email-enumeration
+  protection on, Firebase returns `invalid-credential` for
+  both "no such user" and "wrong password"; with it off it
+  returns `user-not-found` / `wrong-password`. All three map
+  to the single typed error `invalidCredentials` and one
+  neutral message — the app never confirms whether an email
+  is registered. Password reset always reports success
+  wording ("If an account exists for that email…") for the
+  same reason.
+- **D16.6-6 Local data is device-owned** (the prompt's
+  proposal, adopted). Sign-in, account switching and
+  sign-out never delete or merge the local stores; the UI
+  says so in plain words. Sign-out offers a **separate,
+  explicit** "also clear this device's progress" action
+  (history list — the finish gate is retained, as its own
+  contract requires — achievements, statistics, unfinished
+  match, name generations), behind its own confirmation.
+  Settings are preferences, not progress, and are not
+  cleared. Privacy check: after sign-out the app holds a
+  fresh guest session, and the previous account's email
+  exists nowhere on the device outside Firebase Auth's own
+  session store — which sign-out has ended — so a second
+  person picking up the device can see device-local game
+  data but no account detail.
+- **D16.6-7 Sign-out returns a fresh guest.** Sign-out is
+  `signOut()` followed immediately by `signInAnonymously()`:
+  the app is never left without an identity (today's
+  Settings sign-out leaves a signed-out state; with the
+  accounts flag on, the account flow supersedes it; with
+  the flag off, Settings behaves exactly as before). The
+  pre-sign-out warning states the old guest identity cannot
+  be recovered once left behind.
+- **D16.6-8 Cloud profile & merge.** One document,
+  `users/{uid}/profile`: `schemaVersion`, generated
+  `displayName` + `nameGeneration`, `achievements`
+  (id → unlock epoch-ms, ≤ 64), `statistics` (the
+  `MatchStatistics` JSON), `statisticsRecordIds` (the ids
+  the statistics snapshot covers, ≤ 100), `updatedAtMs`.
+  A few KB by construction; the rules bound every field
+  because rules cannot measure bytes. Sync is an account
+  benefit: guests never read or write a profile.
+  *Merge (deterministic, idempotent, cannot double-count):*
+  achievements = union, earliest unlock time wins;
+  name generation = max; statistics — if the cloud id set
+  is a subset of the local gate, local wins; if the local
+  gate is a subset of the cloud set, the cloud snapshot is
+  adopted wholesale; if the sets diverged, the snapshot
+  with more `matchesPlayed` wins (tie: later `updatedAtMs`,
+  then local) and the merged id set is the **union**, so a
+  match counted only in the losing snapshot is marked
+  counted without being in the totals — a deliberate
+  undercount, never a double-count. Applying a merge can
+  write back the local statistics snapshot, the unlock map,
+  the name generation, and **absorb** cloud ids into the
+  local finish gate; two small interface additions make
+  that possible (`MatchHistoryRepository.recordedIds` /
+  `absorbRecordedIds`, `StatisticsRepository.replace`).
+  A corrupt or newer-schema profile is ignored wholesale —
+  local data is never touched by a bad read.
+  *Write discipline:* one merge read + at most one write on
+  sign-in; afterwards a history decorator
+  (`SyncingHistoryRepository`) notes each newly recorded
+  match and the sync service writes at most once per
+  finished match, debounced so the achievement evaluation
+  for that match lands first, and skipped when the snapshot
+  is unchanged. Never per move.
+- **D16.6-9 Mid-match identity guard.** An app-level
+  `IdentityGuard` (installed like `FeedbackService`) is set
+  by `OnlineGameController` while a match is live and by
+  `OnlineLobbyController` while it holds an open room, and
+  is consulted by the `AccountController` before linking,
+  switching, signing out or deleting: a locked guard returns
+  the typed refusal `blockedByLiveMatch` and nothing touches
+  the gateway. Both controllers clear their flag on finish
+  and on dispose. Honest limit, recorded: a room abandoned
+  by navigating away from the lobby is outside the guard —
+  a pre-existing Phase 8 behaviour; the seat keeps the old
+  uid and simply becomes unreachable, which the existing
+  abandonment rules already clean up. No data is corrupted
+  by it.
+- **D16.6-10 Leaderboard requires an account.** Rules:
+  entry create/update/rename additionally require
+  `request.auth.token.firebase.sign_in_provider !=
+  'anonymous'`, and for the `password` provider
+  `email_verified == true`. Denying only the anonymous
+  provider (rather than allow-listing) keeps the existing
+  rules tests' contexts valid under the emulator's default
+  claims and is the strongest statement the product
+  decision needs: a guest is precisely an anonymous
+  provider session. Client side, the `LeaderboardSubmitter`
+  skips guests (and unverified email accounts) so the app
+  never spends a write the rules are certain to refuse, and
+  the leaderboard screen tells guests plainly that their
+  matches are not counted while guests can still **view**
+  the board and play online. Owner-visible trade-off,
+  recorded in the PRD: participation drops (a player must
+  register before any match counts); the flag can still
+  disable the leaderboard entirely.
+- **D16.6-11 Password policy.** Minimum **8 characters**,
+  stated as a hint under the field before submission and
+  enforced client-side; Firebase's own `weak-password`
+  error maps to the same typed error if the server is
+  stricter. No composition rules (length is the control
+  with evidence behind it).
+- **D16.6-12 Deletion order.** Re-authenticate first
+  (password prompt for email accounts, Google flow for
+  Google accounts), then delete the profile document while
+  still authenticated, then delete the Firebase user. If
+  the final step fails, the account still exists and the
+  profile simply re-syncs from the device at next sign-in —
+  stated in `privacy_notes.md`. Leaderboard entries are
+  **never** deleted (deleting one would reset the Phase
+  16.5 double-count guards for a recreated account);
+  they keep the generated display name, which identifies
+  nobody. Shared match documents keep a dangling uid —
+  a seat id in a finished record, nothing more.
+- **D16.6-13 The `users/` wildcard is narrowed.** Phase 7's
+  `match /users/{userId}/{document=**}` (owner-only, no
+  validation) would silently bypass any profile validation
+  added beside it, because one granting rule is enough.
+  Part G replaces it with explicit matches for the three
+  documents the app actually writes (`settings`,
+  `statistics`, `unfinishedMatch`, owner-only as before)
+  plus the validated `profile` match. Anything else under
+  `users/{uid}/` is denied by default. This is strictly
+  stronger; the existing rules tests are checked against
+  the shapes they use before the change is made.
+
+## Firebase limits actually read (2026-11-01)
+
+Read from firebase.google.com/pricing,
+firebase.google.com/docs/auth/limits and
+firebase.google.com/docs/auth (crawls dated 2026-10-31):
+
+- **Active users.** The pricing page's Authentication table
+  gives "Monthly active users — 50K MAUs" on Spark (under
+  the Identity Platform heading). The much lower daily cap
+  applies **only to projects upgraded to Firebase
+  Authentication with Identity Platform** — Wallforge has
+  not upgraded: "When upgraded, no-cost (Spark) plan
+  projects will be limited to 3,000 daily active users…
+  Projects on the no-cost (Spark) plan have a new limit of
+  3,000 daily active users (DAUs) for most sign-in
+  providers" — and the limits doc's table groups "Email,
+  Social, Anonymous, Custom" at 3,000 DAUs vs "Unlimited"
+  before. **Anonymous users count as active users** wherever
+  active-user accounting applies (an advertised upgrade
+  feature is that "anonymous accounts also will no longer
+  count towards billing and usage quotas" — i.e. today
+  they do). If the project is ever upgraded to Identity
+  Platform, the 3,000 DAU Spark cap — anonymous included —
+  becomes the binding auth limit and must be re-checked.
+- **Auth email sending (Spark, limits doc).** Address
+  verification 1,000/day; address change 1,000/day;
+  **password reset 150/day**; **email-link sign-in 5/day**.
+  The 5/day figure is why D16.6-1 rejects email-link
+  sign-in; the 150/day reset cap is an abuse bound the UI
+  cannot exceed and the owner script notes it.
+- **Account limits.** "Anonymous user accounts | 100
+  million"; "Registered user accounts | Unlimited".
+- **Abuse quotas.** "New account creation | 100
+  accounts/hour for each IP address"; "Account deletion |
+  10 accounts/second". The owner enables email-enumeration
+  protection in the Console (Part H script) — it is a
+  Console setting, not code.
+
+## Apple / Play requirements actually read (2026-11-01)
+
+- **Apple, Guideline 4.8 (Login Services)**,
+  developer.apple.com/app-store/review/guidelines/: "Apps
+  that use a third-party or social login service (such as
+  Facebook Login, Google Sign-In, …) to set up or
+  authenticate the user's primary account with the app must
+  also offer as an equivalent option another login service"
+  with three features: data collection limited to name and
+  email; the user can keep their email private; no
+  interaction collection for advertising without consent.
+  The operative text does not name Sign in with Apple, but
+  it is the service that meets those terms. The exception —
+  "Your app exclusively uses your company's own account
+  setup and sign-in systems" — does **not** cover
+  Wallforge, because Google Sign-In is offered. Consequence
+  recorded: an iOS release needs Sign in with Apple added
+  (or must drop Google on iOS); the provider list is a
+  list, so this is additive later. **Apple 5.1.1(v)**:
+  "If your app supports account creation, you must also
+  offer account deletion within the app" — Part F builds
+  exactly that.
+- **Google Play (Play Console Help, "Understanding Google
+  Play's app account deletion requirements")**: "If your
+  app enables account creation, you must: provide users
+  with an in-app path to delete their app accounts and
+  associated data; **and** provide a web link resource
+  where users can request app account deletion and
+  associated data deletion" — plus the Data safety form's
+  Data deletion questions in Play Console. Part F therefore
+  ships the in-app path and documents the web-reachable
+  path (a deletion-request page/form the owner publishes
+  with Phase 17's store listing); the app itself links to
+  it from the delete screen once the owner supplies the
+  URL — until then the in-app path is the operative one and
+  the gap is stated in `privacy_notes.md`, not hidden.
+
+## google_sign_in evaluation (rules.md §3.3 / §2.3)
+
+- **Package**: `google_sign_in` **7.2.0** (latest stable,
+  verified against the pub.dev API 2026-11-01; the
+  flutter/packages monorepo, BSD-3-Clause — licence file
+  verified in the pub cache after `pub get`). Maintained by
+  the Dart/Flutter team; platforms Android/iOS/macOS/Web
+  via endorsed federated implementations (not added
+  manually).
+- **Purpose (the justification)**: obtaining a Google ID
+  token on Android/iOS, which `firebase_auth` cannot do
+  alone on mobile — Firebase's own popup/redirect flows
+  exist only on web. There is no Flutter-built-in
+  alternative for native Google sign-in.
+- **Web is deliberately NOT using it**: `google_sign_in_web`
+  cannot authenticate programmatically at all ("This
+  implementation returns false for
+  `supportsAuthentication`… the Google Identity Services
+  SDK only allows signing in using UI provided by the
+  SDK" — it requires the GIS-rendered button). Firebase
+  Auth's `signInWithPopup(GoogleAuthProvider)` is the
+  supported web path and needs no extra package, so the
+  gateway branches on `kIsWeb`: popup on web, the package
+  on mobile. The v7 API is used as documented:
+  `GoogleSignIn.instance.initialize(...)`, `authenticate()`,
+  with cancellation surfaced as a typed error.
+- **Status**: code written against the documented v7 API;
+  **not device-verified** (no Android build can run in this
+  VM — Gradle networking is blocked; see TOOLS.md). The
+  owner script carries the device checks.

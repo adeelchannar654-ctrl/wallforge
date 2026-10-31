@@ -220,6 +220,28 @@ Possible data:
 
 No private information should be stored unless required.
 
+**Owner decision, 2026-11-01 (Phase 16.6): optional accounts
+are now real.** The app still starts instantly as an
+anonymous guest; a player may upgrade that guest by linking
+Google or Email/Password sign-in to the *same* user ID, so
+their online identity survives a reinstall or a new device.
+Accounts are never required for local, vs-AI or unranked
+online play, and no screen blocks on sign-in. What an
+account stores in the cloud is deliberately small (one
+profile document: the generated display name, unlocked
+achievement ids, and a compact lifetime statistics
+snapshot) — **full match history is not synced**, and the
+UI says so. No email address is stored in Firestore; the
+public identity is always the generated display name, never
+a Google name or an email. As part of this decision, the
+Phase 16.5 weekly leaderboard now counts matches only for
+players signed in with a real (non-anonymous, and for email
+a verified) account, because anonymous accounts are free to
+mass-create; guests can still view the board and play
+online. There is no social graph, no friends list and no
+ranked mode — those remain out of scope (§10, §12). Full
+record: `memory.md` §13ab (decisions D16.6-1…13).
+
 ### 6.6 Settings
 
 - Music.

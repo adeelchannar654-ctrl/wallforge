@@ -1675,6 +1675,80 @@ Phase 17 was not started.
 
 ---
 
+# Phase 16.6 — Accounts and Sign-in (guest stays the default)
+
+## Goal
+
+Add optional accounts between Phase 16.5 and Phase 17 without
+changing how the app starts or plays: the app still begins
+instantly as an anonymous guest, and a player may *upgrade*
+that guest by linking Google or Email/Password to the **same**
+uid, so their online identity, rooms and leaderboard entries
+survive a reinstall or a new device. Guest play (local, vs-AI,
+unranked online) never requires an account and no screen
+blocks on sign-in. Engine, oracle and rules of play frozen;
+Spark plan only.
+
+### Tasks
+
+- Part A: baseline gates, decision records (PRD, this
+  section), the `FEATURE_ACCOUNTS` flag (off in release by
+  default, exactly like the leaderboard flag).
+- Part B: auth state model (`guest` / `signedIn(provider,
+  uid, emailVerified)`) and a typed gateway: Google and
+  Email/Password sign-in, linking, verification and reset
+  emails, sign-out, delete with re-authentication, one
+  typed error model, one app-wide auth-state stream.
+- Part C: linking preserves the uid; the conflict choice
+  (credential already belongs to another account) never
+  auto-merges; local stores stay device-owned; sign-out
+  returns a fresh guest; identity changes are refused
+  while an online match or open room exists.
+- Part D: Account section (Settings + Profile) and sign-in
+  screens: guest state, Google, email sign-in/create with
+  password policy hint, forgot password, resend
+  verification, verification-pending, signed-in state,
+  sign out, delete account. Full Phase 13 accessibility
+  treatment.
+- Part E: small cloud profile `users/{uid}/profile`
+  (generated display name, unlocked achievement ids, a
+  compact lifetime statistics snapshot) with a deterministic
+  idempotent merge; full match history is NOT synced.
+- Part F: in-app account deletion with re-authentication,
+  the web-reachable deletion path documented, leaderboard
+  entries deliberately not deletable, and a written data
+  inventory for Phase 17.
+- Part G: rules — leaderboard writes require a
+  non-anonymous provider (verified email for the email
+  provider); profile document owner-only and shape/size
+  validated; rules tests for each, existing suite unchanged.
+- Part H: fake-gateway flow tests, widget tests for every
+  state, a real-app journey (guest → sign in → leaderboard
+  unlocks → sign out → guest), lifecycle/leak tests, the
+  responsive/accessibility matrix, the Firestore recount,
+  the web-size comparison, and the owner setup/test script
+  (`owner_tests_16_6.md`).
+
+### Exit criteria
+
+Guest remains the default and, with the flag off, nothing
+changes; Google and Email/Password sign-in work through the
+typed gateway (the native Google flow is labelled written,
+not device-verified); linking preserves the uid and the
+conflict flow never auto-merges; the mid-match identity
+guard is proven through the real app; leaderboard writes
+require a real account in the rules; the cloud profile is
+bounded, owner-only and idempotently merged; deletion and
+the data inventory are written; all gates green with real
+output and the phase pushed. Phase 17 is not started.
+
+### Result
+
+In progress — recorded in full in `memory.md` §13ab when the
+phase closes.
+
+---
+
 # Phase 17 — Release Preparation
 
 ## Goal
