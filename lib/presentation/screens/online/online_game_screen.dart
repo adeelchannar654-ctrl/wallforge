@@ -14,6 +14,7 @@ import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
 import '../../../domain/wallforge_domain.dart';
 import '../../board/board.dart';
+import '../../widgets/achievement_toast.dart';
 import '../../widgets/clock_chip.dart';
 import '../../widgets/match_exit_dialogs.dart';
 import '../result/result_screen.dart';
@@ -720,7 +721,18 @@ class _Owner extends StatefulWidget {
 
 class _OwnerState extends State<_Owner> {
   @override
+  void initState() {
+    super.initState();
+    // Phase 16.5, Part F: surface achievement unlocks from a
+    // recorded finish as a toast on this screen.
+    widget.controller.onAchievementsUnlocked = (unlocked) {
+      if (mounted) showAchievementUnlocks(context, unlocked);
+    };
+  }
+
+  @override
   void dispose() {
+    widget.controller.onAchievementsUnlocked = null;
     if (widget.owns) {
       widget.controller.dispose();
       widget.rematch?.dispose();

@@ -11,9 +11,11 @@ import '../../domain/models/game_action.dart';
 import 'match_clock.dart';
 import '../../domain/models/game_state.dart';
 import '../../domain/models/game_status.dart';
+import '../../domain/models/achievement.dart';
 import '../../domain/models/match_record.dart';
 import '../../domain/models/player_id.dart';
 import '../../domain/repositories/repositories.dart';
+import 'achievements/achievements_service.dart';
 import 'action_inference.dart';
 import 'ai/ai_difficulty.dart';
 import 'game_interaction.dart';
@@ -70,6 +72,12 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
   StatisticsRepository? _statisticsRepository;
   UnfinishedMatchRepository? _unfinishedMatchRepository;
   MatchHistoryRepository? _historyRepository;
+  AchievementsService? _achievementsService;
+
+  /// Set by the game screen (Phase 16.5, Part F): called with
+  /// the achievements a recorded finish just unlocked, so the
+  /// screen can toast them. Never called with an empty list.
+  void Function(List<AchievementDefinition>)? onAchievementsUnlocked;
 
   // --- Phase 16.5, Part E: match identity and history capture ---------------
 
@@ -124,11 +132,13 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
     required StatisticsRepository statistics,
     required UnfinishedMatchRepository unfinishedMatch,
     MatchHistoryRepository? history,
+    AchievementsService? achievements,
   }) {
     _settingsRepository = settings;
     _statisticsRepository = statistics;
     _unfinishedMatchRepository = unfinishedMatch;
     _historyRepository = history;
+    _achievementsService = achievements;
   }
 
   /// The settings this controller is running with.
@@ -683,6 +693,15 @@ class LocalGameController extends ChangeNotifier with GameInteraction {
       difficulty: _difficultyNameFor(_versusAi, _aiDifficulty),
       humanWon: winner == _humanPlayer,
     );
+    // Phase 16.5, Part F: achievements evaluate over the
+    // record just written plus the statistics just folded.
+    final achievements = _achievementsService;
+    if (achievements != null) {
+      final fresh = await achievements.onMatchRecorded();
+      if (fresh.isNotEmpty && !_disposed) {
+        onAchievementsUnlocked?.call(fresh);
+      }
+    }
   }
 
   /// The history record for the match that just finished.

@@ -72,6 +72,22 @@ class InMemoryUnfinishedMatchRepository implements UnfinishedMatchRepository {
   Future<void> clear() async => _match = null;
 }
 
+/// In-memory [AchievementsRepository].
+class InMemoryAchievementsRepository implements AchievementsRepository {
+  InMemoryAchievementsRepository([Map<String, int>? initial])
+    : _unlocks = {...?initial};
+
+  Map<String, int> _unlocks;
+
+  @override
+  Future<Map<String, int>> loadUnlocks() async => Map.of(_unlocks);
+
+  @override
+  Future<void> saveUnlocks(Map<String, int> unlocks) async {
+    _unlocks = Map.of(unlocks);
+  }
+}
+
 /// In-memory [MatchHistoryRepository] with the same gate and
 /// bound semantics as the shared-preferences implementation.
 class InMemoryMatchHistoryRepository implements MatchHistoryRepository {

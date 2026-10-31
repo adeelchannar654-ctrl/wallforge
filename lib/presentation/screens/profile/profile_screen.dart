@@ -177,6 +177,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   onPressed: () =>
                       Navigator.of(context).pushNamed(AppRoutes.history),
                 ),
+                const SizedBox(height: AppSpacing.sm),
+                SecondaryActionButton(
+                  label: 'ACHIEVEMENTS',
+                  icon: Icons.emoji_events_outlined,
+                  onPressed: () =>
+                      Navigator.of(context).pushNamed(AppRoutes.achievements),
+                ),
                 const SizedBox(height: AppSpacing.md),
                 Text(
                   'Statistics cover local and AI matches on this device. '

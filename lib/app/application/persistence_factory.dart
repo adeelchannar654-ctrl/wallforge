@@ -1,3 +1,4 @@
+import '../../data/local/shared_preferences_achievements_repository.dart';
 import '../../data/local/shared_preferences_history_repository.dart';
 import '../../data/local/shared_preferences_settings_repository.dart';
 import '../../data/local/shared_preferences_statistics_repository.dart';
@@ -9,6 +10,7 @@ import '../../data/remote/firestore_statistics_repository.dart';
 import '../../data/remote/firestore_unfinished_match_repository.dart';
 import '../../domain/models/board_config.dart';
 import 'ai/ai_difficulty.dart';
+import 'achievements/achievements_service.dart';
 import 'local_game_controller.dart';
 
 /// Attaches persistence to a `LocalGameController`.
@@ -35,15 +37,23 @@ class PersistenceFactory {
   /// if storage is unavailable the controller runs with defaults and forgets on
   /// exit.
   static void attachLocal(LocalGameController controller) {
+    const statistics = SharedPreferencesStatisticsRepository();
+    const history = SharedPreferencesHistoryRepository();
     controller
       ..attachPersistence(
         settings: const SharedPreferencesSettingsRepository(),
-        statistics: const SharedPreferencesStatisticsRepository(),
+        statistics: statistics,
         unfinishedMatch: const SharedPreferencesUnfinishedMatchRepository(),
         // Phase 16.5: history is per-device by design, so it
         // uses the local store even in the remote-persistence
-        // build (see attachRemote).
-        history: const SharedPreferencesHistoryRepository(),
+        // build (see attachRemote). Achievements evaluate over
+        // it (Part F).
+        history: history,
+        achievements: AchievementsService(
+          history: history,
+          statistics: statistics,
+          store: const SharedPreferencesAchievementsRepository(),
+        ),
       )
       ..loadPersisted();
   }
@@ -70,20 +80,27 @@ class PersistenceFactory {
       return;
     }
     final client = CloudFirestoreClient();
+    final statistics = FirestoreStatisticsRepository(
+      client: client,
+      userId: ownerId,
+    );
+    const history = SharedPreferencesHistoryRepository();
     controller
       ..attachPersistence(
         settings: FirestoreSettingsRepository(client: client, userId: ownerId),
-        statistics: FirestoreStatisticsRepository(
-          client: client,
-          userId: ownerId,
-        ),
+        statistics: statistics,
         unfinishedMatch: FirestoreUnfinishedMatchRepository(
           client: client,
           userId: ownerId,
         ),
         // History stays on the device even here (Phase 16.5):
         // it is never synced, by design.
-        history: const SharedPreferencesHistoryRepository(),
+        history: history,
+        achievements: AchievementsService(
+          history: history,
+          statistics: statistics,
+          store: const SharedPreferencesAchievementsRepository(),
+        ),
       )
       ..loadPersisted();
   }

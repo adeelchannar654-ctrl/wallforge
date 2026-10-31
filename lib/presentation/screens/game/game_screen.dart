@@ -17,6 +17,7 @@ import '../../../domain/models/game_action.dart';
 import '../../../domain/models/game_status.dart';
 import '../../../domain/models/player_id.dart';
 import '../../board/board.dart';
+import '../../widgets/achievement_toast.dart';
 import '../../widgets/clock_chip.dart';
 import '../../widgets/match_exit_dialogs.dart';
 import '../result/result_screen.dart';
@@ -658,6 +659,11 @@ class _ControllerOwnershipState extends State<_ControllerOwnership>
     // clock — the same controller sits on Home for statistics
     // and the resume card, where no clock may run.
     widget.controller.activateClock();
+    // Phase 16.5, Part F: surface achievement unlocks from a
+    // recorded finish as a toast on this screen.
+    widget.controller.onAchievementsUnlocked = (unlocked) {
+      if (mounted) showAchievementUnlocks(context, unlocked);
+    };
   }
 
   @override
@@ -681,6 +687,7 @@ class _ControllerOwnershipState extends State<_ControllerOwnership>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    widget.controller.onAchievementsUnlocked = null;
     if (widget.owns) widget.controller.dispose();
     super.dispose();
   }

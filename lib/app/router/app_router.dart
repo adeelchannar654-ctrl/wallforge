@@ -11,10 +11,12 @@ import '../../app/application/local_game_controller.dart';
 import '../../app/application/online/online_game_controller.dart';
 import '../../app/application/online/online_lobby_factory.dart';
 import '../../app/application/online/rematch_controller.dart';
+import '../../app/application/achievements/achievements_service.dart';
 import '../../app/application/persistence_factory.dart';
 import '../../app/application/match_setup.dart';
 import '../../presentation/screens/ai/ai_difficulty_screen.dart';
 import '../../presentation/screens/game/game_screen.dart';
+import '../../presentation/screens/achievements/achievements_screen.dart';
 import '../../presentation/screens/history/history_detail_screen.dart';
 import '../../presentation/screens/history/history_screen.dart';
 import '../../presentation/screens/home/home_screen.dart';
@@ -87,6 +89,9 @@ class AppRoutes {
 
   /// One history record's detail (Phase 16.5).
   static const String historyDetail = '/history/detail';
+
+  /// The achievements catalogue and unlocks (Phase 16.5).
+  static const String achievements = '/achievements';
 }
 
 /// Arguments for the `/online/game` route: the match controller the lobby
@@ -216,6 +221,8 @@ class AppRouter {
               ? HistoryDetailScreen(record: record)
               : const HistoryScreen(),
         );
+      case AppRoutes.achievements:
+        return _page(settings, const AchievementsScreen());
       case AppRoutes.settings:
         return _page(settings, const SettingsScreen());
       default:
@@ -329,11 +336,18 @@ class AppRouter {
       versusAi: versusAi,
       aiDifficulty: aiDifficulty,
     );
+    final statistics = InMemoryStatisticsRepository();
+    final history = InMemoryMatchHistoryRepository();
     controller.attachPersistence(
       settings: InMemorySettingsRepository(),
-      statistics: InMemoryStatisticsRepository(),
+      statistics: statistics,
       unfinishedMatch: InMemoryUnfinishedMatchRepository(),
-      history: InMemoryMatchHistoryRepository(),
+      history: history,
+      achievements: AchievementsService(
+        history: history,
+        statistics: statistics,
+        store: InMemoryAchievementsRepository(),
+      ),
     );
     return controller;
   }

@@ -1,6 +1,7 @@
 /// Domain models for the Wallforge game engine.
 library;
 
+export 'achievement.dart';
 export 'action_failure.dart';
 export 'board_config.dart';
 export 'cell.dart';

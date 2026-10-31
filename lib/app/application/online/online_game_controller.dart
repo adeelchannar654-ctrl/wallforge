@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/logging/app_logger.dart';
 import '../../../domain/wallforge_domain.dart';
+import '../achievements/achievements_service.dart';
 import '../action_inference.dart';
 import '../game_interaction.dart';
 
@@ -119,9 +120,11 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
     this.opponentTimeout = opponentInactivityThreshold,
     this.movementAssistance = false,
     MatchHistoryRepository? history,
+    AchievementsService? achievements,
   }) : _state = initialState ?? GameState.initial(),
        _clock = clock ?? DateTime.now,
        _historyRepository = history,
+       _achievementsService = achievements,
        _room = Room.fromJson(<String, dynamic>{}) ?? _emptyRoom;
 
   static const AppLogger _log = AppLogger('online_game');
@@ -158,6 +161,15 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
   /// from the final snapshot already in memory and the gate
   /// lives in the local store.
   final MatchHistoryRepository? _historyRepository;
+
+  /// The achievements service (Phase 16.5, Part F), evaluated
+  /// after a finish is recorded.
+  final AchievementsService? _achievementsService;
+
+  /// Set by the game screen: called with the achievements a
+  /// recorded finish just unlocked, for the unlock toast.
+  /// Never called with an empty list.
+  void Function(List<AchievementDefinition>)? onAchievementsUnlocked;
 
   /// The moves this client witnessed, in spec notation.
   final List<String> _recordedMoves = <String>[];
@@ -516,7 +528,7 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
     if (history == null) return;
     final room = _room;
     final startedAt = _startedObservedAtMs ?? room.createdAtMs;
-    await history.recordIfNew(
+    final added = await history.recordIfNew(
       MatchRecord(
         id: room.code,
         mode: MatchMode.online,
@@ -539,6 +551,15 @@ class OnlineGameController extends ChangeNotifier with GameInteraction {
         rematchOf: room.rematchOf,
       ),
     );
+    // Phase 16.5, Part F: achievements evaluate over the
+    // record just written.
+    final achievements = _achievementsService;
+    if (added && achievements != null) {
+      final fresh = await achievements.onMatchRecorded();
+      if (fresh.isNotEmpty && !_disposed) {
+        onAchievementsUnlocked?.call(fresh);
+      }
+    }
   }
 
   /// This client's colour, or null before the room is known.

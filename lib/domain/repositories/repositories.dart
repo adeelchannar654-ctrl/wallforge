@@ -104,6 +104,20 @@ abstract interface class MatchHistoryRepository {
   Future<void> clear();
 }
 
+/// The achievement unlock store (Phase 16.5, Part F): which
+/// achievements have unlocked, and when. Local only, like
+/// history — achievements never leave the device.
+abstract interface class AchievementsRepository {
+  /// Loads the unlock map (achievement id → unlock time, epoch
+  /// ms). Tolerant: a damaged store reads as no unlocks.
+  Future<Map<String, int>> loadUnlocks();
+
+  /// Persists the unlock map, replacing the stored one. A
+  /// store written by a newer schema version is left alone —
+  /// the write is silently skipped, as in the history store.
+  Future<void> saveUnlocks(Map<String, int> unlocks);
+}
+
 /// Online room lifecycle, declared here and implemented in `lib/data/remote/`.
 ///
 /// ## Why rooms are a repository and not application logic

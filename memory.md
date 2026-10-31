@@ -5255,3 +5255,64 @@ mirror the blob store. Gates: format 196 files 0 changed;
 analyze clean; affected suites green (385 in the regression
 batch incl. persistence/firestore integration, navigation,
 Phase 16 matrix, plus the Phase 11/13/14 screen suites).
+
+### Part F — achievements (2026-10-31)
+
+Shipped, per D16.5-7. Catalogue (`kAchievements`, data in
+`lib/domain/models/achievement.dart`): 17 entries — First
+Win; streaks 3/5/10; Beat Easy/Medium/Hard/Expert; Every
+Board (5/7/9/11); Minimalist (win placing no walls); Wall
+Builder (win having placed all your walls); Blitz (win in
+≤ 25 plies); Comeback; On Time (win by timeout); Online
+Victor; Run It Back (win a rematch); and Top of the Week,
+marked `external` — the evaluator can never produce it; only
+the leaderboard hook can (Part H). Predicates
+(`AchievementEvaluator`) are pure functions of the history
+records plus the legacy statistics snapshot: pre-history
+play is honoured where the counters carry the fact
+(first-win from `humanWins`, beat-difficulty from the
+by-difficulty buckets, board sizes from the by-size
+buckets), so a long-time player does not start from zero.
+Semantics recorded: a record "was won" when it has a winner
+who is this device's player — or, for pass-and-play (no
+single owner), when the winner is Blue, mirroring the
+legacy statistics' keying. Streaks use the BEST run in
+chronological order (an unlock is permanent; a later loss
+does not un-earn it), and an abandonment breaks a run.
+Wall counts come from the move list by ply parity (Blue
+always moves first), and require a complete list.
+Comeback replays the stored move list through the engine
+as a library and compares goal distances
+(`shortestRoute`) after every ply: winner trailing by ≥ 3
+steps at any point; any replay failure reads as "not
+provable", never a crash and never an unlock.
+Unlock store: `wallforge.achievements.v1` ({id: unlockedAtMs})
+with the same tolerance discipline as history (corrupt →
+empty; newer schema → read-only). `AchievementsService`
+evaluates after each recorded finish (both controllers call
+it once the history gate accepts), persists new unlocks
+with the unlock time, and returns only the fresh ones;
+re-evaluation is idempotent end to end (proven across a
+service restart in tests). The unlock toast is a SnackBar —
+non-modal, never blocks play, announced via a live region,
+VIEW action opens the screen — fired from both game
+screens' owner states through the controllers'
+`onAchievementsUnlocked` callback. The Achievements screen
+(from Profile) lists every entry with its state in words:
+unlocked + date, or locked + numeric progress where a count
+is meaningful (streaks, boards), and carries the
+anti-abuse note on its face: local, device-only, unlocks
+nothing, never shared or ranked. Achievements write nowhere
+except their own store — they cannot feed the leaderboard.
+Tests: 15 new (evaluator: first-win incl. legacy-only,
+pass-and-play keying, abandonment, best-streak + progress,
+difficulties from records and buckets, boards combining
+records + buckets, wall parity/minimalist/builder/partial
+list, fast-win threshold, a genuine 13-ply comeback line on
+5×5 replayed through the engine plus a wire-to-wire
+negative, timeout/online/rematch, external never produced;
+service: unlock-once persistence across restart, the
+leaderboard hook's rank bounds; controller hook end-to-end;
+UI: screen states + progress text + the note, the toast).
+Gates: format 204 files 0 changed; analyze clean; affected
+suites green.

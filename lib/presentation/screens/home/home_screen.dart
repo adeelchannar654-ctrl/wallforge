@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/application/achievements/achievements_service.dart';
 import '../../../app/application/local_game_controller.dart';
 import '../../../app/router/app_router.dart';
 import '../../../app/theme/app_colors.dart';
@@ -7,6 +8,7 @@ import '../../../app/theme/app_radii.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
 import '../../../core/constants/app_info.dart';
+import '../../../data/local/shared_preferences_achievements_repository.dart';
 import '../../../data/local/shared_preferences_history_repository.dart';
 import '../../../data/local/shared_preferences_settings_repository.dart';
 import '../../../data/local/shared_preferences_statistics_repository.dart';
@@ -39,12 +41,15 @@ class HomeScreen extends StatefulWidget {
     this.unfinishedMatchRepository =
         const SharedPreferencesUnfinishedMatchRepository(),
     this.historyRepository = const SharedPreferencesHistoryRepository(),
+    this.achievementsRepository =
+        const SharedPreferencesAchievementsRepository(),
   });
 
   final SettingsRepository settingsRepository;
   final StatisticsRepository statisticsRepository;
   final UnfinishedMatchRepository unfinishedMatchRepository;
   final MatchHistoryRepository historyRepository;
+  final AchievementsRepository achievementsRepository;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -111,6 +116,11 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
       statistics: widget.statisticsRepository,
       unfinishedMatch: widget.unfinishedMatchRepository,
       history: widget.historyRepository,
+      achievements: AchievementsService(
+        history: widget.historyRepository,
+        statistics: widget.statisticsRepository,
+        store: widget.achievementsRepository,
+      ),
     );
     await controller.refreshResumableMatch();
     final match = controller.resumableMatch;

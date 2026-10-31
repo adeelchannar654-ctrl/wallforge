@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_breakpoints.dart';
 
+import '../../../app/application/achievements/achievements_service.dart';
 import '../../../app/application/online/online_game_controller.dart';
 import '../../../core/feedback/feedback_controller.dart';
 import '../../../core/feedback/feedback_scope.dart';
@@ -12,8 +13,10 @@ import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_radii.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
+import '../../../data/local/shared_preferences_achievements_repository.dart';
 import '../../../data/local/shared_preferences_history_repository.dart';
 import '../../../data/local/shared_preferences_settings_repository.dart';
+import '../../../data/local/shared_preferences_statistics_repository.dart';
 import '../../../domain/wallforge_domain.dart';
 import '../../widgets/app_chrome.dart';
 import '../../widgets/responsive_content.dart';
@@ -380,6 +383,11 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
       code: room.code,
       movementAssistance: settings.movementAssistance,
       history: const SharedPreferencesHistoryRepository(),
+      achievements: AchievementsService(
+        history: const SharedPreferencesHistoryRepository(),
+        statistics: const SharedPreferencesStatisticsRepository(),
+        store: const SharedPreferencesAchievementsRepository(),
+      ),
     );
     // The match controller fires its cues through the app's feedback
     // layer, with the settings snapshot just loaded applied to it.
