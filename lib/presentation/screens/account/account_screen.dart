@@ -11,6 +11,7 @@ import '../../../data/local/shared_preferences_leaderboard_name_repository.dart'
 import '../../../domain/repositories/auth.dart';
 import '../../../domain/repositories/leaderboard.dart';
 import '../../widgets/app_chrome.dart';
+import '../../widgets/app_icons.dart';
 import '../../widgets/responsive_content.dart';
 import 'account_copy.dart';
 
@@ -449,7 +450,7 @@ class _AccountScreenState extends State<AccountScreen> {
         const SizedBox(height: AppSpacing.md),
         SecondaryActionButton(
           label: 'SIGN OUT',
-          icon: Icons.logout,
+          iconAsset: AppIcons.logout,
           onPressed: busy ? null : () => _confirmSignOut(controller),
         ),
         const SizedBox(height: AppSpacing.sm),

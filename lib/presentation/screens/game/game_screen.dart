@@ -18,6 +18,7 @@ import '../../../domain/models/game_status.dart';
 import '../../../domain/models/player_id.dart';
 import '../../board/board.dart';
 import '../../widgets/achievement_toast.dart';
+import '../../widgets/app_icons.dart';
 import '../../widgets/clock_chip.dart';
 import '../../widgets/match_exit_dialogs.dart';
 import '../../widgets/result_card.dart';
@@ -389,16 +390,16 @@ class GameScreen extends StatelessWidget {
 
   Widget _buildModeToggle() {
     return SegmentedButton<InteractionMode>(
-      segments: const [
+      segments: [
         ButtonSegment(
           value: InteractionMode.move,
-          label: Text('MOVE'),
-          icon: Icon(Icons.open_with, size: 16),
+          label: const Text('MOVE'),
+          icon: Image.asset(AppIcons.move, width: 20, height: 20),
         ),
         ButtonSegment(
           value: InteractionMode.wall,
-          label: Text('WALL'),
-          icon: Icon(Icons.horizontal_rule, size: 16),
+          label: const Text('WALL'),
+          icon: Image.asset(AppIcons.wall, width: 20, height: 20),
         ),
       ],
       selected: {controller.mode},

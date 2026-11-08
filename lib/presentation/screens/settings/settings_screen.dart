@@ -15,6 +15,7 @@ import '../../../data/remote/firebase_auth_gateway.dart';
 import '../../../domain/repositories/repositories.dart';
 import '../../widgets/account_section.dart';
 import '../../widgets/app_chrome.dart';
+import '../../widgets/app_icons.dart';
 import '../../widgets/responsive_content.dart';
 
 /// The Settings screen (`design.md` §23), with the honesty boundary §23
@@ -332,7 +333,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: AppSpacing.md),
             SecondaryActionButton(
               label: 'SIGN OUT',
-              icon: Icons.logout,
+              iconAsset: AppIcons.logout,
               onPressed: _signOut,
             ),
           ],

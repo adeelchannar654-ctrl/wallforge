@@ -27,6 +27,7 @@ import '../../../data/remote/cloud_firestore_client.dart';
 import '../../../data/remote/firestore_leaderboard_repository.dart';
 import '../../../domain/wallforge_domain.dart';
 import '../../widgets/app_chrome.dart';
+import '../../widgets/app_icons.dart';
 import '../../widgets/responsive_content.dart';
 
 /// Which lobby section a route alias asked to bring into view.
@@ -233,6 +234,7 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
           const SizedBox(height: AppSpacing.md),
           _primaryButton(
             label: 'FIND OPPONENT',
+            iconAsset: AppIcons.quickMatch,
             onPressed: controller.isBusy ? null : controller.quickMatch,
           ),
         ],
@@ -272,6 +274,7 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
           const SizedBox(height: AppSpacing.md),
           _primaryButton(
             label: controller.isBusy ? 'WORKING' : 'CREATE ROOM',
+            iconAsset: AppIcons.createRoom,
             onPressed: controller.isBusy
                 ? null
                 : () => controller.createRoom(
@@ -330,6 +333,7 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
           const SizedBox(height: AppSpacing.md),
           _primaryButton(
             label: 'JOIN ROOM',
+            iconAsset: AppIcons.joinRoom,
             onPressed: controller.isBusy ? null : _join,
           ),
         ],
@@ -689,6 +693,7 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
   Widget _primaryButton({
     required String label,
     required VoidCallback? onPressed,
+    String? iconAsset,
   }) => SizedBox(
     height: 52,
     child: FilledButton(
@@ -702,13 +707,22 @@ class _OnlineLobbyScreenState extends State<OnlineLobbyScreen> {
           borderRadius: BorderRadius.circular(AppRadii.md),
         ),
       ),
-      child: Text(
-        label,
-        style: AppTypography.labelCaps.copyWith(
-          color: onPressed == null
-              ? AppColors.onSurfaceVariant
-              : AppColors.onPrimaryContainer,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (iconAsset != null) ...[
+            Image.asset(iconAsset, width: 26, height: 26),
+            const SizedBox(width: AppSpacing.sm),
+          ],
+          Text(
+            label,
+            style: AppTypography.labelCaps.copyWith(
+              color: onPressed == null
+                  ? AppColors.onSurfaceVariant
+                  : AppColors.onPrimaryContainer,
+            ),
+          ),
+        ],
       ),
     ),
   );

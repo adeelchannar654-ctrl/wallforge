@@ -6,6 +6,7 @@ import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
 import '../../../domain/repositories/room.dart';
 import '../../widgets/app_chrome.dart';
+import '../../widgets/app_icons.dart';
 
 /// The rematch consent controls on the online Result screen (Q-9.2).
 ///
@@ -80,7 +81,7 @@ class _OnlineRematchSectionState extends State<OnlineRematchSection> {
             switch (controller.phase) {
               RematchPhase.idle => PrimaryActionButton(
                 label: 'REMATCH',
-                icon: Icons.replay,
+                iconAsset: AppIcons.rematch,
                 onPressed: controller.propose,
               ),
               RematchPhase.proposing => Column(
@@ -112,7 +113,7 @@ class _OnlineRematchSectionState extends State<OnlineRematchSection> {
                   const SizedBox(height: AppSpacing.md),
                   PrimaryActionButton(
                     label: 'ACCEPT REMATCH',
-                    icon: Icons.replay,
+                    iconAsset: AppIcons.rematch,
                     onPressed: controller.accept,
                   ),
                   const SizedBox(height: AppSpacing.sm),

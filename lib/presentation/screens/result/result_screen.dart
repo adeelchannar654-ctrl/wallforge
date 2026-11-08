@@ -8,6 +8,7 @@ import '../../../domain/models/board_config.dart';
 import '../../../domain/models/finish_reason.dart';
 import '../../../domain/models/player_id.dart';
 import '../../widgets/app_chrome.dart';
+import '../../widgets/app_icons.dart';
 import '../../widgets/responsive_content.dart';
 
 /// Which kind of match ended — drives the heading and the summary line.
@@ -220,7 +221,7 @@ class ResultScreen extends StatelessWidget {
               else if (onRematch != null)
                 PrimaryActionButton(
                   label: 'REMATCH',
-                  icon: Icons.replay,
+                  iconAsset: AppIcons.rematch,
                   onPressed: onRematch,
                 ),
               if (onShare != null) ...[
@@ -234,7 +235,7 @@ class ResultScreen extends StatelessWidget {
               const SizedBox(height: AppSpacing.md),
               SecondaryActionButton(
                 label: 'RETURN TO HOME',
-                icon: Icons.home_outlined,
+                iconAsset: AppIcons.home,
                 onPressed: onHome,
               ),
               const SizedBox(height: AppSpacing.xxl),
